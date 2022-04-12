@@ -14,7 +14,7 @@ coverage.json
 .openzeppelin
 
 #typechain files
-typechain
+typechain-types
 
 #vscode config
 .vscode
