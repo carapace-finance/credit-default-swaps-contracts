@@ -9,7 +9,8 @@
     "deploy:mainnet_forked": "npx hardhat run --network localhost scripts/deploy.ts",
     "node": "npx hardhat node",
     "test": "npx hardhat test",
-    "cover": "npx hardhat coverage"
+    "cover": "npx hardhat coverage",
+    "doc": "npx hardhat dodoc"
   },
   "devDependencies": {
     "@defi-wonderland/smock": "^2.0.7",
@@ -19,6 +20,7 @@
     "@nomiclabs/hardhat-waffle": "^2.0.3",
     "@openzeppelin/contracts": "^4.5.0",
     "@openzeppelin/hardhat-defender": "^1.6.0",
+    "@primitivefi/hardhat-dodoc": "^0.2.3",
     "@typechain/ethers-v5": "^10.0.0",
     "@typechain/hardhat": "^6.0.0",
     "@types/chai": "^4.3.1",
@@ -31,7 +33,6 @@
     "prettier": "^2.6.2",
     "prettier-plugin-solidity": "^1.0.0-beta.19",
     "solidity-coverage": "^0.7.20",
-    "solidity-docgen": "^0.6.0-beta.8",
     "ts-node": "^10.7.0",
     "typescript": "^4.6.3"
   }
