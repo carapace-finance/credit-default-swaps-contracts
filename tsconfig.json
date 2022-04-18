@@ -16,8 +16,8 @@
   "include": [
     "scripts/**/*",
     "test/**/*",
+    "utils/*",
     "environment.d.ts",
-    "hardhat.config.ts",
-    "utils/deploy.ts"
+    "hardhat.config.ts"
   ]
 }
