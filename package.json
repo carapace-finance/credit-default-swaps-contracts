@@ -1,7 +1,6 @@
 {
   "name": "credit-default-swaps-contracts",
   "version": "1.0.0",
-  "main": "index.js",
   "author": "Carapace Finance",
   "license": "MIT",
   "scripts": {
