@@ -1,20 +1,28 @@
+## node packages
 node_modules
-.env
+
+## git
 .gitattributes
 
-#Hardhat files
+## credentials
+.env
+
+#Hardhat
 artifacts
 cache
 
-#coverage files
+#coverage
 coverage
 coverage.json
 
-#OpenZeppelin files
+#OpenZeppelin
 .openzeppelin
 
-#typechain files
+#typechain
 typechain-types
+
+# docgen
+docs
 
 #vscode config
 .vscode
