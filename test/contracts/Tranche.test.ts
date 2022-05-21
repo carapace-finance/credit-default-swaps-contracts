@@ -3,6 +3,7 @@ import { Contract, Signer } from "ethers";
 import { USDC_ADDRESS, USDC_DECIMALS, USDC_ABI } from "../utils/constants";
 import { PremiumPricing } from "../../typechain-types/contracts/core/PremiumPricing";
 import { Tranche } from "../../typechain-types/contracts/core/Tranche";
+import { getUnixTimestampOfSomeMonthAhead } from "../utils/time";
 
 const tranche: Function = (
   deployer: Signer,
