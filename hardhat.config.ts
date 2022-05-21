@@ -63,7 +63,7 @@ const config: HardhatUserConfig = {
     apiKey: process.env.ETHERSCAN_API_KEY
   },
   dodoc: {
-    runOnCompile: true,
+    runOnCompile: false,
     debugMode: true
   }
 };
