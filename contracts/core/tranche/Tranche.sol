@@ -64,4 +64,14 @@ contract Tranche is LPToken {
       _referenceLendingPools
     );
   }
+  /*** state-changing functions ***/
+  /// @notice allows the owner to pause the contract
+  function pauseTranche() external onlyOwner {
+    _pause();
+  }
+
+  /// @notice allows the owner to unpause the contract
+  function unpauseTranche() external onlyOwner {
+    _unpause();
+  }
 }

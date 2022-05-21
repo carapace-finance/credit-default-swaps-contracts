@@ -51,6 +51,33 @@ const tranche: Function = (
         expect(_premiumPricingAddress).to.eq(USDC_ADDRESS);
       });
     });
+    describe("pauseTranche", () => {
+      it("...should allow owner to pause contract", async () => {
+        await expect(
+          tranche.connect(account1).pauseTranche()
+        ).to.be.revertedWith("Ownable: caller is not the owner");
+        await expect(tranche.connect(deployer).pauseTranche()).to.emit(
+          tranche,
+          "Paused"
+        );
+        const _paused: boolean = await tranche.paused();
+        expect(_paused).to.eq(true);
+      });
+    });
+
+    describe("unpauseTranche", () => {
+      it("...should allow owner to unpause contract", async () => {
+        await expect(
+          tranche.connect(account1).unpauseTranche()
+        ).to.be.revertedWith("Ownable: caller is not the owner");
+        await expect(tranche.connect(deployer).unpauseTranche()).to.emit(
+          tranche,
+          "Unpaused"
+        );
+        const _paused: boolean = await tranche.paused();
+        expect(_paused).to.eq(false);
+      });
+    });
   });
 };
 
