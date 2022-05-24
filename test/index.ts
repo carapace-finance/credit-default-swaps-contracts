@@ -3,6 +3,9 @@ import { premiumPricing } from "./contracts/PremiumPricing.test";
 import {
   deployer,
   account1,
+  account2,
+  account3,
+  account4,
   deployContracts,
   trancheInstance,
   premiumPricingInstance
@@ -14,7 +17,14 @@ describe("start testing", () => {
   });
 
   it("run all the tests", () => {
-    tranche(deployer, account1, premiumPricingInstance, trancheInstance);
+    tranche(
+      deployer,
+      account1,
+      account2,
+      account3,
+      premiumPricingInstance,
+      trancheInstance
+    );
     premiumPricing(deployer, premiumPricingInstance);
   });
 });

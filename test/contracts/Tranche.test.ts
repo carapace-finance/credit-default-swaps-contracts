@@ -8,18 +8,20 @@ import { getUnixTimestampOfSomeMonthAhead } from "../utils/time";
 
 const tranche: Function = (
   deployer: Signer,
-  account1: Signer,
+  owner: Signer,
+  buyer: Signer,
+  seller: Signer,
   premiumPricing: PremiumPricing,
   tranche: Tranche
 ) => {
   describe("Tranche", () => {
     let deployerAddress: string;
-    let account1Address: string;
+    let ownerAddress: string;
     let USDC: Contract;
 
     before("get addresses", async () => {
       deployerAddress = await deployer.getAddress();
-      account1Address = await account1.getAddress();
+      ownerAddress = await owner.getAddress();
     });
 
     before("instantiate USDC token contract", async () => {

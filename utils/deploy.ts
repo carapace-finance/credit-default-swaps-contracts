@@ -7,12 +7,14 @@ import { PremiumPricing } from "../typechain-types/contracts/core/PremiumPricing
 let deployer: Signer;
 let account1: Signer;
 let account2: Signer;
+let account3: Signer;
+let account4: Signer;
 
 let trancheInstance: Tranche;
 let premiumPricingInstance: PremiumPricing;
 
 (async () => {
-  [deployer, account1, account2] = await ethers.getSigners();
+  [deployer, account1, account2, account3, account4] = await ethers.getSigners();
 })().catch((err) => {
   console.error(err);
 });
@@ -59,6 +61,8 @@ export {
   deployer,
   account1,
   account2,
+  account3,
+  account4,
   deployContracts,
   trancheInstance,
   premiumPricingInstance
