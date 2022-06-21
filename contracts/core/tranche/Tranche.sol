@@ -115,8 +115,12 @@ contract Tranche is SToken, ReentrancyGuard {
     _;
   }
 
+  function _noBuyerAccountExist() private view returns (bool) {
+    return ownerAddressToBuyerAccountId[msg.sender] == 0;
+  }
+
   /**
-   * @notice The total amount of premium in the tranche.
+   * @dev the total underlying balance is collateral plus interest including premium and interest from rehypothecation
    */
   function totalUnderlying() public view returns (uint256) {
     return underlyingToken.balanceOf(address(this));
@@ -134,8 +138,6 @@ contract Tranche is SToken, ReentrancyGuard {
     return _exchangeRate;
   }
 
-  function _noBuyerAccountExist() private view returns (bool) {
-    return ownerAddressToBuyerAccountId[msg.sender] == 0;
   /**
    * @param _underlyingAmount The amount of underlying assets to be converted.
    */
