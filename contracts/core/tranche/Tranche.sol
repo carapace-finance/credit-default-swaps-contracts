@@ -150,6 +150,19 @@ contract Tranche is SToken, ReentrancyGuard {
     uint256 _sTokenShares = _underlyingAmount / _getExchangeRate();
     return _sTokenShares;
   }
+
+  /**
+   * @dev A protection seller can calculate their balance of an underlying asset with their SToken balance and the exchange rate: SToken balance * the exchange rate
+   * @dev Your balance of an underlying asset is the sum of your collateral and interest minus protocol fees.
+   * @param _sTokenShares The amount of SToken balance to be converted.
+   */
+  function convertToUnderlying(uint256 _sTokenShares)
+    public
+    view
+    returns (uint256)
+  {
+    uint256 _underlyingAmount = _sTokenShares * _getExchangeRate();
+    return _underlyingAmount;
   }
 
   /*** state-changing functions ***/
