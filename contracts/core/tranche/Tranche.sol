@@ -22,12 +22,17 @@ contract Tranche is LPToken, ReentrancyGuard {
     IReferenceLendingPools referenceLendingPools
   );
 
+  event ProtectionSold(address protectionSeller, uint256 protectionAmount);
+
   /// @notice Emitted when a new buyer account is created.
   event BuyerAccountCreated(address owner, uint256 accountId);
 
   /// @notice Emitted when a new coverage is bought.
   event CoverageBought(address buyer, uint256 lendingPoolId, uint256 premium);
   /*** struct definition ***/
+  /// @notice Emitted when interest is accrued
+  event InterestAccrued();
+
 
   /*** variables ***/
   /// @notice Reference to the PremiumPricing contract
@@ -38,6 +43,8 @@ contract Tranche is LPToken, ReentrancyGuard {
 
   /// @notice ReferenceLendingPools contract address
   IReferenceLendingPools public referenceLendingPools;
+  /// @notice The total amount of capital from protection sellers accumulated in the tranche
+  uint256 public totalCollateral; // todo: is collateral the right name? maybe coverage?
 
   /// @notice The total amount of premium accumulated in the tranche
   uint256 private _premiumTotal;
@@ -112,10 +119,36 @@ contract Tranche is LPToken, ReentrancyGuard {
    */
   function premiumTotal() public view returns (uint256) {
     return _premiumTotal;
+  function totalUnderlying() public view returns (uint256) {
+    return underlyingToken.balanceOf(address(this));
+  }
+
+  /**
+   * @dev the exchange rate = total underlying balance - protocol fees / total SToken supply
+   * @dev the rehypothecation and the protocol fees will be added in the upcoming versions
+   */
+  function _getExchangeRate() internal view returns (uint256) {
+    // todo: this function needs to be tested thoroughly
+    uint256 _totalUnderlying = totalUnderlying();
+    uint256 _totalSTokenSupply = totalSupply();
+    uint256 _exchangeRate = _totalUnderlying / _totalSTokenSupply;
+    return _exchangeRate;
   }
 
   function _noBuyerAccountExist() private view returns (bool) {
     return ownerAddressToBuyerAccountId[msg.sender] == 0;
+  /**
+   * @param _underlyingAmount The amount of underlying assets to be converted.
+   */
+  function convertToSToken(uint256 _underlyingAmount)
+    public
+    view
+    returns (uint256)
+  {
+    if (totalSupply() == 0) return _underlyingAmount;
+    uint256 _sTokenShares = _underlyingAmount / _getExchangeRate();
+    return _sTokenShares;
+  }
   }
 
   /*** state-changing functions ***/
@@ -159,6 +192,7 @@ contract Tranche is LPToken, ReentrancyGuard {
     if (_noBuyerAccountExist() == true) {
       _createBuyerAccount();
     }
+    accrueInterest();
     uint256 _premiumAmount = premiumPricing.calculatePremium(
       _expirationTime,
       _coverageAmount
@@ -171,3 +205,36 @@ contract Tranche is LPToken, ReentrancyGuard {
     emit CoverageBought(msg.sender, _lendingPoolId, _premiumAmount);
   }
 }
+
+  /**
+   * @dev the underlying token must be approved first
+   * @param _underlyingAmount How much capital you provide.
+   * @param _receiver The address of ERC20 token _shares receiver.
+   * @param _expirationTime For how long you want to cover.
+   */
+  function sellProtection(
+    uint256 _underlyingAmount,
+    address _receiver,
+    uint256 _expirationTime
+  ) external whenNotPaused nonReentrant {
+    require(
+      _expirationTime - block.timestamp > 7889238,
+      "Tranche::sellProtection: _expirationTime is shorter than the minimal locking period(three months)!"
+    );
+    // todo: decide the minimal locking period and change the value if necessary
+    accrueInterest();
+    uint256 _sTokenShares = convertToSToken(_underlyingAmount);
+    underlyingToken.transferFrom(msg.sender, address(this), _underlyingAmount);
+    _safeMint(_receiver, _sTokenShares);
+    totalCollateral += _underlyingAmount;
+    emit ProtectionSold(_receiver, _underlyingAmount);
+  }
+
+  /**
+   * @notice Applies accrued interest to total underlying
+   * @dev This method calculates interest accrued from the last checkpointed block up to the current block and writes new checkpoint to storage.
+   */
+  function accrueInterest() public {
+    // todo: implement the body of this function
+    emit InterestAccrued();
+  }
