@@ -37,13 +37,13 @@ contract Tranche is SToken, ReentrancyGuard {
 
   /*** variables ***/
   /// @notice Reference to the PremiumPricing contract
-  IPremiumPricing public premiumPricing;
+  IPremiumPricing public immutable premiumPricing;
 
   /// @notice Reference to the underlying token
   IERC20 public immutable underlyingToken;
 
   /// @notice ReferenceLendingPools contract address
-  IReferenceLendingPools public referenceLendingPools;
+  IReferenceLendingPools public immutable referenceLendingPools;
   /// @notice The total amount of capital from protection sellers accumulated in the tranche
   uint256 public totalCollateral; // todo: is collateral the right name? maybe coverage?
 
