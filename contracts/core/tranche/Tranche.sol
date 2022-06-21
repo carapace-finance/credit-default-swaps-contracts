@@ -118,8 +118,6 @@ contract Tranche is SToken, ReentrancyGuard {
   /**
    * @notice The total amount of premium in the tranche.
    */
-  function premiumTotal() public view returns (uint256) {
-    return _premiumTotal;
   function totalUnderlying() public view returns (uint256) {
     return underlyingToken.balanceOf(address(this));
   }
