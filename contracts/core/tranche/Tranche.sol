@@ -7,8 +7,8 @@ import "./SToken.sol";
 import "../../interfaces/IReferenceLendingPools.sol";
 import "../../interfaces/IPremiumPricing.sol";
 
-/// @notice Tranche coordinates a swap market in between a buyer and a seller. It stores premium from a swap buyer and coverage capital from a swap seller.
   /*** libraries ***/
+/// @notice Tranche coordinates a swap market in between a buyer and a seller. It stores premium from a protection buyer and capital from a protection seller.
 contract Tranche is SToken, ReentrancyGuard {
   /// @notice OpenZeppelin library for managing counters.
   using Counters for Counters.Counter;
@@ -18,7 +18,7 @@ contract Tranche is SToken, ReentrancyGuard {
   event TrancheInitialized(
     string name,
     string symbol,
-    IERC20 paymentToken,
+    IERC20 underlyingToken,
     IReferenceLendingPools referenceLendingPools
   );
 
@@ -27,9 +27,10 @@ contract Tranche is SToken, ReentrancyGuard {
   /// @notice Emitted when a new buyer account is created.
   event BuyerAccountCreated(address owner, uint256 accountId);
 
-  /// @notice Emitted when a new coverage is bought.
-  event CoverageBought(address buyer, uint256 lendingPoolId, uint256 premium);
   /*** struct definition ***/
+  /// @notice Emitted when a new protection is bought.
+  event ProtectionBought(address buyer, uint256 lendingPoolId, uint256 premium);
+
   /// @notice Emitted when interest is accrued
   event InterestAccrued();
 
@@ -38,16 +39,16 @@ contract Tranche is SToken, ReentrancyGuard {
   /// @notice Reference to the PremiumPricing contract
   IPremiumPricing public premiumPricing;
 
-  /// @notice Reference to the payment token
-  IERC20 public paymentToken;
+  /// @notice Reference to the underlying token
+  IERC20 public immutable underlyingToken;
 
   /// @notice ReferenceLendingPools contract address
   IReferenceLendingPools public referenceLendingPools;
   /// @notice The total amount of capital from protection sellers accumulated in the tranche
   uint256 public totalCollateral; // todo: is collateral the right name? maybe coverage?
 
-  /// @notice The total amount of premium accumulated in the tranche
-  uint256 private _premiumTotal;
+  /// @notice The total amount of premium from protection buyers accumulated in the tranche
+  uint256 public totalPremium;
 
   /// @notice Buyer account id counter
   Counters.Counter public buyerAccountIdCounter;
@@ -64,29 +65,29 @@ contract Tranche is SToken, ReentrancyGuard {
 
   /*** constructor ***/
   /**
-   * @notice Instantiate an LP token, set up a payment token plus a ReferenceLendingPools contract, and then increment the buyerAccountIdCounter.
+   * @notice Instantiate an SToken, set up a underlying token plus a ReferenceLendingPools contract, and then increment the buyerAccountIdCounter.
    * @dev buyerAccountIdCounter starts in 1 as 0 is reserved for empty objects
-   * @param _paymentTokenAddress The address of the payment token in this tranche.
    * @param _name The name of the SToken in this tranche.
    * @param _symbol The symbol of the SToken in this tranche.
+   * @param _underlyingTokenAddress The address of the underlying token in this tranche.
    * @param _referenceLendingPools The address of the ReferenceLendingPools contract for this tranche.
    * @param _premiumPricing The address of the PremiumPricing contract.
    */
   constructor(
     string memory _name,
     string memory _symbol,
-    IERC20 _paymentTokenAddress,
+    IERC20 _underlyingTokenAddress,
     IReferenceLendingPools _referenceLendingPools,
     IPremiumPricing _premiumPricing
-    paymentToken = _paymentTokenAddress;
   ) SToken(_name, _symbol) {
+    underlyingToken = _underlyingTokenAddress;
     referenceLendingPools = _referenceLendingPools;
     premiumPricing = _premiumPricing;
     buyerAccountIdCounter.increment();
     emit TrancheInitialized(
       _name,
       _symbol,
-      _paymentTokenAddress,
+      _underlyingTokenAddress,
       _referenceLendingPools
     );
   }
@@ -161,27 +162,28 @@ contract Tranche is SToken, ReentrancyGuard {
   function unpauseTranche() external onlyOwner {
     _unpause();
   }
+
   /**
-   * @notice Create a unique account of a coverage buyer for an EOA
+   * @notice Create a unique account of a protection buyer for an EOA
    * @dev Only one account can be created per EOA
    */
   function _createBuyerAccount() private noBuyerAccountExist whenNotPaused {
-    uint256 _accountId = buyerAccountIdCounter.current();
-    ownerAddressToBuyerAccountId[msg.sender] = _accountId;
+    uint256 _buyerAccountId = buyerAccountIdCounter.current();
+    ownerAddressToBuyerAccountId[msg.sender] = _buyerAccountId;
     buyerAccountIdCounter.increment();
-    emit BuyerAccountCreated(msg.sender, _accountId);
+    emit BuyerAccountCreated(msg.sender, _buyerAccountId);
   }
 
   /**
-   * @dev The paymentToken must be approved first.
+   * @dev The underlyingToken must be approved first.
    * @param _lendingPoolId The id of the lending pool to be covered.
    * @param _expirationTime For how long you want to cover.
-   * @param _coverageAmount How much you want to cover.
+   * @param _protectionAmount How much you want to cover.
    */
-  function buyCoverage(
+  function buyProtection(
     uint256 _lendingPoolId,
     uint256 _expirationTime,
-    uint256 _coverageAmount
+    uint256 _protectionAmount
   )
     external
     whenNotExpired(_lendingPoolId)
@@ -195,16 +197,15 @@ contract Tranche is SToken, ReentrancyGuard {
     accrueInterest();
     uint256 _premiumAmount = premiumPricing.calculatePremium(
       _expirationTime,
-      _coverageAmount
+      _protectionAmount
     );
     uint256 _accountId = ownerAddressToBuyerAccountId[msg.sender];
     buyerAccounts[_accountId][_lendingPoolId] += _premiumAmount;
-    paymentToken.transferFrom(msg.sender, address(this), _premiumAmount);
+    underlyingToken.transferFrom(msg.sender, address(this), _premiumAmount);
     lendingPoolIdToPremiumTotal[_lendingPoolId] += _premiumAmount;
-    _premiumTotal += _premiumAmount;
-    emit CoverageBought(msg.sender, _lendingPoolId, _premiumAmount);
+    totalPremium += _premiumAmount;
+    emit ProtectionBought(msg.sender, _lendingPoolId, _premiumAmount);
   }
-}
 
   /**
    * @dev the underlying token must be approved first
