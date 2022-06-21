@@ -3,13 +3,13 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "./LPToken.sol";
+import "./SToken.sol";
 import "../../interfaces/IReferenceLendingPools.sol";
 import "../../interfaces/IPremiumPricing.sol";
 
 /// @notice Tranche coordinates a swap market in between a buyer and a seller. It stores premium from a swap buyer and coverage capital from a swap seller.
-contract Tranche is LPToken, ReentrancyGuard {
   /*** libraries ***/
+contract Tranche is SToken, ReentrancyGuard {
   /// @notice OpenZeppelin library for managing counters.
   using Counters for Counters.Counter;
 
@@ -66,9 +66,9 @@ contract Tranche is LPToken, ReentrancyGuard {
   /**
    * @notice Instantiate an LP token, set up a payment token plus a ReferenceLendingPools contract, and then increment the buyerAccountIdCounter.
    * @dev buyerAccountIdCounter starts in 1 as 0 is reserved for empty objects
-   * @param _name The name of the LP token in this tranche.
-   * @param _symbol The symbol of the LP token in this tranche.
    * @param _paymentTokenAddress The address of the payment token in this tranche.
+   * @param _name The name of the SToken in this tranche.
+   * @param _symbol The symbol of the SToken in this tranche.
    * @param _referenceLendingPools The address of the ReferenceLendingPools contract for this tranche.
    * @param _premiumPricing The address of the PremiumPricing contract.
    */
@@ -78,8 +78,8 @@ contract Tranche is LPToken, ReentrancyGuard {
     IERC20 _paymentTokenAddress,
     IReferenceLendingPools _referenceLendingPools,
     IPremiumPricing _premiumPricing
-  ) LPToken(_name, _symbol) {
     paymentToken = _paymentTokenAddress;
+  ) SToken(_name, _symbol) {
     referenceLendingPools = _referenceLendingPools;
     premiumPricing = _premiumPricing;
     buyerAccountIdCounter.increment();
