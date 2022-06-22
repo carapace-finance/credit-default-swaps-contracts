@@ -14,7 +14,8 @@ let trancheInstance: Tranche;
 let premiumPricingInstance: PremiumPricing;
 
 (async () => {
-  [deployer, account1, account2, account3, account4] = await ethers.getSigners();
+  [deployer, account1, account2, account3, account4] =
+    await ethers.getSigners();
 })().catch((err) => {
   console.error(err);
 });
@@ -30,16 +31,6 @@ const contractFactory: Function = async (contractName: string) => {
 
 const deployContracts: Function = async () => {
   try {
-    const _trancheFactory = await contractFactory("Tranche");
-    trancheInstance = await _trancheFactory.deploy(
-      "lpToken",
-      "LPT",
-      USDC_ADDRESS,
-      USDC_ADDRESS, // need to be changed to the address of the reference loans contract
-      USDC_ADDRESS // need to be changed to the address of the premium pricing contract
-    );
-    await trancheInstance.deployed();
-    console.log("Tranche" + " deployed to:", trancheInstance.address);
 
     const _premiumPricingInstance = await contractFactory("PremiumPricing");
     premiumPricingInstance = await _premiumPricingInstance.deploy(
@@ -52,6 +43,18 @@ const deployContracts: Function = async () => {
       "PremiumPricing" + " deployed to:",
       premiumPricingInstance.address
     );
+
+    const _trancheFactory = await contractFactory("Tranche");
+    trancheInstance = await _trancheFactory.deploy(
+      "sToken",
+      "LPT",
+      USDC_ADDRESS,
+      USDC_ADDRESS, // need to be changed to the address of the reference loans contract
+      premiumPricingInstance.address
+    );
+    await trancheInstance.deployed();
+    console.log("Tranche" + " deployed to:", trancheInstance.address);
+
   } catch (e) {
     console.log(e);
   }
