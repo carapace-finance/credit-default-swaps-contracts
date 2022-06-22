@@ -322,14 +322,6 @@ const tranche: Function = (
         );
       });
 
-      it("...fail if the _safeMint method is called by a non-tranche contract", async () => {
-        // todo: write this test later
-        // how do I test this? I think stoken and tranche contracts are the same address.
-        // await expect(
-        //   tranche.sellProtection(_underlyingAmount, sellerAddress, _expirationTime)
-        // ).to.be.revertedWith("'SToken::onlyTranche: Invalid tranche!");
-      });
-
       it("...interest accrued", async () => {
         // todo: test accrueInterest
         // expect(

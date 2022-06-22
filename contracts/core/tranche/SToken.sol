@@ -26,11 +26,7 @@ contract SToken is ERC20, Pausable, Ownable {
    * @param _to The address that should own the position
    * @param _amount the amount of tokens to mint
    */
-  function _safeMint(address _to, uint256 _amount)
-    internal
-    // onlyTranche // TODO: add this modifier
-    whenNotPaused
-  {
+  function _safeMint(address _to, uint256 _amount) internal whenNotPaused {
     _mint(_to, _amount);
     emit Minted(_to, _amount);
   }
