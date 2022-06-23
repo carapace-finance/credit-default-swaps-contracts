@@ -13,6 +13,9 @@ contract Tranche is SToken, ReentrancyGuard {
   /// @notice OpenZeppelin library for managing counters.
   using Counters for Counters.Counter;
 
+  /*** errors ***/
+  error ExpirationTimeTooShort(uint256 expirationTime);
+  error BuyerAccountExists(address msgSender);
   /*** events ***/
   /// @notice Emitted when a new tranche is created.
   event TrancheInitialized(
@@ -108,10 +111,8 @@ contract Tranche is SToken, ReentrancyGuard {
   }
 
   modifier noBuyerAccountExist() {
-    require(
-      ownerAddressToBuyerAccountId[msg.sender] == 0,
-      "Tranche::noBuyerAccountExist: the buyer account already exists!"
-    );
+    if (!(ownerAddressToBuyerAccountId[msg.sender] == 0))
+      revert BuyerAccountExists(msg.sender);
     _;
   }
 
@@ -231,10 +232,8 @@ contract Tranche is SToken, ReentrancyGuard {
     address _receiver,
     uint256 _expirationTime
   ) external whenNotPaused nonReentrant {
-    require(
-      _expirationTime - block.timestamp > 7889238,
-      "Tranche::sellProtection: _expirationTime is shorter than the minimal locking period(three months)!"
-    );
+    if (!(_expirationTime - block.timestamp > 7889238))
+      revert ExpirationTimeTooShort(_expirationTime);
     // todo: decide the minimal locking period and change the value if necessary
     accrueInterest();
     uint256 _sTokenShares = convertToSToken(_underlyingAmount);
