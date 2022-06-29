@@ -6,5 +6,6 @@ declare namespace NodeJS {
     MNEMONIC_WORDS: string;
     WALLET_INITIAL_INDEX: string;
     ETHERSCAN_API_KEY: string;
+    FIRST_POOL_SALT: string;
   }
 }
