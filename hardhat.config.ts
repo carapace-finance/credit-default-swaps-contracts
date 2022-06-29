@@ -3,8 +3,6 @@ import "@nomiclabs/hardhat-etherscan";
 import "@nomiclabs/hardhat-waffle";
 import "@typechain/ethers-v5";
 import "@typechain/hardhat";
-import dotenv from "dotenv";
-dotenv.config();
 import "solidity-coverage";
 import "@primitivefi/hardhat-dodoc";
 
