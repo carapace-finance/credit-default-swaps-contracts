@@ -1,6 +1,7 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomiclabs/hardhat-etherscan";
 import "@nomiclabs/hardhat-waffle";
+import "@tenderly/hardhat-tenderly";
 import "@typechain/ethers-v5";
 import "@typechain/hardhat";
 import "solidity-coverage";
