@@ -251,3 +251,4 @@ contract Tranche is SToken, ReentrancyGuard {
     // todo: implement the body of this function
     emit InterestAccrued();
   }
+}
