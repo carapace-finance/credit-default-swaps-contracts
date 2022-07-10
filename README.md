@@ -33,21 +33,28 @@ You are ready to write code!
 
 ## npm Script
 
-```
+```bash
 $ npm run compile
 // compiles your contracts and generate artifacts and cache.
 
-$ npm run deploy:mainnet_forked
-// deploys your contracts to the mirrored version of the mainnet in your local network.
-
 $ npm run node
 // runs the default network configured in the `hardhat.config.ts`.
+
+$ npm run deploy:mainnet_forked
+// deploys your contracts to the mirrored version of the mainnet in your local network.
 
 $ npm run test
 // runs test in the test directory.
 
 $ npm run cover
 // generate a code coverage report for testing.
+
+$ npm run tenderly:verify
+// 
+
+$ npm run tenderly:push
+// 
+
 $ npm run doc
 // generate a documentation from NatSpec comments.
 ```
