@@ -22,6 +22,7 @@ export MNEMONIC_WORDS = <mnemonic_words>
 export WALLET_INITIAL_INDEX = "0"
 export ETHERSCAN_API_KEY = <etherscan_api_key>
 export FIRST_POOL_FIRST_TRANCHE_SALT = <first_pool_first_tranche_salt>
+export SECOND_POOL_FIRST_TRANCHE_SALT = <second_pool_first_tranche_salt>
 export FIRST_POOL_SECOND_TRANCHE_SALT = <first_pool_second_tranche_salt>
 ```
 
