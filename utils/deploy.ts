@@ -2,6 +2,7 @@ import { Contract, ContractFactory, Signer } from "ethers";
 import { ethers } from "hardhat";
 import { USDC_ADDRESS } from "../test/utils/constants";
 import { Tranche } from "../typechain-types/contracts/core/tranche/Tranche";
+import { PoolFactory } from "../typechain-types/contracts/core/PoolFactory";
 import { PremiumPricing } from "../typechain-types/contracts/core/PremiumPricing";
 
 let deployer: Signer;
@@ -11,6 +12,7 @@ let account3: Signer;
 let account4: Signer;
 
 let trancheInstance: Tranche;
+let poolFactoryInstance: PoolFactory;
 let premiumPricingInstance: PremiumPricing;
 
 (async () => {
@@ -55,6 +57,10 @@ const deployContracts: Function = async () => {
     await trancheInstance.deployed();
     console.log("Tranche" + " deployed to:", trancheInstance.address);
 
+    const _poolFactoryFactory = await contractFactory("PoolFactory");
+    poolFactoryInstance = await _poolFactoryFactory.deploy();
+    await poolFactoryInstance.deployed();
+    console.log("PoolFactory" + " deployed to:", poolFactoryInstance.address);
   } catch (e) {
     console.log(e);
   }
@@ -67,6 +73,7 @@ export {
   account3,
   account4,
   deployContracts,
+  poolFactoryInstance,
   trancheInstance,
   premiumPricingInstance
 };
