@@ -1,12 +1,12 @@
 {
   "name": "credit-default-swaps-contracts",
   "version": "1.0.0",
-  "author": "Carapace Finance",
+  "author": "Carapace",
   "license": "MIT",
   "scripts": {
     "compile": "npx hardhat compile",
-    "deploy:mainnet_forked": "npx hardhat run --network localhost scripts/deploy.ts",
     "node": "npx hardhat node",
+    "deploy:mainnet_forked": "npx hardhat run --network localhost scripts/deploy.ts",
     "test": "npx hardhat test",
     "cover": "npx hardhat coverage",
     "tenderly:verify": "npx hardhat tenderly:verify",
