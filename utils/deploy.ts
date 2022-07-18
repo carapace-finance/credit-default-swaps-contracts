@@ -1,7 +1,9 @@
+import { BigNumber } from "@ethersproject/bignumber";
 import { Contract, ContractFactory, Signer } from "ethers";
 import { ethers } from "hardhat";
 import { USDC_ADDRESS } from "../test/utils/constants";
 import { Tranche } from "../typechain-types/contracts/core/tranche/Tranche";
+import { Pool } from "../typechain-types/contracts/core/pool/Pool";
 import { PoolFactory } from "../typechain-types/contracts/core/PoolFactory";
 import { PremiumPricing } from "../typechain-types/contracts/core/PremiumPricing";
 
@@ -12,6 +14,7 @@ let account3: Signer;
 let account4: Signer;
 
 let trancheInstance: Tranche;
+let poolInstance: Pool;
 let poolFactoryInstance: PoolFactory;
 let premiumPricingInstance: PremiumPricing;
 
@@ -61,6 +64,29 @@ const deployContracts: Function = async () => {
     poolFactoryInstance = await _poolFactoryFactory.deploy();
     await poolFactoryInstance.deployed();
     console.log("PoolFactory" + " deployed to:", poolFactoryInstance.address);
+
+    const _poolFactory = await contractFactory("Pool");
+    const _firstPoolFirstTrancheSalt: string = "0x".concat(
+      process.env.FIRST_POOL_FIRST_TRANCHE_SALT
+    );
+    const _firstPoolId: BigNumber = BigNumber.from(1);
+    const _floor: BigNumber = BigNumber.from(100);
+    const _ceiling: BigNumber = BigNumber.from(500);
+    const _name: string = "sToken11";
+    const _symbol: string = "sT11";
+    poolInstance = await _poolFactory.deploy(
+      _firstPoolFirstTrancheSalt,
+      _firstPoolId,
+      _floor,
+      _ceiling,
+      USDC_ADDRESS,
+      referenceLoansInstance.address,
+      premiumPricingInstance.address,
+      _name,
+      _symbol
+    );
+    await poolInstance.deployed();
+    console.log("Pool" + " deployed to:", poolInstance.address);
   } catch (e) {
     console.log(e);
   }
@@ -73,6 +99,7 @@ export {
   account3,
   account4,
   deployContracts,
+  poolInstance,
   poolFactoryInstance,
   trancheInstance,
   premiumPricingInstance
