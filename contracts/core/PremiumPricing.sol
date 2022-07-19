@@ -42,7 +42,7 @@ contract PremiumPricing is Ownable {
    */
   function calculatePremium(uint256 _expirationTime, uint256 _protectionAmount)
     external
-    view
+    pure
     returns (uint256)
   {
     // uint256 _riskFactor = _calculateRiskFactor();
