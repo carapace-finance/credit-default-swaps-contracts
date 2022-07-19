@@ -6,6 +6,7 @@ import { Tranche } from "../typechain-types/contracts/core/tranche/Tranche";
 import { Pool } from "../typechain-types/contracts/core/pool/Pool";
 import { PoolFactory } from "../typechain-types/contracts/core/PoolFactory";
 import { PremiumPricing } from "../typechain-types/contracts/core/PremiumPricing";
+import { TrancheFactory } from "../typechain-types/contracts/core/TrancheFactory";
 
 let deployer: Signer;
 let account1: Signer;
@@ -17,6 +18,7 @@ let trancheInstance: Tranche;
 let poolInstance: Pool;
 let poolFactoryInstance: PoolFactory;
 let premiumPricingInstance: PremiumPricing;
+let trancheFactoryInstance: TrancheFactory;
 
 (async () => {
   [deployer, account1, account2, account3, account4] =
@@ -59,6 +61,14 @@ const deployContracts: Function = async () => {
     );
     await trancheInstance.deployed();
     console.log("Tranche" + " deployed to:", trancheInstance.address);
+
+    const _trancheFactoryFactory = await contractFactory("TrancheFactory");
+    trancheFactoryInstance = await _trancheFactoryFactory.deploy();
+    await trancheFactoryInstance.deployed();
+    console.log(
+      "TrancheFactory" + " deployed to:",
+      trancheFactoryInstance.address
+    );
 
     const _poolFactoryFactory = await contractFactory("PoolFactory");
     poolFactoryInstance = await _poolFactoryFactory.deploy();
@@ -103,4 +113,5 @@ export {
   poolFactoryInstance,
   trancheInstance,
   premiumPricingInstance
+  trancheFactoryInstance
 };
