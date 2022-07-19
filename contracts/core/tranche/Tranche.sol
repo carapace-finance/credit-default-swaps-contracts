@@ -4,12 +4,12 @@ pragma solidity ^0.8.13;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./SToken.sol";
-import "../../interfaces/IReferenceLendingPools.sol";
+import "../../interfaces/IReferenceLoans.sol";
 import "../../interfaces/IPremiumPricing.sol";
 
-  /*** libraries ***/
 /// @notice Tranche coordinates a swap market in between a buyer and a seller. It stores premium from a protection buyer and capital from a protection seller.
 contract Tranche is SToken, ReentrancyGuard {
+  /*** libraries ***/
   /// @notice OpenZeppelin library for managing counters.
   using Counters for Counters.Counter;
 
@@ -45,8 +45,8 @@ contract Tranche is SToken, ReentrancyGuard {
   /// @notice Reference to the underlying token
   IERC20 public immutable underlyingToken;
 
-  /// @notice ReferenceLendingPools contract address
-  IReferenceLendingPools public immutable referenceLendingPools;
+  /// @notice ReferenceLoans contract address
+  IReferenceLoans public immutable referenceLoans;
   /// @notice The total amount of capital from protection sellers accumulated in the tranche
   uint256 public totalCollateral; // todo: is collateral the right name? maybe coverage?
 
@@ -56,7 +56,7 @@ contract Tranche is SToken, ReentrancyGuard {
   /// @notice Buyer account id counter
   Counters.Counter public buyerAccountIdCounter;
 
-  /// @notice The buyer account id for each address
+  /// @notice a buyer account id for each address
   mapping(address => uint256) public ownerAddressToBuyerAccountId;
 
   /// @notice The premium amount for each lending pool for each account id
@@ -68,23 +68,23 @@ contract Tranche is SToken, ReentrancyGuard {
 
   /*** constructor ***/
   /**
-   * @notice Instantiate an SToken, set up a underlying token plus a ReferenceLendingPools contract, and then increment the buyerAccountIdCounter.
+   * @notice Instantiate an SToken, set up a underlying token plus a ReferenceLoans contract, and then increment the buyerAccountIdCounter.
    * @dev buyerAccountIdCounter starts in 1 as 0 is reserved for empty objects
    * @param _name The name of the SToken in this tranche.
    * @param _symbol The symbol of the SToken in this tranche.
-   * @param _underlyingTokenAddress The address of the underlying token in this tranche.
-   * @param _referenceLendingPools The address of the ReferenceLendingPools contract for this tranche.
+   * @param _underlyingToken The address of the underlying token in this tranche.
+   * @param _referenceLoans The address of the ReferenceLoans contract for this tranche.
    * @param _premiumPricing The address of the PremiumPricing contract.
    */
   constructor(
     string memory _name,
     string memory _symbol,
-    IERC20 _underlyingTokenAddress,
-    IReferenceLendingPools _referenceLendingPools,
+    IERC20 _underlyingToken,
+    IReferenceLoans _referenceLoans,
     IPremiumPricing _premiumPricing
   ) SToken(_name, _symbol) {
-    underlyingToken = _underlyingTokenAddress;
-    referenceLendingPools = _referenceLendingPools;
+    underlyingToken = _underlyingToken;
+    referenceLoans = _referenceLoans;
     premiumPricing = _premiumPricing;
     buyerAccountIdCounter.increment();
     emit TrancheInitialized(

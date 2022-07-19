@@ -1,7 +1,7 @@
-import { tranche } from "./contracts/Tranche.test";
 import { pool } from "./contracts/Pool.test";
 import { poolFactory } from "./contracts/PoolFactory.test";
 import { premiumPricing } from "./contracts/PremiumPricing.test";
+import { tranche } from "./contracts/Tranche.test";
 import { trancheFactory } from "./contracts/TrancheFactory.test";
 
 import {
@@ -26,7 +26,6 @@ describe("start testing", () => {
   it("run all the tests", () => {
     pool(account1, poolInstance, referenceLoansInstance);
     poolFactory(
-      deployer,
       account1,
       poolFactoryInstance,
       premiumPricingInstance,

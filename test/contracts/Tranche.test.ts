@@ -43,14 +43,13 @@ const tranche: Function = (
         expect(_symbol).to.eq("LPT");
       });
       it("...set the USDC as the underlying token", async () => {
-        const _underlyingTokenAddress: string = await tranche.underlyingToken();
-        expect(_underlyingTokenAddress).to.eq(USDC_ADDRESS);
+        const _underlyingToken: string = await tranche.underlyingToken();
+        expect(_underlyingToken).to.eq(USDC_ADDRESS);
       });
       it("...set the reference lending pool contract address", async () => {
-        const _referenceLendingPoolsAddress: string =
-          await tranche.referenceLendingPools();
-        // todo: the _referenceLendingPoolsAddress should not be USDC_ADDRESS
-        expect(_referenceLendingPoolsAddress).to.eq(USDC_ADDRESS);
+        const _referenceLoansAddress: string = await tranche.referenceLoans();
+        // todo: the _referenceLoansAddress should not be USDC_ADDRESS
+        expect(_referenceLoansAddress).to.eq(USDC_ADDRESS);
       });
       it("...set the premium pricing contract address", async () => {
         const _premiumPricingAddress: string = await tranche.premiumPricing();
@@ -62,7 +61,7 @@ const tranche: Function = (
       let _protectionAmount: BigNumber;
 
       it("...should expire the referenceLoans", async () => {
-        // todo: write this test once you finish writing the ReferenceLendingPools contract
+        // todo: write this test once you finish writing the ReferenceLoans contract
         //   await referenceLoans.setIsExpired(true);
         //   const _checkIsExpired: boolean =
         //     await referenceLoans.checkIsExpired();
@@ -70,12 +69,12 @@ const tranche: Function = (
       });
 
       it("...fails if the lending pool has expired already", async () => {
-        // todo: write this test once you finish writing the ReferenceLendingPools contract
+        // todo: write this test once you finish writing the ReferenceLoans contract
         // await expect(tranche.buyProtection(0,0,0)).to.be.revertedWith("Lending pool has expired");
       });
 
       it("...should roll back the expiration the referenceLoans for testing", async () => {
-        // todo: write this test once you finish writing the ReferenceLendingPools contract
+        // todo: write this test once you finish writing the ReferenceLoans contract
         //   await referenceLoans.setIsExpired(true);
         //   const _checkIsExpired: boolean =
         //     await referenceLoans.checkIsExpired();
@@ -83,7 +82,7 @@ const tranche: Function = (
       });
 
       it("...fails if the lending pool has defaulted", async () => {
-        // todo: write this test once you finish writing the ReferenceLendingPools contract
+        // todo: write this test once you finish writing the ReferenceLoans contract
         // even if a pool defaults, there may be more default from other loans in the pool. whenNotDefault should be valid only when all the loans in the lending pool default?
       });
 
@@ -393,7 +392,9 @@ const tranche: Function = (
           _underlyingAmount.add(_underlyingAmount)
         );
         // shares == _underlyingAmount in the 1st protection purchase
-        expect(_shares.add(_underlyingAmount)).to.eq(await tranche.balanceOf(sellerAddress));
+        expect(_shares.add(_underlyingAmount)).to.eq(
+          await tranche.balanceOf(sellerAddress)
+        );
       });
 
       it("...should return 30 total underlying amount", async () => {

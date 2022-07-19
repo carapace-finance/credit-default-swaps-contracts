@@ -2,10 +2,10 @@ import { BigNumber } from "@ethersproject/bignumber";
 import { Contract, ContractFactory, Signer } from "ethers";
 import { ethers } from "hardhat";
 import { USDC_ADDRESS } from "../test/utils/constants";
-import { Tranche } from "../typechain-types/contracts/core/tranche/Tranche";
 import { Pool } from "../typechain-types/contracts/core/pool/Pool";
 import { PoolFactory } from "../typechain-types/contracts/core/PoolFactory";
 import { PremiumPricing } from "../typechain-types/contracts/core/PremiumPricing";
+import { Tranche } from "../typechain-types/contracts/core/tranche/Tranche";
 import { TrancheFactory } from "../typechain-types/contracts/core/TrancheFactory";
 
 let deployer: Signer;
@@ -14,10 +14,10 @@ let account2: Signer;
 let account3: Signer;
 let account4: Signer;
 
-let trancheInstance: Tranche;
 let poolInstance: Pool;
 let poolFactoryInstance: PoolFactory;
 let premiumPricingInstance: PremiumPricing;
+let trancheInstance: Tranche;
 let trancheFactoryInstance: TrancheFactory;
 
 (async () => {

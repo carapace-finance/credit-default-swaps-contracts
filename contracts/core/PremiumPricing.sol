@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 /// @notice A contract for premium price calculation.
 contract PremiumPricing is Ownable {
   /*** events ***/
-  event PremiumPricingInitialized(
+  event PremiumPricingCreated(
     uint256 minimumProtection,
     uint256 curvature,
     uint256 minimumRiskFactor
@@ -26,7 +26,7 @@ contract PremiumPricing is Ownable {
     minimumProtection = _minimumProtection;
     curvature = _curvature;
     minimumRiskFactor = _minimumRiskFactor;
-    emit PremiumPricingInitialized(
+    emit PremiumPricingCreated(
       _minimumProtection,
       _curvature,
       _minimumRiskFactor
