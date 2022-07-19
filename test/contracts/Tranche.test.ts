@@ -310,6 +310,7 @@ const tranche: Function = (
       });
 
       it("...fail if _expirationTime is not more than the minimal locking period(three months)", async () => {
+        let _shortExpirationTimeString = await _shortExpirationTime;
         await expect(
           tranche.sellProtection(
             _underlyingAmount,
@@ -317,7 +318,9 @@ const tranche: Function = (
             _shortExpirationTime
           )
         ).to.be.revertedWith(
-          "Tranche::sellProtection: _expirationTime is shorter than the minimal locking period(three months)!"
+          "ExpirationTimeTooShort(" +
+            _shortExpirationTimeString.toString() +
+            ")"
         );
       });
 
