@@ -2,6 +2,8 @@ import { tranche } from "./contracts/Tranche.test";
 import { pool } from "./contracts/Pool.test";
 import { poolFactory } from "./contracts/PoolFactory.test";
 import { premiumPricing } from "./contracts/PremiumPricing.test";
+import { trancheFactory } from "./contracts/TrancheFactory.test";
+
 import {
   deployer,
   account1,
@@ -13,6 +15,7 @@ import {
   poolFactoryInstance,
   trancheInstance,
   premiumPricingInstance
+  trancheFactoryInstance
 } from "../utils/deploy";
 
 describe("start testing", () => {
@@ -39,5 +42,11 @@ describe("start testing", () => {
       trancheInstance
     );
     premiumPricing(deployer, premiumPricingInstance);
+    trancheFactory(
+      account1,
+      trancheFactoryInstance,
+      premiumPricingInstance,
+      referenceLoansInstance
+    );
   });
 });
