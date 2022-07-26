@@ -5,6 +5,7 @@ import { USDC_ADDRESS } from "../test/utils/constants";
 import { Pool } from "../typechain-types/contracts/core/pool/Pool";
 import { PoolFactory } from "../typechain-types/contracts/core/PoolFactory";
 import { PremiumPricing } from "../typechain-types/contracts/core/PremiumPricing";
+import { ReferenceLoans } from "../typechain-types/contracts/core/pool/ReferenceLoans";
 import { Tranche } from "../typechain-types/contracts/core/tranche/Tranche";
 import { TrancheFactory } from "../typechain-types/contracts/core/TrancheFactory";
 
@@ -17,6 +18,7 @@ let account4: Signer;
 let poolInstance: Pool;
 let poolFactoryInstance: PoolFactory;
 let premiumPricingInstance: PremiumPricing;
+let referenceLoansInstance: ReferenceLoans;
 let trancheInstance: Tranche;
 let trancheFactoryInstance: TrancheFactory;
 
@@ -49,6 +51,14 @@ const deployContracts: Function = async () => {
     console.log(
       "PremiumPricing" + " deployed to:",
       premiumPricingInstance.address
+    );
+
+    const referenceLoansFactory = await contractFactory("ReferenceLoans");
+    referenceLoansInstance = await referenceLoansFactory.deploy();
+    await referenceLoansInstance.deployed();
+    console.log(
+      "ReferenceLoans" + " deployed to:",
+      referenceLoansInstance.address
     );
 
     const _trancheFactory = await contractFactory("Tranche");
@@ -111,6 +121,7 @@ export {
   deployContracts,
   poolInstance,
   poolFactoryInstance,
+  referenceLoansInstance,
   trancheInstance,
   premiumPricingInstance
   trancheFactoryInstance

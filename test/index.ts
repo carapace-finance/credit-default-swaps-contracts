@@ -13,6 +13,7 @@ import {
   deployContracts,
   poolInstance,
   poolFactoryInstance,
+  referenceLoansInstance,
   trancheInstance,
   premiumPricingInstance
   trancheFactoryInstance
