@@ -13,9 +13,9 @@ import {
   deployContracts,
   poolInstance,
   poolFactoryInstance,
+  premiumPricingInstance,
   referenceLoansInstance,
   trancheInstance,
-  premiumPricingInstance
   trancheFactoryInstance
 } from "../utils/deploy";
 
