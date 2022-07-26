@@ -121,8 +121,8 @@ export {
   deployContracts,
   poolInstance,
   poolFactoryInstance,
+  premiumPricingInstance,
   referenceLoansInstance,
   trancheInstance,
-  premiumPricingInstance
   trancheFactoryInstance
 };
