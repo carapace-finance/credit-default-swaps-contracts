@@ -17,12 +17,13 @@ contract Tranche is SToken, ReentrancyGuard {
   error ExpirationTimeTooShort(uint256 expirationTime);
   error BuyerAccountExists(address msgSender);
   /*** events ***/
+
   /// @notice Emitted when a new tranche is created.
   event TrancheInitialized(
     string name,
     string symbol,
     IERC20 underlyingToken,
-    IReferenceLendingPools referenceLendingPools
+    IReferenceLoans referenceLoans
   );
 
   event ProtectionSold(address protectionSeller, uint256 protectionAmount);
@@ -87,18 +88,14 @@ contract Tranche is SToken, ReentrancyGuard {
     referenceLoans = _referenceLoans;
     premiumPricing = _premiumPricing;
     buyerAccountIdCounter.increment();
-    emit TrancheInitialized(
-      _name,
-      _symbol,
-      _underlyingTokenAddress,
-      _referenceLendingPools
-    );
+    emit TrancheInitialized(_name, _symbol, _underlyingToken, _referenceLoans);
   }
   /**
    * @param _lendingPoolId The id of the lending pool.
    */
   modifier whenNotExpired(uint256 _lendingPoolId) {
-    // require(referenceLendingPools.checkIsExpired(uint256 _lendingPoolId) == false, "Lending pool has expired");
+    //   if (referenceLoans.checkIsExpired(_lendingPoolId) == true)
+    //     revert PoolExpired(_lendingPoolId);
     _;
   }
 
