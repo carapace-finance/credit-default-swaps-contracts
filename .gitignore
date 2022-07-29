@@ -6,6 +6,9 @@ node_modules
 
 ## credentials
 .env
+.env.local
+.env.production
+.env.development
 
 #Hardhat
 artifacts
@@ -26,3 +29,4 @@ docs
 
 #vscode config
 .vscode
+.DS_Store
