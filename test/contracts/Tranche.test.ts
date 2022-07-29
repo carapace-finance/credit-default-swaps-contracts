@@ -1,10 +1,11 @@
 import { BigNumber } from "@ethersproject/bignumber";
 import { expect } from "chai";
 import { Contract, Signer } from "ethers";
-import { USDC_ADDRESS, USDC_DECIMALS, USDC_ABI } from "../utils/constants";
+import { CIRCLE_ACCOUNT_ADDRESS, USDC_ADDRESS, USDC_DECIMALS, USDC_ABI } from "../utils/constants";
 import { PremiumPricing } from "../../typechain-types/contracts/core/PremiumPricing";
 import { Tranche } from "../../typechain-types/contracts/core/Tranche";
 import { getUnixTimestampOfSomeMonthAhead } from "../utils/time";
+import { ethers } from "hardhat";
 
 const tranche: Function = (
   deployer: Signer,
@@ -28,8 +29,12 @@ const tranche: Function = (
       sellerAddress = await seller.getAddress();
     });
 
-    before("instantiate USDC token contract", async () => {
+    before("instantiate USDC token contract and transfer USDC to deployer account", async () => {
       USDC = await new Contract(USDC_ADDRESS, USDC_ABI, deployer);
+
+      // Impersonate CIRCLE account and transfer some USDC to deployer to test with
+      const circleAccount = await ethers.getImpersonatedSigner(CIRCLE_ACCOUNT_ADDRESS);
+      USDC.connect(circleAccount).transfer(deployerAddress, BigNumber.from(1000).mul(USDC_DECIMALS));
     });
 
     describe("constructor", () => {

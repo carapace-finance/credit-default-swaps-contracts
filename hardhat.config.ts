@@ -6,6 +6,7 @@ import "@typechain/ethers-v5";
 import "@typechain/hardhat";
 import "solidity-coverage";
 import "@primitivefi/hardhat-dodoc";
+import "dotenv/config";
 
 const config: HardhatUserConfig = {
   defaultNetwork: "hardhat",
