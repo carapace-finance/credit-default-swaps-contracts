@@ -20,33 +20,47 @@ import {
 } from "../utils/deploy";
 
 describe("start testing", () => {
-  it("deploy contracts", async () => {
+  before("deploy contracts", async () => {
     await deployContracts();
   });
 
-  it("run all the tests", () => {
-    pool(account1, poolInstance, referenceLoansInstance);
-    poolFactory(
-      account1,
-      poolFactoryInstance,
-      premiumPricingInstance,
-      referenceLoansInstance,
-      trancheFactoryInstance
-    );
-    tranche(
-      deployer,
-      account1,
-      account2,
-      account3,
-      premiumPricingInstance,
-      trancheInstance
-    );
-    premiumPricing(deployer, premiumPricingInstance);
-    trancheFactory(
-      account1,
-      trancheFactoryInstance,
-      premiumPricingInstance,
-      referenceLoansInstance
-    );
+  describe("run all the tests", () => {
+    it("run the Pool test", async () => {
+      pool(account1, poolInstance, referenceLoansInstance);
+    });
+
+    it("run the PoolFactory test", async () => {
+      poolFactory(
+        account1,
+        poolFactoryInstance,
+        premiumPricingInstance,
+        referenceLoansInstance,
+        trancheFactoryInstance
+      );
+    });
+
+    it("run the PremiumPricing test", async () => {
+      premiumPricing(premiumPricingInstance);
+    });
+
+    it("run the Tranche test", async () => {
+      tranche(
+        deployer,
+        account1,
+        account2,
+        account3,
+        premiumPricingInstance,
+        trancheInstance
+      );
+    });
+
+    it("run the TrancheFactory test", async () => {
+      trancheFactory(
+        account1,
+        trancheFactoryInstance,
+        premiumPricingInstance,
+        referenceLoansInstance
+      );
+    });
   });
 });
