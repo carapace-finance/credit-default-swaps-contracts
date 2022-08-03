@@ -39,26 +39,33 @@ abstract contract IPoolCycleManager {
         uint256 cycleDuration
     );
 
-    /// @notice Registers the given pool and starts a new cycle for it in `Open` state.
-    /// @param _poolId The id of the pool.
-    /// @param openCycleDuration Time duration for which cycle is OPEN, meaning deposit & withdraw is allowed.
-    /// @param cycleDuration The total duration of each pool cycle.
+    /**
+     * @notice Registers the given pool and starts a new cycle for it in `Open` state.
+     * @param _poolId The id of the pool.
+     * @param openCycleDuration Time duration for which cycle is OPEN, meaning deposit & withdraw is allowed.
+     * @param cycleDuration The total duration of each pool cycle.
+     */
     function registerPool(uint256 _poolId, uint256 openCycleDuration, uint256 cycleDuration) virtual public;
 
-    /// @notice Determines & returns the current cycle state of the given pool.
-    /// @notice This function also starts a new cycle if required.
-    /// @param _poolId The id of the pool.
-    /// @return state The newly determined cycle state of the pool.
-    // TODO: better name to convey state update?
-    function calculateAndSetPoolCycleState(uint256 _poolId) virtual public returns (CycleState state);
+    /**
+     * @notice Determines & returns the current cycle state of the given pool.
+     * @notice This function also starts a new cycle if required.
+     * @param _poolId The id of the pool.
+     * @return state The newly determined cycle state of the pool.
+     */
+    function calculateAndSetPoolCycleState(uint256 _poolId) virtual public returns (CycleState);
 
-    /// @notice Provides the current cycle state of the pool with specified id.
-    /// @param _poolId The id of the pool.
-    /// @return state The current cycle state of the given pool.
-    function getCurrentCycleState(uint256 _poolId) virtual public view returns (CycleState state);
+    /**
+     * @notice Provides the current cycle state of the pool with specified id.
+     * @param _poolId The id of the pool.
+     * @return state The current cycle state of the given pool. 
+     */
+    function getCurrentCycleState(uint256 _poolId) virtual public view returns (CycleState);
 
-    /// @notice Provides the current cycle index of the pool with specified id.
-    /// @param _poolId The id of the pool.
-    /// @return index The current cycle index of the given pool.
-    function getCurrentCycleIndex(uint256 _poolId) virtual public view returns (uint256 index);
+    /**
+     * @notice Provides the current cycle index of the pool with specified id.
+     * @param _poolId The id of the pool.
+     * @return index The current cycle index of the given pool.
+     */
+    function getCurrentCycleIndex(uint256 _poolId) virtual public view returns (uint256);
 }

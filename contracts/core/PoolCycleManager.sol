@@ -5,7 +5,11 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "../interfaces/IPoolCycleManager.sol";
 
 
-/// @title PoolCycleManager
+/**
+ * @title PoolCycleManager
+ * @author Carapace Finanace
+ * @notice Contract to manage the current cycle of various pools.
+ */
 contract PoolCycleManager is IPoolCycleManager {
 
     /*** errors ***/
