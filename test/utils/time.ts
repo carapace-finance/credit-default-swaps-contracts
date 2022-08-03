@@ -1,3 +1,6 @@
+import { BigNumber } from "@ethersproject/bignumber";
+import { network } from "hardhat";
+
 const getUnixTimestampOfSomeMonthAhead: Function = async (months: number) => {
   let _expirationTime: number;
   let _date: Date = new Date();
@@ -10,4 +13,9 @@ const getUnixTimestampOfSomeMonthAhead: Function = async (months: number) => {
   return _expirationTime;
 };
 
-export { getUnixTimestampOfSomeMonthAhead };
+const moveForwardTime: Function = async (_duration: BigNumber) => {
+  await network.provider.send("evm_increaseTime", [_duration.toNumber()]);
+  await network.provider.send("evm_mine", []);
+};
+
+export { getUnixTimestampOfSomeMonthAhead, moveForwardTime };

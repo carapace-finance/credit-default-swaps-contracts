@@ -3,6 +3,7 @@ import { poolFactory } from "./contracts/PoolFactory.test";
 import { premiumPricing } from "./contracts/PremiumPricing.test";
 import { tranche } from "./contracts/Tranche.test";
 import { trancheFactory } from "./contracts/TrancheFactory.test";
+import { testPoolCycleManager } from "./contracts/PoolCycleManager.test";
 
 import {
   deployer,
@@ -16,7 +17,8 @@ import {
   premiumPricingInstance,
   referenceLoansInstance,
   trancheInstance,
-  trancheFactoryInstance
+  trancheFactoryInstance,
+  poolCycleManagerInstance
 } from "../utils/deploy";
 
 describe("start testing", () => {
@@ -60,6 +62,14 @@ describe("start testing", () => {
         trancheFactoryInstance,
         premiumPricingInstance,
         referenceLoansInstance
+      );
+    });
+    
+    it("run the PoolCycleManager test", async () => {
+      testPoolCycleManager(
+        deployer,
+        account1,
+        poolCycleManagerInstance
       );
     });
   });
