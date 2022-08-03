@@ -7,7 +7,7 @@ import { Tranche } from "../../typechain-types/contracts/core/Tranche";
 import { getUnixTimestampOfSomeMonthAhead } from "../utils/time";
 import { ethers } from "hardhat";
 
-const tranche: Function = (
+const testTranche: Function = (
   deployer: Signer,
   owner: Signer,
   buyer: Signer,
@@ -443,4 +443,4 @@ const tranche: Function = (
   });
 };
 
-export { tranche };
+export { testTranche };

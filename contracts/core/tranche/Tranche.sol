@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./SToken.sol";
 import "../../interfaces/IReferenceLoans.sol";
 import "../../interfaces/IPremiumPricing.sol";
+import "../../interfaces/IPoolCycleManager.sol";
 
 /// @notice Tranche coordinates a swap market in between a buyer and a seller. It stores premium from a protection buyer and capital from a protection seller.
 contract Tranche is SToken, ReentrancyGuard {
@@ -48,6 +49,10 @@ contract Tranche is SToken, ReentrancyGuard {
 
   /// @notice ReferenceLoans contract address
   IReferenceLoans public immutable referenceLoans;
+
+  /// @notice Reference to the PoolCycleManager contract
+  IPoolCycleManager public immutable poolCycleManager;
+
   /// @notice The total amount of capital from protection sellers accumulated in the tranche
   uint256 public totalCollateral; // todo: is collateral the right name? maybe coverage?
 
@@ -76,20 +81,25 @@ contract Tranche is SToken, ReentrancyGuard {
    * @param _underlyingToken The address of the underlying token in this tranche.
    * @param _referenceLoans The address of the ReferenceLoans contract for this tranche.
    * @param _premiumPricing The address of the PremiumPricing contract.
+   * @param _poolCycleManager The address of the PoolCycleManager contract.
    */
   constructor(
     string memory _name,
     string memory _symbol,
     IERC20 _underlyingToken,
     IReferenceLoans _referenceLoans,
-    IPremiumPricing _premiumPricing
+    IPremiumPricing _premiumPricing,
+    IPoolCycleManager _poolCycleManager
   ) SToken(_name, _symbol) {
     underlyingToken = _underlyingToken;
     referenceLoans = _referenceLoans;
     premiumPricing = _premiumPricing;
+    poolCycleManager = _poolCycleManager;
     buyerAccountIdCounter.increment();
+    
     emit TrancheInitialized(_name, _symbol, _underlyingToken, _referenceLoans);
   }
+
   /**
    * @param _lendingPoolId The id of the lending pool.
    */

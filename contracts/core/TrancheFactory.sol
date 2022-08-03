@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "./tranche/Tranche.sol";
+import "../interfaces/IPoolCycleManager.sol";
 
 /// @notice TrancheFactory creates a new tranche in a given pool and keeps track of them.
 contract TrancheFactory is Ownable {
@@ -42,6 +43,7 @@ contract TrancheFactory is Ownable {
    * @param _underlyingToken The address of the underlying token in this tranche.
    * @param _referenceLoans The address of the ReferenceLoans contract for this tranche.
    * @param _premiumPricing The address of the PremiumPricing contract.
+   * @param _poolCycleManager The address of the PoolCycleManager contract.
    */
   function createTranche(
     bytes32 _salt,
@@ -50,7 +52,8 @@ contract TrancheFactory is Ownable {
     string memory _symbol,
     IERC20 _underlyingToken,
     IReferenceLoans _referenceLoans,
-    IPremiumPricing _premiumPricing
+    IPremiumPricing _premiumPricing,
+    IPoolCycleManager _poolCycleManager
   ) public onlyOwner returns (address) {
     // todo: add the onlyPool modifier
     if (poolIdToTrancheIdCounter[_poolId].current() == 0) {
@@ -62,7 +65,8 @@ contract TrancheFactory is Ownable {
         _symbol,
         _underlyingToken,
         _referenceLoans,
-        _premiumPricing
+        _premiumPricing,
+        _poolCycleManager
       )
     );
     poolIdToTrancheAddresses[_poolId].push(trancheAddress);

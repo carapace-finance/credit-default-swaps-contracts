@@ -6,21 +6,39 @@ import "../interfaces/IPoolCycleManager.sol";
 
 
 /// @title PoolCycleManager
-contract PoolCycleManager is Ownable, IPoolCycleManager {
+contract PoolCycleManager is IPoolCycleManager {
 
     /*** errors ***/
+    error NotPoolFactory(address msgSender);
     error PoolAlreadyRegistered(uint256 poolId);
     error InvalidCycleDuration(uint256 cycleDuration);
 
     /*** state variables ***/
+    address public poolFactoryAddress;
 
     /// @notice tracks the current cycle of all pools in the system.
     mapping (uint256 => PoolCycle) public poolCycles;
 
+    /*** constructor ***/
+    /**
+     * @dev Pool factory contract must create this contract in order to register new pools.
+     */
+    constructor() {
+        poolFactoryAddress = msg.sender;
+    }
+
+    /*** modifiers ***/
+    modifier onlyPoolFactory() {
+        if(msg.sender != poolFactoryAddress) {
+            revert NotPoolFactory(msg.sender);
+        }
+        _;
+    }
+
     /*** state-changing functions ***/
 
     /// @inheritdoc IPoolCycleManager
-    function registerPool(uint256 _poolId, uint256 openCycleDuration, uint256 cycleDuration) override public onlyOwner {
+    function registerPool(uint256 _poolId, uint256 openCycleDuration, uint256 cycleDuration) override public onlyPoolFactory {
         PoolCycle storage poolCycle = poolCycles[_poolId];
 
         if(poolCycle.currentCycleStartTime > 0) {

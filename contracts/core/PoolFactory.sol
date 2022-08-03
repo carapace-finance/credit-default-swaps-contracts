@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/utils/Counters.sol";
 import "./pool/Pool.sol";
 import "../interfaces/IPremiumPricing.sol";
 import "../interfaces/IReferenceLoans.sol";
+import "./PoolCycleManager.sol";
 
 /// @notice PoolFactory creates a new pool and keeps track of them.
 contract PoolFactory is Ownable {
@@ -14,6 +15,9 @@ contract PoolFactory is Ownable {
   /// @notice OpenZeppelin library for managing counters.
   using Counters for Counters.Counter;
 
+  uint256 public constant POOL_OPEN_CYCLE_DURATION = 10 days;
+  uint256 public constant POOL_CYCLE_DURATION = 90 days;
+  
   /*** events ***/
 
   /// @notice Emitted when a new pool is created.
@@ -28,6 +32,8 @@ contract PoolFactory is Ownable {
   );
 
   /*** variables ***/
+  /// @notice reference to the pool cycle manager
+  PoolCycleManager public poolCycleManager;
 
   /// @notice pool id counter
   Counters.Counter public poolIdCounter;
@@ -41,6 +47,8 @@ contract PoolFactory is Ownable {
    */
   constructor() {
     poolIdCounter.increment();
+
+    poolCycleManager = new PoolCycleManager();
   }
 
   /*** state-changing functions ***/
@@ -76,10 +84,15 @@ contract PoolFactory is Ownable {
         _underlyingToken,
         _referenceLoans,
         _premiumPricing,
+        poolCycleManager,
         _name,
         _symbol
       )
     );
+    
+    /// register newly created pool to the pool cycle manager
+    poolCycleManager.registerPool(_poolId, POOL_OPEN_CYCLE_DURATION, POOL_CYCLE_DURATION);
+
     poolIdToPoolAddress[_poolId] = _poolAddress;
     poolIdCounter.increment();
     emit PoolCreated(

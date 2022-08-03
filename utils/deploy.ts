@@ -1,5 +1,5 @@
 import { BigNumber } from "@ethersproject/bignumber";
-import { Contract, ContractFactory, Signer } from "ethers";
+import { ContractFactory, Signer } from "ethers";
 import { ethers } from "hardhat";
 import { USDC_ADDRESS } from "../test/utils/constants";
 import { Pool } from "../typechain-types/contracts/core/pool/Pool";
@@ -63,13 +63,22 @@ const deployContracts: Function = async () => {
       referenceLoansInstance.address
     );
 
+    const _poolCycleManagerFactory = await contractFactory("PoolCycleManager");
+    poolCycleManagerInstance = await _poolCycleManagerFactory.deploy();
+    await poolCycleManagerInstance.deployed();
+    console.log(
+      "PoolCycleManager" + " deployed to:",
+      poolCycleManagerInstance.address
+    );
+
     const _trancheFactory = await contractFactory("Tranche");
     trancheInstance = await _trancheFactory.deploy(
       "sToken",
       "LPT",
       USDC_ADDRESS,
       USDC_ADDRESS, // need to be changed to the address of the reference loans contract
-      premiumPricingInstance.address
+      premiumPricingInstance.address,
+      poolCycleManagerInstance.address
     );
     await trancheInstance.deployed();
     console.log("Tranche" + " deployed to:", trancheInstance.address);
@@ -80,14 +89,6 @@ const deployContracts: Function = async () => {
     console.log(
       "TrancheFactory" + " deployed to:",
       trancheFactoryInstance.address
-    );
-
-    const _poolCycleManagerFactory = await contractFactory("PoolCycleManager");
-    poolCycleManagerInstance = await _poolCycleManagerFactory.deploy();
-    await poolCycleManagerInstance.deployed();
-    console.log(
-      "PoolCycleManager" + " deployed to:",
-      poolCycleManagerInstance.address
     );
 
     const _poolFactoryFactory = await contractFactory("PoolFactory");
@@ -112,6 +113,7 @@ const deployContracts: Function = async () => {
       USDC_ADDRESS,
       referenceLoansInstance.address,
       premiumPricingInstance.address,
+      poolCycleManagerInstance.address,
       _name,
       _symbol
     );

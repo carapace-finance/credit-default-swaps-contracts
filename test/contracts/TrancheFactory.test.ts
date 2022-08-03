@@ -5,12 +5,14 @@ import { USDC_ADDRESS } from "../utils/constants";
 import { PremiumPricing } from "../../typechain-types/contracts/core/PremiumPricing";
 import { ReferenceLoans } from "../../typechain-types/contracts/core/pool/ReferenceLoans";
 import { TrancheFactory } from "../../typechain-types/contracts/core/TrancheFactory";
+import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
 
-const trancheFactory: Function = (
+const testTrancheFactory: Function = (
   account1: Signer,
   trancheFactory: TrancheFactory,
   premiumPricing: PremiumPricing,
-  referenceLoans: ReferenceLoans
+  referenceLoans: ReferenceLoans,
+  poolCycleManager: PoolCycleManager
 ) => {
   describe("TrancheFactory", () => {
     describe("createTranche", async () => {
@@ -34,6 +36,7 @@ const trancheFactory: Function = (
               USDC_ADDRESS,
               referenceLoans.address,
               premiumPricing.address,
+              poolCycleManager.address,
               { gasLimit: 100000 }
             )
         ).to.be.revertedWith("Ownable: caller is not the owner");
@@ -52,7 +55,8 @@ const trancheFactory: Function = (
             "sT11",
             USDC_ADDRESS,
             referenceLoans.address,
-            premiumPricing.address
+            premiumPricing.address,
+            poolCycleManager.address
           )
         )
           .to.emit(trancheFactory, "TrancheCreated")
@@ -78,7 +82,8 @@ const trancheFactory: Function = (
             "sT12",
             USDC_ADDRESS,
             referenceLoans.address,
-            premiumPricing.address
+            premiumPricing.address,
+            poolCycleManager.address
           )
         )
           .to.emit(trancheFactory, "TrancheCreated")
@@ -100,4 +105,4 @@ const trancheFactory: Function = (
   });
 };
 
-export { trancheFactory };
+export { testTrancheFactory };

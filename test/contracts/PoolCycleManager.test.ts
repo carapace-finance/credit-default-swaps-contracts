@@ -19,7 +19,7 @@ const testPoolCycleManager: Function = (
     const _cycleDuration: BigNumber = BigNumber.from(30 * 24 * 60 * 60);  // 30 days
 
     describe("registerPool", async () => {
-      it("...should NOT be able to callable by non-owner", async () => {
+      it("...should NOT be able to callable by non-pool-factory address", async () => {
         await expect(
           poolCycleManager
             .connect(account1)
@@ -28,10 +28,10 @@ const testPoolCycleManager: Function = (
               _openCycleDuration,
               _cycleDuration,
             )
-        ).to.be.revertedWith("Ownable: caller is not the owner");
+        ).to.be.revertedWith(`NotPoolFactory("${await account1.getAddress()}")`);
       });
 
-      it("...should be able callable by only owner", async () => {
+      it("...should be able callable by only pool factory contract", async () => {
         await expect(
           poolCycleManager
             .registerPool(
@@ -78,6 +78,40 @@ const testPoolCycleManager: Function = (
         expect(poolCycle.cycleDuration).to.equal(_cycleDuration);
         expect(poolCycle.currentCycleStartTime).to.equal((await ethers.provider.getBlock("latest")).timestamp);
       });
+
+      it("...should be able to register multiple pools", async () => {
+        // register 3rd pool
+        const thirdPoolId: BigNumber = BigNumber.from(3);
+        const thirdOpenCycleDuration: BigNumber = BigNumber.from(2 * 24 * 60 * 60);
+        const thirdCycleDuration: BigNumber = BigNumber.from(12 * 24 * 60 * 60);
+        await poolCycleManager
+          .connect(deployer)
+          .registerPool(3, thirdOpenCycleDuration, thirdCycleDuration);
+        
+        expect(await poolCycleManager.getCurrentCycleIndex(thirdPoolId)).to.equal(0);
+        expect(await poolCycleManager.getCurrentCycleState(thirdPoolId)).to.equal(1);  // 1 = Open
+
+        const thirdPoolCycle = await poolCycleManager.poolCycles(thirdPoolId);
+        expect(thirdPoolCycle.openCycleDuration).to.equal(thirdOpenCycleDuration);
+        expect(thirdPoolCycle.cycleDuration).to.equal(thirdCycleDuration);
+        expect(thirdPoolCycle.currentCycleStartTime).to.equal((await ethers.provider.getBlock("latest")).timestamp);
+
+        // register 4th pool
+        const fourthPoolId: BigNumber = BigNumber.from(4);
+        const fourthOpenCycleDuration: BigNumber = BigNumber.from(5 * 24 * 60 * 60);
+        const fourthCycleDuration: BigNumber = BigNumber.from(15 * 24 * 60 * 60);
+        await poolCycleManager
+          .connect(deployer)
+          .registerPool(fourthPoolId, fourthOpenCycleDuration, fourthCycleDuration);
+        
+        expect(await poolCycleManager.getCurrentCycleIndex(fourthPoolId)).to.equal(0);
+        expect(await poolCycleManager.getCurrentCycleState(fourthPoolId)).to.equal(1);  // 1 = Open
+
+        const fourthPoolCycle = await poolCycleManager.poolCycles(fourthPoolId);
+        expect(fourthPoolCycle.openCycleDuration).to.equal(fourthOpenCycleDuration);
+        expect(fourthPoolCycle.cycleDuration).to.equal(fourthCycleDuration);
+        expect(fourthPoolCycle.currentCycleStartTime).to.equal((await ethers.provider.getBlock("latest")).timestamp);
+      });
     });
 
     describe("calculateAndSetPoolCycleState", async () => {
@@ -87,8 +121,8 @@ const testPoolCycleManager: Function = (
       });
 
       it("...should have 'Created' state for non-registered pool", async () => {
-        await poolCycleManager.calculateAndSetPoolCycleState(3);
-        expect(await poolCycleManager.getCurrentCycleState(3)).to.equal(0);  // 0 = None
+        await poolCycleManager.calculateAndSetPoolCycleState(101);
+        expect(await poolCycleManager.getCurrentCycleState(101)).to.equal(0);  // 0 = None
       });
       
       it("...should stay in 'Open' state when less time than openCycleDuration has passed", async () => {

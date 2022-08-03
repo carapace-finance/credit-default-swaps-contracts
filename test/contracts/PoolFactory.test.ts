@@ -1,4 +1,5 @@
 import { BigNumber } from "@ethersproject/bignumber";
+import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { expect } from "chai";
 import { Signer } from "ethers";
 import { USDC_ADDRESS } from "../utils/constants";
@@ -6,8 +7,10 @@ import { PremiumPricing } from "../../typechain-types/contracts/core/PremiumPric
 import { PoolFactory } from "../../typechain-types/contracts/core/PoolFactory";
 import { ReferenceLoans } from "../../typechain-types/contracts/core/pool/ReferenceLoans";
 import { TrancheFactory } from "../../typechain-types/contracts/core/TrancheFactory";
+import { ethers } from "hardhat";
+import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
 
-const poolFactory: Function = (
+const testPoolFactory: Function = (
   account1: Signer,
   poolFactory: PoolFactory,
   premiumPricing: PremiumPricing,
@@ -75,6 +78,14 @@ const poolFactory: Function = (
             referenceLoans.address,
             premiumPricing.address
           )
+          .to.emit(poolFactory, "PoolCycleCreated")
+          .withArgs(
+            _firstPoolId,
+            0,
+            anyValue,
+            poolFactory.POOL_OPEN_CYCLE_DURATION,
+            poolFactory.POOL_CYCLE_DURATION
+          )
           .to.emit(trancheFactory, "TrancheCreated")
           .withArgs(
             _firstPoolId,
@@ -117,6 +128,14 @@ const poolFactory: Function = (
             referenceLoans.address,
             premiumPricing.address
           )
+          .to.emit(poolFactory, "PoolCycleCreated")
+          .withArgs(
+            _secondPoolId,
+            0,
+            anyValue,
+            poolFactory.POOL_OPEN_CYCLE_DURATION,
+            poolFactory.POOL_CYCLE_DURATION
+          )
           .to.emit(trancheFactory, "TrancheCreated")
           .withArgs(
             _secondPoolId,
@@ -125,6 +144,18 @@ const poolFactory: Function = (
             USDC_ADDRESS,
             referenceLoans.address
           );
+      });
+
+      it("...should start new pool cycles for created pools", async () => {
+        const poolCycleManager: PoolCycleManager = (await ethers.getContractAt("PoolCycleManager", await poolFactory.poolCycleManager())) as PoolCycleManager;
+        
+        expect(await poolCycleManager.getCurrentCycleIndex(_firstPoolId)).to.equal(0);
+        expect(await poolCycleManager.getCurrentCycleState(_firstPoolId)).to.equal(1);  // 1 = Open
+
+        expect(await poolCycleManager.getCurrentCycleIndex(_secondPoolId)).to.equal(0);
+        expect(await poolCycleManager.getCurrentCycleState(_secondPoolId)).to.equal(1);  // 1 = Open
+        expect((await poolCycleManager.poolCycles(_secondPoolId)).currentCycleStartTime)
+          .to.equal((await ethers.provider.getBlock("latest")).timestamp);
       });
 
       // todo: test the generated address after implementing the address pre-computation method in solidity
@@ -147,4 +178,5 @@ const poolFactory: Function = (
   });
 };
 
-export { poolFactory };
+export { testPoolFactory };
+

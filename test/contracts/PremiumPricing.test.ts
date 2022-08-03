@@ -1,7 +1,7 @@
 import { PremiumPricing } from "../../typechain-types/contracts/core/PremiumPricing";
 
-const premiumPricing: Function = (
+const testPremiumPricing: Function = (
   premiumPricing: PremiumPricing
 ) => {};
 
-export { premiumPricing };
+export { testPremiumPricing };

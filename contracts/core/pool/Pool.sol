@@ -6,9 +6,10 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../TrancheFactory.sol";
 import "../../interfaces/IPremiumPricing.sol";
 import "../../interfaces/IReferenceLoans.sol";
+import "../../interfaces/IPoolCycleManager.sol";
 
 /// @notice Each pool is a market where protection sellers and buyers can swap credit default risks of designated underlying loans.
-contract Pool is Ownable, TrancheFactory {
+contract Pool is TrancheFactory {
   /*** struct ***/
 
   struct PoolInfo {
@@ -37,6 +38,7 @@ contract Pool is Ownable, TrancheFactory {
    * @param _underlyingToken The address of the underlying token in this pool.
    * @param _referenceLoans an address of a reference lending pools contract
    * @param _premiumPricing an address of a premium pricing contract
+   * @param _poolCycleManager an address of a pool cycle manager contract
    * @param _name a name of the sToken
    * @param _symbol a symbol of the sToken
    */
@@ -48,6 +50,7 @@ contract Pool is Ownable, TrancheFactory {
     IERC20 _underlyingToken,
     IReferenceLoans _referenceLoans,
     IPremiumPricing _premiumPricing,
+    IPoolCycleManager _poolCycleManager,
     string memory _name,
     string memory _symbol
   ) {
@@ -58,6 +61,7 @@ contract Pool is Ownable, TrancheFactory {
       _underlyingToken,
       _referenceLoans
     );
+
     createTranche(
       _salt,
       _poolId,
@@ -65,7 +69,8 @@ contract Pool is Ownable, TrancheFactory {
       _symbol,
       _underlyingToken,
       _referenceLoans,
-      _premiumPricing
+      _premiumPricing,
+      _poolCycleManager
     );
   }
 

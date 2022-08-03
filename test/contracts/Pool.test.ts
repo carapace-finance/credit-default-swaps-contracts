@@ -5,7 +5,7 @@ import { USDC_ADDRESS } from "../utils/constants";
 import { Pool } from "../../typechain-types/contracts/core/pool/Pool";
 import { ReferenceLoans } from "../../typechain-types/contracts/core/pool/ReferenceLoans";
 
-const pool: Function = (
+const testPool: Function = (
   account1: Signer,
   pool: Pool,
   referenceLoans: ReferenceLoans
@@ -57,4 +57,4 @@ const pool: Function = (
   });
 };
 
-export { pool };
+export { testPool };
