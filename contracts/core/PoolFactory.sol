@@ -90,11 +90,12 @@ contract PoolFactory is Ownable {
       )
     );
     
+    poolIdToPoolAddress[_poolId] = _poolAddress;
+    poolIdCounter.increment();
+
     /// register newly created pool to the pool cycle manager
     poolCycleManager.registerPool(_poolId, POOL_OPEN_CYCLE_DURATION, POOL_CYCLE_DURATION);
 
-    poolIdToPoolAddress[_poolId] = _poolAddress;
-    poolIdCounter.increment();
     emit PoolCreated(
       _poolId,
       _poolAddress,

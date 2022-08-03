@@ -38,19 +38,19 @@ contract PoolCycleManager is IPoolCycleManager {
     /*** state-changing functions ***/
 
     /// @inheritdoc IPoolCycleManager
-    function registerPool(uint256 _poolId, uint256 openCycleDuration, uint256 cycleDuration) override public onlyPoolFactory {
+    function registerPool(uint256 _poolId, uint256 _openCycleDuration, uint256 _cycleDuration) override public onlyPoolFactory {
         PoolCycle storage poolCycle = poolCycles[_poolId];
 
         if(poolCycle.currentCycleStartTime > 0) {
             revert PoolAlreadyRegistered(_poolId);
         }
 
-        if(openCycleDuration > cycleDuration) {
-            revert InvalidCycleDuration(cycleDuration);
+        if(_openCycleDuration > _cycleDuration) {
+            revert InvalidCycleDuration(_cycleDuration);
         }
 
-        poolCycle.openCycleDuration = openCycleDuration;
-        poolCycle.cycleDuration = cycleDuration;
+        poolCycle.openCycleDuration = _openCycleDuration;
+        poolCycle.cycleDuration = _cycleDuration;
         _startNewCycle(_poolId, poolCycle, 0);
     }
 
@@ -88,29 +88,29 @@ contract PoolCycleManager is IPoolCycleManager {
     /*** view functions ***/
 
     /// @inheritdoc IPoolCycleManager
-    function getCurrentCycleState(uint256 _poolId) override public view returns (CycleState currentCycleState) {
+    function getCurrentCycleState(uint256 _poolId) override public view returns (CycleState) {
         return poolCycles[_poolId].currentCycleState;
     }
 
     /// @inheritdoc IPoolCycleManager
-    function getCurrentCycleIndex(uint256 _poolId) override public view returns (uint256 currentCycleIndex) {
+    function getCurrentCycleIndex(uint256 _poolId) override public view returns (uint256) {
         return poolCycles[_poolId].currentCycleIndex;
     }
 
     /*** internal/private functions ***/
 
     /// @dev Starts a new pool cycle using specified cycle index
-    function _startNewCycle(uint256 _ppolId, PoolCycle storage poolCycle, uint256 cycleIndex) internal {
-        poolCycle.currentCycleIndex = cycleIndex;
-        poolCycle.currentCycleStartTime = block.timestamp;
-        poolCycle.currentCycleState = CycleState.Open;
+    function _startNewCycle(uint256 _ppolId, PoolCycle storage _poolCycle, uint256 _cycleIndex) internal {
+        _poolCycle.currentCycleIndex = _cycleIndex;
+        _poolCycle.currentCycleStartTime = block.timestamp;
+        _poolCycle.currentCycleState = CycleState.Open;
 
         emit PoolCycleCreated(
             _ppolId,
-            cycleIndex,
+            _cycleIndex,
             block.timestamp,
-            poolCycle.openCycleDuration,
-            poolCycle.cycleDuration
+            _poolCycle.openCycleDuration,
+            _poolCycle.cycleDuration
         );
     }
 }
