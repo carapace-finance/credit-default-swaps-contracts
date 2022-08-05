@@ -8,6 +8,7 @@ import "../../interfaces/IPremiumPricing.sol";
 import "../../interfaces/IReferenceLoans.sol";
 import "../../interfaces/IPoolCycleManager.sol";
 import "../../interfaces/IPool.sol";
+import "../../interfaces/ITranche.sol";
 
 /// @notice Each pool is a market where protection sellers and buyers can swap credit default risks of designated underlying loans.
 contract Pool is IPool, TrancheFactory {
@@ -19,6 +20,9 @@ contract Pool is IPool, TrancheFactory {
 
   /// @notice some information about this pool
   PoolInfo public poolInfo;
+
+  /// @notice the address of the tranche created by this pool
+  ITranche public tranche;
 
   /*** constructor ***/
   // todo: error handling for the floor value
@@ -39,7 +43,7 @@ contract Pool is IPool, TrancheFactory {
     string memory _symbol
   ) {
     poolInfo = _poolInfo;
-    createTranche(
+    address trancheAddress = createTranche(
       _salt,
       _poolInfo.poolId,
       this,
@@ -50,6 +54,7 @@ contract Pool is IPool, TrancheFactory {
       _premiumPricing,
       _poolCycleManager
     );
+    tranche = ITranche(trancheAddress);
   }
 
   /*** state-changing functions ***/
@@ -68,8 +73,13 @@ contract Pool is IPool, TrancheFactory {
 
   /// @inheritdoc IPool
   function calculateLeverageRatio() public view override returns (uint256) {
-    /// TODO: implement this function
-    return 0;
+    /// TODO: consider multiple tranches
+    /// TODO: How many decimals do we want to use for the leverage ratio?
+    uint256 totalProtection = tranche.getTotalProtection();
+    if (totalProtection == 0) {
+      return 0;
+    }
+    return (tranche.getTotalCapital() * 10**6) / totalProtection;
   }
 
   /** view functions */

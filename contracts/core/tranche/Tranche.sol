@@ -8,22 +8,13 @@ import "../../interfaces/IReferenceLoans.sol";
 import "../../interfaces/IPremiumPricing.sol";
 import "../../interfaces/IPoolCycleManager.sol";
 import "../../interfaces/IPool.sol";
+import "../../interfaces/ITranche.sol";
 
 /// @notice Tranche coordinates a swap market in between a buyer and a seller. It stores premium from a protection buyer and capital from a protection seller.
-contract Tranche is SToken, ReentrancyGuard {
+contract Tranche is SToken, ReentrancyGuard, ITranche {
   /*** libraries ***/
   /// @notice OpenZeppelin library for managing counters.
   using Counters for Counters.Counter;
-
-  /// @notice A struct to store the details of a withdrawal request.
-  struct WithdrawalRequest {
-    /// @notice The amount of underlying token to withdraw.
-    uint256 amount;
-    /// @notice Minimum index at or after which the actual withdrawal can be made
-    uint256 minPoolCycleIndex;
-    /// @notice Flag to indicate whether the withdrawal request is for entire balance or not.
-    bool all;
-  }
 
   /*** errors ***/
 
@@ -87,6 +78,9 @@ contract Tranche is SToken, ReentrancyGuard {
 
   /// @notice The total amount of premium from protection buyers accumulated in the tranche
   uint256 public totalPremium;
+
+  /// @notice The total amount of protection bought from this tranche
+  uint256 public totalProtection;
 
   /// @notice Buyer account id counter
   Counters.Counter public buyerAccountIdCounter;
@@ -272,6 +266,7 @@ contract Tranche is SToken, ReentrancyGuard {
     underlyingToken.transferFrom(msg.sender, address(this), _premiumAmount);
     lendingPoolIdToPremiumTotal[_lendingPoolId] += _premiumAmount;
     totalPremium += _premiumAmount;
+    totalProtection += _protectionAmount;
     emit ProtectionBought(msg.sender, _lendingPoolId, _premiumAmount);
   }
 
@@ -319,7 +314,7 @@ contract Tranche is SToken, ReentrancyGuard {
     _safeMint(_receiver, sTokenShares);
     underlyingToken.transferFrom(msg.sender, address(this), _underlyingAmount);
 
-    /// Verify leverage ratio only when total capital higher than minimum capital requirement
+    /// Verify leverage ratio only when total capital is higher than minimum capital requirement
     if (totalCollateral > pool.getMinRequiredCapital()) {
       /// calculate pool's current leverage ratio considering the new deposit
       uint256 leverageRatio = pool.calculateLeverageRatio();
@@ -437,5 +432,18 @@ contract Tranche is SToken, ReentrancyGuard {
   function accrueInterest() public {
     // todo: implement the body of this function
     emit InterestAccrued();
+  }
+
+  /// @inheritdoc ITranche
+  function getTotalCapital() public view override returns (uint256) {
+    /// This is the total of capital deposited by sellers + accrued premiums from buyers - default payouts.
+    /// TODO: consider accrued premiums & default payouts
+    return totalCollateral;
+  }
+
+  /// @inheritdoc ITranche
+  function getTotalProtection() public view override returns (uint256) {
+    /// total amount of the protection bought
+    return totalProtection;
   }
 }
