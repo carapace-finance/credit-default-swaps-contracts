@@ -2,7 +2,7 @@ import { BigNumber } from "@ethersproject/bignumber";
 import { ContractFactory, Signer } from "ethers";
 import { ethers } from "hardhat";
 import { USDC_ADDRESS } from "../test/utils/constants";
-import { Pool } from "../typechain-types/contracts/core/pool/Pool";
+import { IPool, Pool } from "../typechain-types/contracts/core/pool/Pool";
 import { PoolFactory } from "../typechain-types/contracts/core/PoolFactory";
 import { PremiumPricing } from "../typechain-types/contracts/core/PremiumPricing";
 import { ReferenceLoans } from "../typechain-types/contracts/core/pool/ReferenceLoans";
@@ -71,18 +71,6 @@ const deployContracts: Function = async () => {
       poolCycleManagerInstance.address
     );
 
-    const _trancheFactory = await contractFactory("Tranche");
-    trancheInstance = await _trancheFactory.deploy(
-      "sToken",
-      "LPT",
-      USDC_ADDRESS,
-      USDC_ADDRESS, // need to be changed to the address of the reference loans contract
-      premiumPricingInstance.address,
-      poolCycleManagerInstance.address
-    );
-    await trancheInstance.deployed();
-    console.log("Tranche" + " deployed to:", trancheInstance.address);
-
     const _trancheFactoryFactory = await contractFactory("TrancheFactory");
     trancheFactoryInstance = await _trancheFactoryFactory.deploy();
     await trancheFactoryInstance.deployed();
@@ -90,28 +78,36 @@ const deployContracts: Function = async () => {
       "TrancheFactory" + " deployed to:",
       trancheFactoryInstance.address
     );
-
+    
+    // Deploy PoolFactory
     const _poolFactoryFactory = await contractFactory("PoolFactory");
     poolFactoryInstance = await _poolFactoryFactory.deploy();
     await poolFactoryInstance.deployed();
     console.log("PoolFactory" + " deployed to:", poolFactoryInstance.address);
-
+    
+    // Deploy Pool
     const _poolFactory = await contractFactory("Pool");
     const _firstPoolFirstTrancheSalt: string = "0x".concat(
       process.env.FIRST_POOL_FIRST_TRANCHE_SALT
     );
-    const _firstPoolId: BigNumber = BigNumber.from(1);
-    const _floor: BigNumber = BigNumber.from(100);
-    const _ceiling: BigNumber = BigNumber.from(500);
+    
     const _name: string = "sToken11";
     const _symbol: string = "sT11";
+    const poolParams: IPool.PoolParamsStruct = {
+      leverageRatioFloor: BigNumber.from(100),
+      leverageRatioCeiling: BigNumber.from(500),
+      minRequiredCapital: BigNumber.from(1000000),
+      underlyingToken: USDC_ADDRESS,
+      referenceLoans: referenceLoansInstance.address
+    };
+    const poolInfo: IPool.PoolInfoStruct = {
+      poolId: BigNumber.from(1),
+      params: poolParams
+    };
+
     poolInstance = await _poolFactory.deploy(
       _firstPoolFirstTrancheSalt,
-      _firstPoolId,
-      _floor,
-      _ceiling,
-      USDC_ADDRESS,
-      referenceLoansInstance.address,
+      poolInfo,
       premiumPricingInstance.address,
       poolCycleManagerInstance.address,
       _name,
@@ -119,6 +115,20 @@ const deployContracts: Function = async () => {
     );
     await poolInstance.deployed();
     console.log("Pool" + " deployed to:", poolInstance.address);
+    
+    // Deploy Tranche
+    const _trancheFactory = await contractFactory("Tranche");
+    trancheInstance = await _trancheFactory.deploy(
+      "sToken",
+      "LPT",
+      USDC_ADDRESS,
+      poolInstance.address,
+      USDC_ADDRESS, // need to be changed to the address of the reference loans contract
+      premiumPricingInstance.address,
+      poolCycleManagerInstance.address
+    );
+    await trancheInstance.deployed();
+    console.log("Tranche" + " deployed to:", trancheInstance.address);
   } catch (e) {
     console.log(e);
   }

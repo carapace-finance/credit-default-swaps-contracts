@@ -7,6 +7,7 @@ import "@typechain/hardhat";
 import "solidity-coverage";
 import "@primitivefi/hardhat-dodoc";
 import "dotenv/config";
+import "hardhat-contract-sizer";
 
 const config: HardhatUserConfig = {
   defaultNetwork: "hardhat",
@@ -25,7 +26,8 @@ const config: HardhatUserConfig = {
         initialIndex: process.env.WALLET_INITIAL_INDEX
           ? parseInt(process.env.WALLET_INITIAL_INDEX)
           : 0 // set index of account to use inside wallet (defaults to 0)
-      }
+      },
+      allowUnlimitedContractSize: true
     },
     mainnet: {
       url: `https://eth-mainnet.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`,

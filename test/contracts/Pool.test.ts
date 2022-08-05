@@ -24,16 +24,16 @@ const testPool: Function = (
         expect(poolInfo.poolId.toString()).to.eq("1");
       });
       it("...set the floor", async () => {
-        expect(poolInfo.floor.toString()).to.eq("100");
+        expect(poolInfo.params.leverageRatioFloor.toString()).to.eq("100");
       });
       it("...set the ceiling", async () => {
-        expect(poolInfo.ceiling.toString()).to.eq("500");
+        expect(poolInfo.params.leverageRatioCeiling.toString()).to.eq("500");
       });
       it("...set the underlying token", async () => {
-        expect(poolInfo.underlyingToken.toString()).to.eq(USDC_ADDRESS);
+        expect(poolInfo.params.underlyingToken.toString()).to.eq(USDC_ADDRESS);
       });
       it("...set the reference loans", async () => {
-        expect(poolInfo.referenceLoans.toString()).to.eq(
+        expect(poolInfo.params.referenceLoans.toString()).to.eq(
           referenceLoans.address
         );
       });

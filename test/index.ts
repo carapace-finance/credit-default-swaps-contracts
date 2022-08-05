@@ -59,6 +59,7 @@ describe("start testing", () => {
     it("run the TrancheFactory test", async () => {
       testTrancheFactory(
         account1,
+        poolInstance,
         trancheFactoryInstance,
         premiumPricingInstance,
         referenceLoansInstance,

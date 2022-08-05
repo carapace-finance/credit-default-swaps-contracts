@@ -17,7 +17,7 @@ contract PoolFactory is Ownable {
 
   uint256 public constant POOL_OPEN_CYCLE_DURATION = 10 days;
   uint256 public constant POOL_CYCLE_DURATION = 90 days;
-  
+
   /*** events ***/
 
   /// @notice Emitted when a new pool is created.
@@ -53,23 +53,9 @@ contract PoolFactory is Ownable {
 
   /*** state-changing functions ***/
 
-  /**
-   * @notice Create a new pool contract with create2(https://eips.ethereum.org/EIPS/eip-1014).
-   * @param _salt Each Pool contract should have a unique salt. We generate a random salt off-chain. // todo: can we test randomness of salt?
-   * @param _floor The minimum collateral in this pool. // todo: consider passing percentage
-   * @param _ceiling The maximum collateral in this pool. // todo: consider passing percentage
-   * @param _underlyingToken The address of the underlying token in this pool.
-   * @param _referenceLoans an address of a reference lending pools contract // todo: decide when and how we deploy a ReferenceLoans contract of this pool.
-   * @param _premiumPricing an address of a premium pricing contract
-   * @param _name a name of the sToken for the first tranche of this pool.
-   * @param _symbol a symbol of the sToken for the first tranche of this pool.
-   */
   function createPool(
     bytes32 _salt,
-    uint256 _floor,
-    uint256 _ceiling,
-    IERC20 _underlyingToken,
-    IReferenceLoans _referenceLoans,
+    IPool.PoolParams memory _poolParameters,
     IPremiumPricing _premiumPricing,
     string memory _name,
     string memory _symbol
@@ -78,31 +64,31 @@ contract PoolFactory is Ownable {
     address _poolAddress = address(
       new Pool{salt: _salt}(
         _salt,
-        _poolId,
-        _floor,
-        _ceiling,
-        _underlyingToken,
-        _referenceLoans,
+        IPool.PoolInfo({poolId: _poolId, params: _poolParameters}),
         _premiumPricing,
         poolCycleManager,
         _name,
         _symbol
       )
     );
-    
+
     poolIdToPoolAddress[_poolId] = _poolAddress;
     poolIdCounter.increment();
 
     /// register newly created pool to the pool cycle manager
-    poolCycleManager.registerPool(_poolId, POOL_OPEN_CYCLE_DURATION, POOL_CYCLE_DURATION);
+    poolCycleManager.registerPool(
+      _poolId,
+      POOL_OPEN_CYCLE_DURATION,
+      POOL_CYCLE_DURATION
+    );
 
     emit PoolCreated(
       _poolId,
       _poolAddress,
-      _floor,
-      _ceiling,
-      _underlyingToken,
-      _referenceLoans,
+      _poolParameters.leverageRatioFloor,
+      _poolParameters.leverageRatioCeiling,
+      _poolParameters.underlyingToken,
+      _poolParameters.referenceLoans,
       _premiumPricing
     );
     return _poolAddress;

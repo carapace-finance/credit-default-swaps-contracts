@@ -6,9 +6,11 @@ import { PremiumPricing } from "../../typechain-types/contracts/core/PremiumPric
 import { ReferenceLoans } from "../../typechain-types/contracts/core/pool/ReferenceLoans";
 import { TrancheFactory } from "../../typechain-types/contracts/core/TrancheFactory";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
+import { Pool } from "../../typechain-types/contracts/core/pool/Pool";
 
 const testTrancheFactory: Function = (
   account1: Signer,
+  pool: Pool,
   trancheFactory: TrancheFactory,
   premiumPricing: PremiumPricing,
   referenceLoans: ReferenceLoans,
@@ -31,6 +33,7 @@ const testTrancheFactory: Function = (
             .createTranche(
               _firstPoolFirstTrancheSalt,
               _firstPoolId,
+              pool.address,
               "sToken11",
               "sT11",
               USDC_ADDRESS,
@@ -47,10 +50,11 @@ const testTrancheFactory: Function = (
       });
 
       it("...create the first tranche in the first pool", async () => {
-        expect(
-          await trancheFactory.createTranche(
+        await expect(
+          trancheFactory.createTranche(
             _firstPoolSecondTrancheSalt,
             _firstPoolId,
+            pool.address,
             "sToken11",
             "sT11",
             USDC_ADDRESS,
@@ -78,6 +82,7 @@ const testTrancheFactory: Function = (
           await trancheFactory.createTranche(
             _firstPoolSecondTrancheSalt,
             _firstPoolId,
+            pool.address,
             "sToken12",
             "sT12",
             USDC_ADDRESS,

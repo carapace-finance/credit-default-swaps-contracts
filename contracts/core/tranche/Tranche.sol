@@ -7,6 +7,7 @@ import "./SToken.sol";
 import "../../interfaces/IReferenceLoans.sol";
 import "../../interfaces/IPremiumPricing.sol";
 import "../../interfaces/IPoolCycleManager.sol";
+import "../../interfaces/IPool.sol";
 
 /// @notice Tranche coordinates a swap market in between a buyer and a seller. It stores premium from a protection buyer and capital from a protection seller.
 contract Tranche is SToken, ReentrancyGuard {
@@ -14,9 +15,35 @@ contract Tranche is SToken, ReentrancyGuard {
   /// @notice OpenZeppelin library for managing counters.
   using Counters for Counters.Counter;
 
+  /// @notice A struct to store the details of a withdrawal request.
+  struct WithdrawalRequest {
+    /// @notice The amount of underlying token to withdraw.
+    uint256 amount;
+    /// @notice Minimum index at or after which the actual withdrawal can be made
+    uint256 minPoolCycleIndex;
+    /// @notice Flag to indicate whether the withdrawal request is for entire balance or not.
+    bool all;
+  }
+
   /*** errors ***/
+
   error ExpirationTimeTooShort(uint256 expirationTime);
   error BuyerAccountExists(address msgSender);
+  error PoolIsNotOpen(uint256 poolId);
+  error PoolLeverageRatioTooHigh(uint256 poolId, uint256 leverageRatio);
+  error PoolLeverageRatioTooLow(uint256 poolId, uint256 leverageRatio);
+  error NoWithdrawalRequested(address msgSender);
+  error WithdrawalNotAvailableYet(
+    address msgSender,
+    uint256 minPoolCycleIndex,
+    uint256 currentPoolCycleIndex
+  );
+  error WithdrawalHigherThanRequested(
+    address msgSender,
+    uint256 requestedAmount
+  );
+  error InsufficientSTokenBalance(address msgSender, uint256 sTokenBalance);
+
   /*** events ***/
 
   /// @notice Emitted when a new tranche is created.
@@ -32,15 +59,14 @@ contract Tranche is SToken, ReentrancyGuard {
   /// @notice Emitted when a new buyer account is created.
   event BuyerAccountCreated(address owner, uint256 accountId);
 
-  /*** struct definition ***/
+  /*** event definition ***/
   /// @notice Emitted when a new protection is bought.
   event ProtectionBought(address buyer, uint256 lendingPoolId, uint256 premium);
 
   /// @notice Emitted when interest is accrued
   event InterestAccrued();
 
-
-  /*** variables ***/
+  /*** state variables ***/
   /// @notice Reference to the PremiumPricing contract
   IPremiumPricing public immutable premiumPricing;
 
@@ -52,6 +78,9 @@ contract Tranche is SToken, ReentrancyGuard {
 
   /// @notice Reference to the PoolCycleManager contract
   IPoolCycleManager public immutable poolCycleManager;
+
+  /// @notice Reference to the Pool contract which owns this tranche
+  IPool public immutable pool;
 
   /// @notice The total amount of capital from protection sellers accumulated in the tranche
   uint256 public totalCollateral; // todo: is collateral the right name? maybe coverage?
@@ -72,6 +101,9 @@ contract Tranche is SToken, ReentrancyGuard {
   /// @notice The total amount of premium for each lending pool
   mapping(uint256 => uint256) public lendingPoolIdToPremiumTotal;
 
+  /// @notice The mapping to track the withdrawal requests per protection seller.
+  mapping(address => WithdrawalRequest) public withdrawalRequests;
+
   /*** constructor ***/
   /**
    * @notice Instantiate an SToken, set up a underlying token plus a ReferenceLoans contract, and then increment the buyerAccountIdCounter.
@@ -79,6 +111,7 @@ contract Tranche is SToken, ReentrancyGuard {
    * @param _name The name of the SToken in this tranche.
    * @param _symbol The symbol of the SToken in this tranche.
    * @param _underlyingToken The address of the underlying token in this tranche.
+   * @param _pool The address of the pool contract.
    * @param _referenceLoans The address of the ReferenceLoans contract for this tranche.
    * @param _premiumPricing The address of the PremiumPricing contract.
    * @param _poolCycleManager The address of the PoolCycleManager contract.
@@ -87,6 +120,7 @@ contract Tranche is SToken, ReentrancyGuard {
     string memory _name,
     string memory _symbol,
     IERC20 _underlyingToken,
+    IPool _pool,
     IReferenceLoans _referenceLoans,
     IPremiumPricing _premiumPricing,
     IPoolCycleManager _poolCycleManager
@@ -94,9 +128,10 @@ contract Tranche is SToken, ReentrancyGuard {
     underlyingToken = _underlyingToken;
     referenceLoans = _referenceLoans;
     premiumPricing = _premiumPricing;
+    pool = _pool;
     poolCycleManager = _poolCycleManager;
     buyerAccountIdCounter.increment();
-    
+
     emit TrancheInitialized(_name, _symbol, _underlyingToken, _referenceLoans);
   }
 
@@ -120,6 +155,18 @@ contract Tranche is SToken, ReentrancyGuard {
   modifier noBuyerAccountExist() {
     if (!(ownerAddressToBuyerAccountId[msg.sender] == 0))
       revert BuyerAccountExists(msg.sender);
+    _;
+  }
+
+  modifier whenPoolIsOpen() {
+    /// Update the pool cycle state
+    uint256 poolId = pool.getId();
+    IPoolCycleManager.CycleState state = poolCycleManager
+      .calculateAndSetPoolCycleState(poolId);
+
+    if (state != IPoolCycleManager.CycleState.Open) {
+      revert PoolIsNotOpen(poolId);
+    }
     _;
   }
 
@@ -248,6 +295,139 @@ contract Tranche is SToken, ReentrancyGuard {
     _safeMint(_receiver, _sTokenShares);
     totalCollateral += _underlyingAmount;
     emit ProtectionSold(_receiver, _underlyingAmount);
+  }
+
+  /**
+   * @notice Attempts to deposit the amount specified.
+   * @notice Upon successful deposit, receiver will get sTokens based on current exchange rate.
+   * @notice A deposit can only be made when the pool is in `Open` state.
+   * @notice Amount needs to be approved for transfer to this contract.
+   * @param _underlyingAmount The amount of underlying token to deposit.
+   * @param _receiver The address to receive the STokens.
+   */
+  function deposit(uint256 _underlyingAmount, address _receiver)
+    external
+    whenPoolIsOpen
+    whenNotPaused
+    nonReentrant
+  {
+    /// accrue interest/premium before calculating leverage ratio
+    accrueInterest();
+
+    uint256 sTokenShares = convertToSToken(_underlyingAmount);
+    totalCollateral += _underlyingAmount;
+    _safeMint(_receiver, sTokenShares);
+    underlyingToken.transferFrom(msg.sender, address(this), _underlyingAmount);
+
+    /// Verify leverage ratio only when total capital higher than minimum capital requirement
+    if (totalCollateral > pool.getMinRequiredCapital()) {
+      /// calculate pool's current leverage ratio considering the new deposit
+      uint256 leverageRatio = pool.calculateLeverageRatio();
+
+      if (leverageRatio > pool.getLeverageRatioCeiling()) {
+        revert PoolLeverageRatioTooHigh(pool.getId(), leverageRatio);
+      }
+    }
+
+    emit ProtectionSold(_receiver, _underlyingAmount);
+  }
+
+  /**
+   * @notice Creates a withdrawal request for the given amount to allow actual withdrawal at the next pool cycle.
+   * @notice Each user can have single request at a time and hence this function will overwrite any existing request.
+   * @notice The actual withdrawal could be made when next pool cycle is opened for withdrawal with other constraints.
+   * @param _amount The amount of underlying token to withdraw.
+   * @param _withdrawAll If true, specified amount will be ignored & all the underlying token will be withdrawn.
+   */
+  function requestWithdrawal(uint256 _amount, bool _withdrawAll)
+    external
+    whenNotPaused
+  {
+    WithdrawalRequest storage request = withdrawalRequests[msg.sender];
+    request.amount = _amount;
+    request.all = _withdrawAll;
+    request.minPoolCycleIndex =
+      poolCycleManager.getCurrentCycleIndex(pool.getId()) +
+      1;
+  }
+
+  /**
+   * @notice Attempts to withdraw the amount specified in the user's withdrawal request.
+   * @notice A withdrawal request must be created during previous pool cycle.
+   * @notice A withdrawal can only be made when the lending pool is in `Open` state.
+   * @notice Requested amount will be transfered from this contract to the receiver address.
+   * @param _underlyingAmount The amount of underlying token to withdraw.
+   * @param _receiver The address to receive the underlying token.
+   */
+  function withdraw(uint256 _underlyingAmount, address _receiver)
+    external
+    whenPoolIsOpen
+    whenNotPaused
+    nonReentrant
+  {
+    /// Step 1: Verify withdrawal request exists
+    WithdrawalRequest storage request = withdrawalRequests[msg.sender];
+    if (request.amount == 0 && request.all == false) {
+      revert NoWithdrawalRequested(msg.sender);
+    }
+
+    /// Step 2: Verify withdrawal request is for current cycle
+    uint256 currentCycleIndex = poolCycleManager.getCurrentCycleIndex(
+      pool.getId()
+    );
+    if (currentCycleIndex < request.minPoolCycleIndex) {
+      revert WithdrawalNotAvailableYet(
+        msg.sender,
+        request.minPoolCycleIndex,
+        currentCycleIndex
+      );
+    }
+
+    if (!request.all && _underlyingAmount > request.amount) {
+      revert WithdrawalHigherThanRequested(msg.sender, request.amount);
+    }
+
+    /// Step 3: accrue interest/premium before calculating sTokens shares
+    accrueInterest();
+
+    /// Step 4: calculate sTokens shares required to withdraw requested amount using current exchange rate
+    uint256 sTokenBalance = balanceOf(msg.sender);
+    uint256 sTokenAmountToBurn;
+    if (request.all == true) {
+      sTokenAmountToBurn = sTokenBalance;
+    } else {
+      sTokenAmountToBurn = convertToSToken(_underlyingAmount);
+      if (sTokenAmountToBurn > sTokenBalance) {
+        /// TODO: should we let user withdraw available amount instead of failing?
+        revert InsufficientSTokenBalance(msg.sender, sTokenBalance);
+      }
+    }
+
+    /// Step 5: burn sTokens shares
+    _burn(msg.sender, sTokenAmountToBurn);
+
+    /// Step 6: transfer underlying token to receiver
+    uint256 underlyingAmountToTransfer = convertToUnderlying(
+      sTokenAmountToBurn
+    );
+    underlyingToken.transfer(_receiver, underlyingAmountToTransfer);
+
+    /// Step 7: Verify the leverage ratio is still within the limit
+    uint256 leverageRatio = pool.calculateLeverageRatio();
+    if (leverageRatio < pool.getLeverageRatioFloor()) {
+      revert PoolLeverageRatioTooLow(pool.getId(), leverageRatio);
+    }
+
+    /// Step 7: update withdrawal request
+    if (request.all == true) {
+      request.amount = 0;
+    } else {
+      request.amount -= underlyingAmountToTransfer;
+    }
+
+    if (request.amount == 0) {
+      delete withdrawalRequests[msg.sender];
+    }
   }
 
   /**

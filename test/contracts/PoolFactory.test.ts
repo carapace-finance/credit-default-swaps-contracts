@@ -9,6 +9,7 @@ import { ReferenceLoans } from "../../typechain-types/contracts/core/pool/Refere
 import { TrancheFactory } from "../../typechain-types/contracts/core/TrancheFactory";
 import { ethers } from "hardhat";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
+import { IPool } from "../../typechain-types/contracts/core/pool/Pool";
 
 const testPoolFactory: Function = (
   account1: Signer,
@@ -29,6 +30,13 @@ const testPoolFactory: Function = (
       const _ceiling: BigNumber = BigNumber.from(500);
       const _firstPoolId: BigNumber = BigNumber.from(1);
       const _secondPoolId: BigNumber = BigNumber.from(2);
+      const _poolParams: IPool.PoolParamsStruct = {
+        leverageRatioFloor: _floor,
+        leverageRatioCeiling: _ceiling,
+        minRequiredCapital: BigNumber.from(1000000),
+        underlyingToken: USDC_ADDRESS,
+        referenceLoans: referenceLoans.address
+      };
 
       it("...only the owner should be able to call the createPool function", async () => {
         await expect(
@@ -36,10 +44,7 @@ const testPoolFactory: Function = (
             .connect(account1)
             .createPool(
               _firstPoolFirstTrancheSalt,
-              _floor,
-              _ceiling,
-              USDC_ADDRESS,
-              referenceLoans.address,
+              _poolParams,
               premiumPricing.address,
               "sToken11",
               "sT11",
@@ -60,10 +65,7 @@ const testPoolFactory: Function = (
         expect(
           await poolFactory.createPool(
             _firstPoolFirstTrancheSalt,
-            _floor,
-            _ceiling,
-            USDC_ADDRESS,
-            referenceLoans.address,
+            _poolParams,
             premiumPricing.address,
             "sToken11",
             "sT11"
@@ -110,10 +112,7 @@ const testPoolFactory: Function = (
         expect(
           await poolFactory.createPool(
             _secondPoolFirstTrancheSalt,
-            _floor,
-            _ceiling,
-            USDC_ADDRESS,
-            referenceLoans.address,
+            _poolParams,
             premiumPricing.address,
             "sToken21",
             "sT21"
