@@ -4,6 +4,7 @@ import { testPremiumPricing } from "./contracts/PremiumPricing.test";
 import { testTranche } from "./contracts/Tranche.test";
 import { testTrancheFactory } from "./contracts/TrancheFactory.test";
 import { testPoolCycleManager } from "./contracts/PoolCycleManager.test";
+import { testAccruedPremiumCalculator } from "./contracts/AccruedPremiumCalculator.test";
 
 import {
   deployer,
@@ -18,7 +19,8 @@ import {
   referenceLoansInstance,
   trancheInstance,
   trancheFactoryInstance,
-  poolCycleManagerInstance
+  poolCycleManagerInstance,
+  accruedPremiumCalculatorInstance
 } from "../utils/deploy";
 
 describe("start testing", () => {
@@ -72,6 +74,12 @@ describe("start testing", () => {
         deployer,
         account1,
         poolCycleManagerInstance
+      );
+    });
+
+    it("run the AccruedPremiumCalculator test", async () => {
+      testAccruedPremiumCalculator(
+        accruedPremiumCalculatorInstance
       );
     });
   });

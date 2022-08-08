@@ -9,6 +9,7 @@ import { ReferenceLoans } from "../typechain-types/contracts/core/pool/Reference
 import { Tranche } from "../typechain-types/contracts/core/tranche/Tranche";
 import { TrancheFactory } from "../typechain-types/contracts/core/TrancheFactory";
 import { PoolCycleManager } from "../typechain-types/contracts/core/PoolCycleManager";
+import { AccruedPremiumCalculator } from "../typechain-types/contracts/libraries/AccruedPremiumCalculator";
 
 let deployer: Signer;
 let account1: Signer;
@@ -23,6 +24,7 @@ let referenceLoansInstance: ReferenceLoans;
 let trancheInstance: Tranche;
 let trancheFactoryInstance: TrancheFactory;
 let poolCycleManagerInstance: PoolCycleManager;
+let accruedPremiumCalculatorInstance: AccruedPremiumCalculator;
 
 (async () => {
   [deployer, account1, account2, account3, account4] =
@@ -42,6 +44,10 @@ const contractFactory: Function = async (contractName: string) => {
 
 const deployContracts: Function = async () => {
   try {
+    const AccruedPremiumCalculator = await contractFactory("AccruedPremiumCalculator");
+    accruedPremiumCalculatorInstance = await AccruedPremiumCalculator.deploy();
+    await accruedPremiumCalculatorInstance.deployed();
+    console.log("Deployed AccruedPremiumCalculator to:", accruedPremiumCalculatorInstance.address);
 
     const _premiumPricingInstance = await contractFactory("PremiumPricing");
     premiumPricingInstance = await _premiumPricingInstance.deploy(
@@ -147,5 +153,6 @@ export {
   referenceLoansInstance,
   trancheInstance,
   trancheFactoryInstance,
-  poolCycleManagerInstance
+  poolCycleManagerInstance,
+  accruedPremiumCalculatorInstance
 };
