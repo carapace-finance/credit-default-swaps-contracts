@@ -18,17 +18,29 @@ const testAccruedPremiumCalculator: Function = (
             const _totalPremium = parseEther((_premiumPerDay * _protection_duration_in_days).toString());                
             const _currentLeverageRatio = parseEther("0.15");
 
-            it("... calculates correct accrued premium for a period from day 0 to day 180", async () => {
-                // console.log("Premium = ", formatEther(_premium));
-                const accruedPremium = await accruedPremiumCalculator.calculateAccruedPremium(
+            let K: BigNumber;
+            let lambda: BigNumber;
+
+            before(async () => {
+                const KAndLamda = await accruedPremiumCalculator.calculateKAndLambda(
                     _totalPremium,
                     _protection_duration_in_days,
-                    0 * 86400,  // start time
-                    _protection_duration_in_days * 86400,    // end time
                     _currentLeverageRatio,
                     _curvature,
                     _minLeverageRatio,
                     _maxLeverageRatio
+                );
+                K = KAndLamda[0];
+                lambda = KAndLamda[1];
+            });
+            it("... calculates correct accrued premium for a period from day 0 to day 180", async () => {
+                
+                // console.log("Premium = ", formatEther(_premium));
+                const accruedPremium = await accruedPremiumCalculator.calculateAccruedPremium(
+                    0 * 86400,  // start time
+                    _protection_duration_in_days * 86400,    // end time
+                    K,
+                    lambda
                 );
 
                 // console.log("Accrued premium = ", formatEther(accruedPremium));
@@ -40,14 +52,10 @@ const testAccruedPremiumCalculator: Function = (
                 // accrued premium for a period from day 0 to day 1
                 // console.log("Premium = ", formatEther(_premium));
                 const accruedPremium = await accruedPremiumCalculator.calculateAccruedPremium(
-                    _totalPremium,
-                    _protection_duration_in_days,
                     0 * 86400,  // start time
                     1 * 86400,  // end time
-                    _currentLeverageRatio,
-                    _curvature,
-                    _minLeverageRatio,
-                    _maxLeverageRatio
+                    K,
+                    lambda
                 );
 
                 // console.log("Accrued premium = ", formatEther(accruedPremium));
@@ -57,14 +65,10 @@ const testAccruedPremiumCalculator: Function = (
             it("... calculates correct accrued premium for a period from second 100 to second 200", async () => {
                 // console.log("Premium = ", formatEther(_premium));
                 const accruedPremium = await accruedPremiumCalculator.calculateAccruedPremium(
-                    _totalPremium,
-                    _protection_duration_in_days,
-                    100,  // start time
-                    200,  // end time
-                    _currentLeverageRatio,
-                    _curvature,
-                    _minLeverageRatio,
-                    _maxLeverageRatio
+                    100 * 86400,  // start time
+                    200 * 86400,  // end time
+                    K,
+                    lambda
                 );
 
                 console.log("Accrued premium = ", formatEther(accruedPremium));

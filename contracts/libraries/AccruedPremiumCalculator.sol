@@ -11,46 +11,44 @@ library AccruedPremiumCalculator {
   uint256 public constant DAYS_IN_YEAR = 365;
   int256 public constant SECONDS_IN_DAY = 60 * 60 * 24;
 
-  // struct AccruedPremiumParams {
-  //   uint256 curvature;
-  //   uint256 leverageRatioFloor;
-  //   uint256 leverageRatioCeiling;
-  //   uint256 currentLeverageRatio;
-  //   uint256 totalPremium;
-  //   uint256 totalDurationInDays;
-  // }
-
   /**
    * @notice Calculates and returns the risk factor scaled to 18 decimals.
    * @notice For example: 0.15 is returned as 0.15 x 10**18 = 15 * 10**16
    * @notice All params passed into this function must be scaled to 18 decimals.
    * @notice For example: 0.005 is passed as 0.005 x 10**18 = 5 * 10**15
+   * @notice formula for Risk Factor = Risk Factor = curvature * ((leverageRatioCeiling - currentLeverageRatio) / (currentLeverageRatio - leverageRatioFloor))
    */
   function calculateRiskFactor(
     uint256 _currentLeverageRatio,
     uint256 _curvature,
-    uint256 _minLeverageRatio,
-    uint256 _maxLeverageRatio
+    uint256 _leverageRatioFloor,
+    uint256 _leverageRatioCeiling
   ) public pure returns (uint256) {
+    /// TODO: add buffer to leverageRatioCeiling and leverageRatioFloor
     return
       _curvature *
-      ((_maxLeverageRatio - _currentLeverageRatio) /
-        (_currentLeverageRatio - _minLeverageRatio));
+      ((_leverageRatioCeiling - _currentLeverageRatio) /
+        (_currentLeverageRatio - _leverageRatioFloor));
   }
 
-  function calculateK(
+  /**
+   * @notice Calculates K and lamda based on the risk factor.
+   * @notice Formula for lamda: Risk Factor / 365
+   * @notice Formula for K: Total Premium / (1 - e^(-1 * protection duration in days * lamda))
+   */
+  function calculateKAndLambda(
     uint256 _premium,
     uint256 _totalDuration,
     uint256 _currentLeverageRatio,
     uint256 _curvature,
-    uint256 _minLeverageRatio,
-    uint256 _maxLeverageRatio
+    uint256 _leverageRatioFloor,
+    uint256 _leverageRatioCeiling
   ) public view returns (int256, int256) {
     uint256 riskFactor = calculateRiskFactor(
       _currentLeverageRatio,
       _curvature,
-      _minLeverageRatio,
-      _maxLeverageRatio
+      _leverageRatioFloor,
+      _leverageRatioCeiling
     );
     console.log("Risk Factor: %s", riskFactor);
 
@@ -74,27 +72,15 @@ library AccruedPremiumCalculator {
    * @notice Calculates and returns the accrued premium between start time and end time, scaled to 18 decimals.
    * @notice For example: 150 is returned as 150 x 10**18 = 15 * 10**19
    * @notice Formula used to calculate accrued premium from time t to T is: K * ( e^(-t * L)   -  e^(-T * L) )
-   * @notice L is lambda, which is calculated using the risk factor
+   * @notice L is lambda, which is calculated using the risk factor.
+   * @notice K is the constant calculated using total premium, total duration and lamda
    */
   function calculateAccruedPremium(
-    uint256 _premium,
-    uint256 _totalDuration,
     uint256 _startTimestamp,
     uint256 _endTimestamp,
-    uint256 _currentLeverageRatio,
-    uint256 _curvature,
-    uint256 _minLeverageRatio,
-    uint256 _maxLeverageRatio
+    int256 K,
+    int256 lambda
   ) external view returns (uint256) {
-    (int256 K, int256 lambda) = calculateK(
-      _premium,
-      _totalDuration,
-      _currentLeverageRatio,
-      _curvature,
-      _minLeverageRatio,
-      _maxLeverageRatio
-    );
-
     console.log("Calculating accrued premium....");
     int256 power1 = -1 * ((int256(_startTimestamp) * lambda) / SECONDS_IN_DAY);
     console.logInt(power1.toInt());
