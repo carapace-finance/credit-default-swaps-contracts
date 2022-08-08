@@ -176,12 +176,13 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
   }
 
   /**
-   * @dev the exchange rate = total underlying balance - protocol fees / total SToken supply
+   * @dev the exchange rate = total capital - protocol fees / total SToken supply
+   * @dev total capital = total depoits from sellers + premium accued from buyers - default payouts
    * @dev the rehypothecation and the protocol fees will be added in the upcoming versions
    */
   function _getExchangeRate() internal view returns (uint256) {
     // todo: this function needs to be tested thoroughly
-    uint256 _totalUnderlying = totalUnderlying();
+    uint256 _totalUnderlying = getTotalCapital();
     uint256 _totalSTokenSupply = totalSupply();
     uint256 _exchangeRate = _totalUnderlying / _totalSTokenSupply;
     return _exchangeRate;

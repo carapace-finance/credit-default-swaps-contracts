@@ -370,6 +370,11 @@ const testTranche: Function = (
           .to.emit(tranche, "ProtectionSold")
           .withArgs(sellerAddress, _underlyingAmount);
         expect(await tranche.totalCollateral()).to.eq(_underlyingAmount);
+        expect(await tranche.getTotalCapital()).to.eq(_underlyingAmount);
+        
+        // SToken share should convert to underlying amount deposited
+        const convertedUnderlyingAmount: BigNumber = await tranche.convertToUnderlying(_shares);
+        expect(convertedUnderlyingAmount).to.eq(_underlyingAmount);
       });
 
       it("...should return 11 total underlying amount", async () => {
@@ -401,11 +406,20 @@ const testTranche: Function = (
         expect(await tranche.totalCollateral()).to.eq(
           _underlyingAmount.add(_underlyingAmount)
         );
-        
+
+        const totalUnderlyingDeposited = _underlyingAmount.mul(2);
+        expect(await tranche.getTotalCapital()).to.eq(totalUnderlyingDeposited);
+
         // shares == _underlyingAmount in the 1st protection purchase
-        expect(_shares.add(_underlyingAmount)).to.eq(
+        const totalShare = _shares.add(_underlyingAmount);
+        expect(totalShare).to.eq(
           await tranche.balanceOf(sellerAddress)
         );
+
+        // Total SToken shares should convert to total underlying amount deposited
+        // This means, exchange rate is still 1:1
+        const convertedUnderlyingAmount: BigNumber = await tranche.convertToUnderlying(totalShare);
+        expect(convertedUnderlyingAmount).to.eq(totalUnderlyingDeposited);
       });
 
       it("...should return 30 total underlying amount", async () => {
