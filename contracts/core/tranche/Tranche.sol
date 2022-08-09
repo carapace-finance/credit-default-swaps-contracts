@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./SToken.sol";
 import "../../interfaces/IReferenceLoans.sol";
@@ -69,7 +69,7 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
   IPremiumPricing public immutable premiumPricing;
 
   /// @notice Reference to the underlying token
-  IERC20 public immutable underlyingToken;
+  IERC20Metadata public immutable underlyingToken;
 
   /// @notice ReferenceLoans contract address
   IReferenceLoans public immutable referenceLoans;
@@ -129,7 +129,7 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
   constructor(
     string memory _name,
     string memory _symbol,
-    IERC20 _underlyingToken,
+    IERC20Metadata _underlyingToken,
     IPool _pool,
     IReferenceLoans _referenceLoans,
     IPremiumPricing _premiumPricing,
@@ -289,7 +289,7 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
     uint256 _totalDurationInDays = (_expirationTime - block.timestamp) /
       uint256(AccruedPremiumCalculator.SECONDS_IN_DAY);
     console.log("totalDurationInDays: ", _totalDurationInDays);
-    uint256 _totalPremium = scaleUsdcAmtTo18Decimals(_premiumAmount);
+    uint256 _totalPremium = scaleUnderlyingAmtTo18Decimals(_premiumAmount);
     console.log("totalPremium: ", _totalPremium);
     uint256 _leverageRatio = pool.calculateLeverageRatio();
 
@@ -471,7 +471,9 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
 
       console.log("accruedPremium: ", accruedPremium);
 
-      totalPremiumAccrued += scaleAmtToUsdc(accruedPremium);
+      totalPremiumAccrued += scale18DecimalsAmtToUnderlyingDecimals(
+        accruedPremium
+      );
     }
 
     lastPremiumAccrualTimestamp = block.timestamp;
@@ -491,16 +493,26 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
     return totalProtection;
   }
 
-  // TODO: generalize this function to use ERC20.decimals();
-  function scaleUsdcAmtTo18Decimals(uint256 usdcAmt)
+  /**
+   * @dev Sacles the given underlying token amount to the amount with 18 decimals.
+   */
+  function scaleUnderlyingAmtTo18Decimals(uint256 underlyingAmt)
     private
-    pure
+    view
     returns (uint256)
   {
-    return (usdcAmt * 10**18) / 10**6;
+    return
+      (underlyingAmt * SCALE_18_DECIMALS) / 10**(underlyingToken.decimals());
   }
 
-  function scaleAmtToUsdc(uint256 amt) private pure returns (uint256) {
-    return (amt * 10**6) / 10**18;
+  /**
+   * @dev Sacles the given amount from 18 decimals to decimals used by underlying token.
+   */
+  function scale18DecimalsAmtToUnderlyingDecimals(uint256 amt)
+    private
+    view
+    returns (uint256)
+  {
+    return (amt * 10**(underlyingToken.decimals())) / SCALE_18_DECIMALS;
   }
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "./IReferenceLoans.sol";
 
 abstract contract IPool {
@@ -12,7 +12,7 @@ abstract contract IPool {
     uint256 leverageRatioFloor;
     uint256 leverageRatioCeiling;
     uint256 minRequiredCapital;
-    IERC20 underlyingToken;
+    IERC20Metadata underlyingToken;
     IReferenceLoans referenceLoans;
   }
 

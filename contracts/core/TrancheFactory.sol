@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "./tranche/Tranche.sol";
 import "../interfaces/IPoolCycleManager.sol";
@@ -55,7 +55,7 @@ contract TrancheFactory is Ownable {
     IPool _pool,
     string memory _name,
     string memory _symbol,
-    IERC20 _underlyingToken,
+    IERC20Metadata _underlyingToken,
     IReferenceLoans _referenceLoans,
     IPremiumPricing _premiumPricing,
     IPoolCycleManager _poolCycleManager

@@ -2,6 +2,8 @@
 pragma solidity ^0.8.13;
 
 abstract contract ITranche {
+  uint256 public constant SCALE_18_DECIMALS = 10**18;
+
   /// @notice A struct to store the details of a withdrawal request.
   struct WithdrawalRequest {
     /// @notice The amount of underlying token to withdraw.
