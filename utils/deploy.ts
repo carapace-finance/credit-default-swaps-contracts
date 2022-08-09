@@ -1,5 +1,6 @@
 import { BigNumber } from "@ethersproject/bignumber";
 import { ContractFactory, Signer } from "ethers";
+import { parseEther } from "ethers/lib/utils";
 import { ethers } from "hardhat";
 import { USDC_ADDRESS } from "../test/utils/constants";
 import { IPool, Pool } from "../typechain-types/contracts/core/pool/Pool";
@@ -33,10 +34,10 @@ let accruedPremiumCalculatorInstance: AccruedPremiumCalculator;
   console.error(err);
 });
 
-const contractFactory: Function = async (contractName: string) => {
+const contractFactory: Function = async (contractName: string, libraries: any) => {
   const _contractFactory: ContractFactory = await ethers.getContractFactory(
     contractName,
-    deployer
+    {signer: deployer, libraries}
   );
   console.log("Deploying " + contractName + "...");
   return _contractFactory;
@@ -77,7 +78,7 @@ const deployContracts: Function = async () => {
       poolCycleManagerInstance.address
     );
 
-    const _trancheFactoryFactory = await contractFactory("TrancheFactory");
+    const _trancheFactoryFactory = await contractFactory("TrancheFactory", { AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address });
     trancheFactoryInstance = await _trancheFactoryFactory.deploy();
     await trancheFactoryInstance.deployed();
     console.log(
@@ -86,13 +87,13 @@ const deployContracts: Function = async () => {
     );
     
     // Deploy PoolFactory
-    const _poolFactoryFactory = await contractFactory("PoolFactory");
+    const _poolFactoryFactory = await contractFactory("PoolFactory", { AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address });
     poolFactoryInstance = await _poolFactoryFactory.deploy();
     await poolFactoryInstance.deployed();
     console.log("PoolFactory" + " deployed to:", poolFactoryInstance.address);
     
     // Deploy Pool
-    const _poolFactory = await contractFactory("Pool");
+    const _poolFactory = await contractFactory("Pool", { AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address });
     const _firstPoolFirstTrancheSalt: string = "0x".concat(
       process.env.FIRST_POOL_FIRST_TRANCHE_SALT
     );
@@ -100,8 +101,8 @@ const deployContracts: Function = async () => {
     const _name: string = "sToken11";
     const _symbol: string = "sT11";
     const poolParams: IPool.PoolParamsStruct = {
-      leverageRatioFloor: BigNumber.from(100),
-      leverageRatioCeiling: BigNumber.from(500),
+      leverageRatioFloor: parseEther("0.1"),
+      leverageRatioCeiling: parseEther("0.2"),
       minRequiredCapital: BigNumber.from(1000000),
       underlyingToken: USDC_ADDRESS,
       referenceLoans: referenceLoansInstance.address
@@ -123,7 +124,7 @@ const deployContracts: Function = async () => {
     console.log("Pool" + " deployed to:", poolInstance.address);
     
     // Deploy Tranche
-    const _trancheFactory = await contractFactory("Tranche");
+    const _trancheFactory = await contractFactory("Tranche", { AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address });
     trancheInstance = await _trancheFactory.deploy(
       "sToken",
       "LPT",

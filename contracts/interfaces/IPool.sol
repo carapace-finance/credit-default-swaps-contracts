@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./IReferenceLoans.sol";
 
 abstract contract IPool {
-  uint256 public constant LEVERAGE_RATIO_SCALE = 10**6;
+  uint256 public constant CURAVATURE = 5 * 10**16;
 
   /*** struct ***/
   struct PoolParams {
@@ -22,8 +22,8 @@ abstract contract IPool {
   }
 
   /**
-   * @notice Calculates and returns leverage ratio scaled to 6 decimals.
-   * @notice For example: 0.15 is returned as 0.15 x 10**6 = 150000
+   * @notice Calculates and returns leverage ratio scaled to 18 decimals.
+   * @notice For example: 0.15 is returned as 0.15 x 10**18 = 15 * 10**16
    */
   function calculateLeverageRatio() public view virtual returns (uint256);
 
@@ -33,14 +33,14 @@ abstract contract IPool {
   function getId() public view virtual returns (uint256);
 
   /**
-   * @notice Returns the minimum leverage ratio allowed by the pool scaled to 6 decimals.
-   * @notice For example: 0.10 is returned as 0.10 x 10**6 = 100000
+   * @notice Returns the minimum leverage ratio allowed by the pool scaled to 18 decimals.
+   * @notice For example: 0.10 is returned as 0.10 x 10**18 = 1 * 10**17
    */
   function getLeverageRatioFloor() public view virtual returns (uint256);
 
   /**
-   * @notice Returns maximum leverage ratio allowed by the pool scaled to 6 decimals.
-   * @notice For example: 0.20 is returned as 0.20 x 10**6 = 200000
+   * @notice Returns maximum leverage ratio allowed by the pool scaled to 18 decimals.
+   * @notice For example: 0.20 is returned as 0.20 x 10**18 = 2 * 10**17
    */
   function getLeverageRatioCeiling() public view virtual returns (uint256);
 
@@ -48,4 +48,9 @@ abstract contract IPool {
    * @notice Returns minimum capital required by the pool in underlying token units.
    */
   function getMinRequiredCapital() public view virtual returns (uint256);
+
+  /**
+   * @notice Returns the curvature used in risk premium calculation.
+   */
+  function getCurvature() public view virtual returns (uint256);
 }

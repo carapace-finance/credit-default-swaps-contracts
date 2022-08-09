@@ -9,6 +9,10 @@ import "../../interfaces/IPremiumPricing.sol";
 import "../../interfaces/IPoolCycleManager.sol";
 import "../../interfaces/IPool.sol";
 import "../../interfaces/ITranche.sol";
+import "../../libraries/AccruedPremiumCalculator.sol";
+
+// TODO: remove after testing
+import "hardhat/console.sol";
 
 /// @notice Tranche coordinates a swap market in between a buyer and a seller. It stores premium from a protection buyer and capital from a protection seller.
 contract Tranche is SToken, ReentrancyGuard, ITranche {
@@ -54,8 +58,11 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
   /// @notice Emitted when a new protection is bought.
   event ProtectionBought(address buyer, uint256 lendingPoolId, uint256 premium);
 
-  /// @notice Emitted when interest is accrued
-  event InterestAccrued();
+  /// @notice Emitted when premium is accrued
+  event PremiumAccrued(
+    uint256 lastPremiumAccrualTimestamp,
+    uint256 totalPremiumAccrued
+  );
 
   /*** state variables ***/
   /// @notice Reference to the PremiumPricing contract
@@ -97,6 +104,15 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
 
   /// @notice The mapping to track the withdrawal requests per protection seller.
   mapping(address => WithdrawalRequest) public withdrawalRequests;
+
+  /// @notice The array to track the loan protection info for all protection bought.
+  LoanProtectionInfo[] private loanProtectionInfos;
+
+  /// @notice The timestamp of last premium accrual
+  uint256 public lastPremiumAccrualTimestamp;
+
+  /// @notice The total premium accrued in underlying token upto the last premium accrual timestamp
+  uint256 public totalPremiumAccrued;
 
   /*** constructor ***/
   /**
@@ -257,7 +273,7 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
     if (_noBuyerAccountExist() == true) {
       _createBuyerAccount();
     }
-    accrueInterest();
+    accruePremium();
     uint256 _premiumAmount = premiumPricing.calculatePremium(
       _expirationTime,
       _protectionAmount
@@ -268,29 +284,34 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
     lendingPoolIdToPremiumTotal[_lendingPoolId] += _premiumAmount;
     totalPremium += _premiumAmount;
     totalProtection += _protectionAmount;
-    emit ProtectionBought(msg.sender, _lendingPoolId, _premiumAmount);
-  }
 
-  /**
-   * @dev the underlying token must be approved first
-   * @param _underlyingAmount How much capital you provide.
-   * @param _receiver The address of ERC20 token _shares receiver.
-   * @param _expirationTime For how long you want to cover.
-   */
-  function sellProtection(
-    uint256 _underlyingAmount,
-    address _receiver,
-    uint256 _expirationTime
-  ) external whenNotPaused nonReentrant {
-    if (!(_expirationTime - block.timestamp > 7889238))
-      revert ExpirationTimeTooShort(_expirationTime);
-    // todo: decide the minimal locking period and change the value if necessary
-    accrueInterest();
-    uint256 _sTokenShares = convertToSToken(_underlyingAmount);
-    underlyingToken.transferFrom(msg.sender, address(this), _underlyingAmount);
-    _safeMint(_receiver, _sTokenShares);
-    totalCollateral += _underlyingAmount;
-    emit ProtectionSold(_receiver, _underlyingAmount);
+    /// Capture loan protection data for premium accrual calculation
+    uint256 _totalDurationInDays = (_expirationTime - block.timestamp) /
+      uint256(AccruedPremiumCalculator.SECONDS_IN_DAY);
+    console.log("totalDurationInDays: ", _totalDurationInDays);
+    uint256 _totalPremium = scaleUsdcAmtTo18Decimals(_premiumAmount);
+    console.log("totalPremium: ", _totalPremium);
+    uint256 _leverageRatio = pool.calculateLeverageRatio();
+
+    (int256 K, int256 lambda) = AccruedPremiumCalculator.calculateKAndLambda(
+      _totalPremium,
+      _totalDurationInDays,
+      _leverageRatio,
+      pool.getCurvature(),
+      pool.getLeverageRatioFloor(),
+      pool.getLeverageRatioCeiling()
+    );
+
+    loanProtectionInfos.push(
+      LoanProtectionInfo({
+        totalPremium: _premiumAmount,
+        totalDurationInDays: _totalDurationInDays,
+        K: K,
+        lambda: lambda
+      })
+    );
+
+    emit ProtectionBought(msg.sender, _lendingPoolId, _premiumAmount);
   }
 
   /**
@@ -307,8 +328,8 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
     whenNotPaused
     nonReentrant
   {
-    /// accrue interest/premium before calculating leverage ratio
-    accrueInterest();
+    /// accrue premium before calculating leverage ratio
+    accruePremium();
 
     uint256 sTokenShares = convertToSToken(_underlyingAmount);
     totalCollateral += _underlyingAmount;
@@ -384,7 +405,7 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
     }
 
     /// Step 3: accrue interest/premium before calculating sTokens shares
-    accrueInterest();
+    accruePremium();
 
     /// Step 4: calculate sTokens shares required to withdraw requested amount using current exchange rate
     uint256 sTokenBalance = balanceOf(msg.sender);
@@ -427,24 +448,59 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
   }
 
   /**
-   * @notice Applies accrued interest to total underlying
-   * @dev This method calculates interest accrued from the last checkpointed block up to the current block and writes new checkpoint to storage.
+   * @notice Calculates the premuim accrued for all existing protections and updates the total premium accrued.
+   * @dev This method calculates premium accrued from the last timestamp to the current timestamp.
    */
-  function accrueInterest() public {
-    // todo: implement the body of this function
-    emit InterestAccrued();
+  function accruePremium() public {
+    // Ensure we accrue premium only once per the block
+    if (block.timestamp == lastPremiumAccrualTimestamp) {
+      return;
+    }
+
+    /// TODO: optimize premium accrual to avoid array iteration
+
+    /// Iterate through existing protections and calculate accrued premium
+    for (uint256 i = 0; i < loanProtectionInfos.length; i++) {
+      LoanProtectionInfo storage loanProtectionInfo = loanProtectionInfos[i];
+      uint256 accruedPremium = AccruedPremiumCalculator.calculateAccruedPremium(
+        lastPremiumAccrualTimestamp,
+        block.timestamp,
+        loanProtectionInfo.K,
+        loanProtectionInfo.lambda
+      );
+
+      console.log("accruedPremium: ", accruedPremium);
+
+      totalPremiumAccrued += scaleAmtToUsdc(accruedPremium);
+    }
+
+    lastPremiumAccrualTimestamp = block.timestamp;
+    emit PremiumAccrued(lastPremiumAccrualTimestamp, totalPremiumAccrued);
   }
 
   /// @inheritdoc ITranche
   function getTotalCapital() public view override returns (uint256) {
-    /// This is the total of capital deposited by sellers + accrued premiums from buyers - default payouts.
-    /// TODO: consider accrued premiums & default payouts
-    return totalCollateral;
+    /// Total capital is: sellers' deposits + accrued premiums from buyers - default payouts.
+    /// TODO: consider default payouts
+    return totalCollateral + totalPremiumAccrued;
   }
 
   /// @inheritdoc ITranche
   function getTotalProtection() public view override returns (uint256) {
     /// total amount of the protection bought
     return totalProtection;
+  }
+
+  // TODO: generalize this function to use ERC20.decimals();
+  function scaleUsdcAmtTo18Decimals(uint256 usdcAmt)
+    private
+    pure
+    returns (uint256)
+  {
+    return (usdcAmt * 10**18) / 10**6;
+  }
+
+  function scaleAmtToUsdc(uint256 amt) private pure returns (uint256) {
+    return (amt * 10**6) / 10**18;
   }
 }

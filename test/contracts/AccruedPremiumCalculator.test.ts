@@ -16,7 +16,7 @@ const testAccruedPremiumCalculator: Function = (
             const _protection_duration_in_days = 180;
             const _premiumPerDay = (_annualPremiumRate * _protectionAmt)/365;
             const _totalPremium = parseEther((_premiumPerDay * _protection_duration_in_days).toString());                
-            const _currentLeverageRatio = parseEther("0.15");
+            const _currentLeverageRatio = parseEther("0.14");
 
             let K: BigNumber;
             let lambda: BigNumber;
@@ -59,20 +59,22 @@ const testAccruedPremiumCalculator: Function = (
                 );
 
                 // console.log("Accrued premium = ", formatEther(accruedPremium));
-                expect(accruedPremium).to.be.gt(parseEther("110.938"));
+                expect(accruedPremium).to.be.gt(parseEther("95.469"));
+                expect(accruedPremium).to.be.lt(parseEther("95.47"));
             });
 
             it("... calculates correct accrued premium for a period from second 100 to second 200", async () => {
                 // console.log("Premium = ", formatEther(_premium));
                 const accruedPremium = await accruedPremiumCalculator.calculateAccruedPremium(
-                    100 * 86400,  // start time
-                    200 * 86400,  // end time
+                    100,  // start time
+                    200,  // end time
                     K,
                     lambda
                 );
 
                 console.log("Accrued premium = ", formatEther(accruedPremium));
-                expect(accruedPremium).to.be.gt(parseEther("0.128409"));
+                expect(accruedPremium).to.be.gt(parseEther("0.11041"));
+                expect(accruedPremium).to.be.lt(parseEther("0.12"));
             });
         });
     });

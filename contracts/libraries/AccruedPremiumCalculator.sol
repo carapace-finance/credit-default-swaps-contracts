@@ -10,6 +10,7 @@ library AccruedPremiumCalculator {
 
   uint256 public constant DAYS_IN_YEAR = 365;
   int256 public constant SECONDS_IN_DAY = 60 * 60 * 24;
+  uint256 public constant BUFFER = 5 * 10**16; // 0.05
 
   /**
    * @notice Calculates and returns the risk factor scaled to 18 decimals.
@@ -23,12 +24,18 @@ library AccruedPremiumCalculator {
     uint256 _curvature,
     uint256 _leverageRatioFloor,
     uint256 _leverageRatioCeiling
-  ) public pure returns (uint256) {
+  ) public view returns (int256) {
     /// TODO: add buffer to leverageRatioCeiling and leverageRatioFloor
+    console.log(
+      "Calculating risk factor... leverage ratio: %s, floor: %s, ceiling: %s",
+      _currentLeverageRatio,
+      _leverageRatioFloor,
+      _leverageRatioCeiling
+    );
     return
-      _curvature *
-      ((_leverageRatioCeiling - _currentLeverageRatio) /
-        (_currentLeverageRatio - _leverageRatioFloor));
+      int256(_curvature) *
+      (int256(_leverageRatioCeiling + BUFFER - _currentLeverageRatio) /
+        (int256(_currentLeverageRatio) - int256(_leverageRatioFloor + BUFFER)));
   }
 
   /**
@@ -44,15 +51,15 @@ library AccruedPremiumCalculator {
     uint256 _leverageRatioFloor,
     uint256 _leverageRatioCeiling
   ) public view returns (int256, int256) {
-    uint256 riskFactor = calculateRiskFactor(
+    int256 riskFactor = calculateRiskFactor(
       _currentLeverageRatio,
       _curvature,
       _leverageRatioFloor,
       _leverageRatioCeiling
     );
-    console.log("Risk Factor: %s", riskFactor);
+    console.logInt(riskFactor);
 
-    int256 lambda = int256(riskFactor / DAYS_IN_YEAR);
+    int256 lambda = riskFactor / int256(DAYS_IN_YEAR);
     console.logInt(lambda);
 
     int256 power1 = (-1) * int256(_totalDuration) * lambda;
@@ -80,7 +87,7 @@ library AccruedPremiumCalculator {
     uint256 _endTimestamp,
     int256 K,
     int256 lambda
-  ) external view returns (uint256) {
+  ) public view returns (uint256) {
     console.log("Calculating accrued premium....");
     int256 power1 = -1 * ((int256(_startTimestamp) * lambda) / SECONDS_IN_DAY);
     console.logInt(power1.toInt());

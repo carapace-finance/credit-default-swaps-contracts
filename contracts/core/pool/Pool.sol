@@ -79,7 +79,7 @@ contract Pool is IPool, TrancheFactory {
     if (totalProtection == 0) {
       return 0;
     }
-    return (tranche.getTotalCapital() * 10**6) / totalProtection;
+    return (tranche.getTotalCapital() * 10**18) / totalProtection;
   }
 
   /** view functions */
@@ -102,5 +102,10 @@ contract Pool is IPool, TrancheFactory {
   /// @inheritdoc IPool
   function getLeverageRatioCeiling() public view override returns (uint256) {
     return poolInfo.params.leverageRatioCeiling;
+  }
+
+  /// @inheritdoc IPool
+  function getCurvature() public view override returns (uint256) {
+    return 5 * 10**16; // 0.05 scaled to 18 decimals
   }
 }

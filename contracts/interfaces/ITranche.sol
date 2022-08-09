@@ -12,6 +12,15 @@ abstract contract ITranche {
     bool all;
   }
 
+  struct LoanProtectionInfo {
+    /// @notice The amount of premium paid in underlying token
+    uint256 totalPremium;
+    /// @notice The total duration of the loan protection in days
+    uint256 totalDurationInDays;
+    int256 K;
+    int256 lambda;
+  }
+
   /**
    * @notice Returns the current total underlying amount in the tranche
    * @notice This is the total of capital deposited by sellers + accrued premiums from buyers - default payouts.
