@@ -68,19 +68,13 @@ describe("start testing", () => {
         poolCycleManagerInstance
       );
     });
-    
+
     it("run the PoolCycleManager test", async () => {
-      testPoolCycleManager(
-        deployer,
-        account1,
-        poolCycleManagerInstance
-      );
+      testPoolCycleManager(deployer, account1, poolCycleManagerInstance);
     });
 
     it("run the AccruedPremiumCalculator test", async () => {
-      testAccruedPremiumCalculator(
-        accruedPremiumCalculatorInstance
-      );
+      testAccruedPremiumCalculator(accruedPremiumCalculatorInstance);
     });
   });
 });
