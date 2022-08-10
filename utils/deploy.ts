@@ -114,10 +114,17 @@ const deployContracts: Function = async () => {
 
     const _name: string = "sToken11";
     const _symbol: string = "sT11";
+    const poolCycleParams: IPool.PoolCycleParamsStruct = {
+      openCycleDuration: BigNumber.from(10 * 86400), // 10 days
+      cycleDuration: BigNumber.from(30 * 86400) // 30 days
+    };
     const poolParams: IPool.PoolParamsStruct = {
       leverageRatioFloor: parseEther("0.1"),
       leverageRatioCeiling: parseEther("0.2"),
-      minRequiredCapital: BigNumber.from(1000000),
+      leverageRatioBuffer: parseEther("0.05"),
+      minRequiredCapital: parseEther("100000"),
+      curvature: parseEther("0.05"),
+      poolCycleParams: poolCycleParams,
       underlyingToken: USDC_ADDRESS,
       referenceLoans: referenceLoansInstance.address
     };

@@ -15,9 +15,6 @@ contract PoolFactory is Ownable {
   /// @notice OpenZeppelin library for managing counters.
   using Counters for Counters.Counter;
 
-  uint256 public constant POOL_OPEN_CYCLE_DURATION = 10 days;
-  uint256 public constant POOL_CYCLE_DURATION = 90 days;
-
   /*** events ***/
 
   /// @notice Emitted when a new pool is created.
@@ -78,8 +75,8 @@ contract PoolFactory is Ownable {
     /// register newly created pool to the pool cycle manager
     poolCycleManager.registerPool(
       _poolId,
-      POOL_OPEN_CYCLE_DURATION,
-      POOL_CYCLE_DURATION
+      _poolParameters.poolCycleParams.openCycleDuration,
+      _poolParameters.poolCycleParams.cycleDuration
     );
 
     emit PoolCreated(

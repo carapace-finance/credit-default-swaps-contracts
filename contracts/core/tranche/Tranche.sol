@@ -171,10 +171,10 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
   modifier whenPoolIsOpen() {
     /// Update the pool cycle state
     uint256 poolId = pool.getId();
-    IPoolCycleManager.CycleState state = poolCycleManager
+    IPoolCycleManager.CycleState cycleState = poolCycleManager
       .calculateAndSetPoolCycleState(poolId);
 
-    if (state != IPoolCycleManager.CycleState.Open) {
+    if (cycleState != IPoolCycleManager.CycleState.Open) {
       revert PoolIsNotOpen(poolId);
     }
     _;
@@ -289,17 +289,22 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
     uint256 _totalDurationInDays = (_expirationTime - block.timestamp) /
       uint256(AccruedPremiumCalculator.SECONDS_IN_DAY);
     console.log("totalDurationInDays: ", _totalDurationInDays);
-    uint256 _totalPremium = scaleUnderlyingAmtTo18Decimals(_premiumAmount);
-    console.log("totalPremium: ", _totalPremium);
+    uint256 _protectionPremium = scaleUnderlyingAmtTo18Decimals(_premiumAmount);
+    console.log("protectionPremium: ", _protectionPremium);
     uint256 _leverageRatio = pool.calculateLeverageRatio();
 
+    if (_leverageRatio > pool.getLeverageRatioCeiling()) {
+      revert PoolLeverageRatioTooLow(pool.getId(), _leverageRatio);
+    }
+
     (int256 K, int256 lambda) = AccruedPremiumCalculator.calculateKAndLambda(
-      _totalPremium,
+      _protectionPremium,
       _totalDurationInDays,
       _leverageRatio,
-      pool.getCurvature(),
       pool.getLeverageRatioFloor(),
-      pool.getLeverageRatioCeiling()
+      pool.getLeverageRatioCeiling(),
+      pool.getLeverageRatioBuffer(),
+      pool.getCurvature()
     );
 
     loanProtectionInfos.push(
@@ -449,7 +454,7 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
 
   /**
    * @notice Calculates the premuim accrued for all existing protections and updates the total premium accrued.
-   * @dev This method calculates premium accrued from the last timestamp to the current timestamp.
+   * @notice This method calculates premium accrued from the last timestamp to the current timestamp.
    */
   function accruePremium() public {
     // Ensure we accrue premium only once per the block

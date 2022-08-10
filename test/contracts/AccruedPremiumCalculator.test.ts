@@ -1,8 +1,6 @@
 import { BigNumber } from "@ethersproject/bignumber";
 import { expect } from "chai";
 import { parseEther, formatEther } from "ethers/lib/utils";
-import { parse } from "path";
-import { buffer } from "stream/consumers";
 import { AccruedPremiumCalculator } from "../../typechain-types/contracts/libraries/AccruedPremiumCalculator";
 
 const testAccruedPremiumCalculator: Function = (
@@ -12,7 +10,7 @@ const testAccruedPremiumCalculator: Function = (
     const _curvature: BigNumber = parseEther("0.05");
     const _leverageRatioFloor: BigNumber = parseEther("0.1");
     const _leverageRatioCeiling: BigNumber = parseEther("0.2");
-    const _buffer = parseEther("0.05");
+    const _leverageRatioBuffer: BigNumber = parseEther("0.05");
     const _protectionAmt = 1000000; // 1M
     const _annualPremiumRate = 0.04; // 4% annual rate
     const _protection_duration_in_days = 180;
@@ -30,9 +28,10 @@ const testAccruedPremiumCalculator: Function = (
         _totalPremium,
         _protection_duration_in_days,
         _currentLeverageRatio,
-        _curvature,
         _leverageRatioFloor,
-        _leverageRatioCeiling
+        _leverageRatioCeiling,
+        _curvature,
+        _leverageRatioBuffer
       );
       K = KAndLamda[0];
       lambda = KAndLamda[1];
@@ -42,28 +41,31 @@ const testAccruedPremiumCalculator: Function = (
       it("... calculates correct risk factor", async () => {
         const riskFactor = await accruedPremiumCalculator.calculateRiskFactor(
           _currentLeverageRatio,
-          _curvature,
           _leverageRatioFloor,
-          _leverageRatioCeiling
+          _leverageRatioCeiling,
+          _leverageRatioBuffer,
+          _curvature
         );
         expect(riskFactor).to.be.eq(parseEther("-0.55"));
       });
 
       it("... calculates risk factor without underflow/overflow for range 0.1 to 0.2", async () => {
+        const step = parseEther("0.005");
         let leverageRatio = _leverageRatioFloor;
         while (leverageRatio.lte(_leverageRatioCeiling)) {
           await accruedPremiumCalculator.calculateRiskFactor(
             leverageRatio,
-            _curvature,
             _leverageRatioFloor,
-            _leverageRatioCeiling
+            _leverageRatioCeiling,
+            _leverageRatioBuffer,
+            _curvature
           );
-          leverageRatio = leverageRatio.add(parseEther("0.005"));
+          leverageRatio = leverageRatio.add(step);
 
           // TODO: discuss what should happen when denominator is zero in risk factor calculation
           if (leverageRatio.eq(parseEther("0.15"))) {
             // skip 0.15 leverage ratio step
-            leverageRatio = leverageRatio.add(parseEther("0.005"));
+            leverageRatio = leverageRatio.add(step);
             continue;
           }
         }
@@ -87,9 +89,10 @@ const testAccruedPremiumCalculator: Function = (
             _totalPremium,
             _protection_duration_in_days,
             leverageRatio,
-            _curvature,
             _leverageRatioFloor,
-            _leverageRatioCeiling
+            _leverageRatioCeiling,
+            _leverageRatioBuffer,
+            _curvature
           );
           leverageRatio = leverageRatio.add(parseEther("0.005"));
 

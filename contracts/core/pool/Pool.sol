@@ -10,6 +10,7 @@ import "../../interfaces/IPoolCycleManager.sol";
 import "../../interfaces/IPool.sol";
 import "../../interfaces/ITranche.sol";
 
+// TODO: add setter functions for all pool parameters
 /// @notice Each pool is a market where protection sellers and buyers can swap credit default risks of designated underlying loans.
 contract Pool is IPool, TrancheFactory {
   /*** variables ***/
@@ -58,7 +59,6 @@ contract Pool is IPool, TrancheFactory {
   }
 
   /*** state-changing functions ***/
-
   // todo: calculate the floor based on the percentage
   // todo: the floor = some adjustable % * the amount of active protection purchased
   function updateFloor(uint256 newFloor) external onlyOwner {
@@ -74,12 +74,11 @@ contract Pool is IPool, TrancheFactory {
   /// @inheritdoc IPool
   function calculateLeverageRatio() public view override returns (uint256) {
     /// TODO: consider multiple tranches
-    /// TODO: How many decimals do we want to use for the leverage ratio?
     uint256 totalProtection = tranche.getTotalProtection();
     if (totalProtection == 0) {
       return 0;
     }
-    return (tranche.getTotalCapital() * 10**18) / totalProtection;
+    return (tranche.getTotalCapital() * SCALE_18_DECIMALS) / totalProtection;
   }
 
   /** view functions */
@@ -105,7 +104,22 @@ contract Pool is IPool, TrancheFactory {
   }
 
   /// @inheritdoc IPool
+  function getLeverageRatioBuffer() public view override returns (uint256) {
+    return poolInfo.params.leverageRatioBuffer;
+  }
+
+  /// @inheritdoc IPool
   function getCurvature() public view override returns (uint256) {
-    return 5 * 10**16; // 0.05 scaled to 18 decimals
+    return poolInfo.params.curvature;
+  }
+
+  /// @inheritdoc IPool
+  function getOpenCycleDuration() public view override returns (uint256) {
+    return poolInfo.params.poolCycleParams.openCycleDuration;
+  }
+
+  /// @inheritdoc IPool
+  function getCycleDuration() public view override returns (uint256) {
+    return poolInfo.params.poolCycleParams.cycleDuration;
   }
 }

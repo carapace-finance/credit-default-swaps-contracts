@@ -64,7 +64,7 @@ contract PoolCycleManager is IPoolCycleManager {
   function calculateAndSetPoolCycleState(uint256 _poolId)
     public
     override
-    returns (CycleState state)
+    returns (CycleState)
   {
     PoolCycle storage poolCycle = poolCycles[_poolId];
 
@@ -74,7 +74,7 @@ contract PoolCycleManager is IPoolCycleManager {
 
     /// If cycle is not started, that means pool is NOT registered yet.
     /// So, we can't move the cycle state
-    if (poolCycle.currentCycleStartTime == 0) {
+    if (currentState == CycleState.None) {
       return currentState;
     }
 
@@ -126,7 +126,7 @@ contract PoolCycleManager is IPoolCycleManager {
 
   /// @dev Starts a new pool cycle using specified cycle index
   function _startNewCycle(
-    uint256 _ppolId,
+    uint256 _poolId,
     PoolCycle storage _poolCycle,
     uint256 _cycleIndex
   ) internal {
@@ -135,7 +135,7 @@ contract PoolCycleManager is IPoolCycleManager {
     _poolCycle.currentCycleState = CycleState.Open;
 
     emit PoolCycleCreated(
-      _ppolId,
+      _poolId,
       _cycleIndex,
       block.timestamp,
       _poolCycle.openCycleDuration,

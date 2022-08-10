@@ -26,6 +26,10 @@ const testPoolFactory: Function = (
       const _secondPoolFirstTrancheSalt: string = "0x".concat(
         process.env.SECOND_POOL_FIRST_TRANCHE_SALT
       );
+      const poolCycleParams: IPool.PoolCycleParamsStruct = {
+        openCycleDuration: BigNumber.from(10 * 86400), // 10 days
+        cycleDuration: BigNumber.from(30 * 86400) // 30 days
+      };
       const _floor: BigNumber = BigNumber.from(100);
       const _ceiling: BigNumber = BigNumber.from(500);
       const _firstPoolId: BigNumber = BigNumber.from(1);
@@ -33,7 +37,10 @@ const testPoolFactory: Function = (
       const _poolParams: IPool.PoolParamsStruct = {
         leverageRatioFloor: _floor,
         leverageRatioCeiling: _ceiling,
+        leverageRatioBuffer: BigNumber.from(5),
         minRequiredCapital: BigNumber.from(1000000),
+        curvature: BigNumber.from(5),
+        poolCycleParams: poolCycleParams,
         underlyingToken: USDC_ADDRESS,
         referenceLoans: referenceLoans.address
       };
@@ -85,8 +92,8 @@ const testPoolFactory: Function = (
             _firstPoolId,
             0,
             anyValue,
-            poolFactory.POOL_OPEN_CYCLE_DURATION,
-            poolFactory.POOL_CYCLE_DURATION
+            poolCycleParams.openCycleDuration,
+            poolCycleParams.cycleDuration
           )
           .to.emit(trancheFactory, "TrancheCreated")
           .withArgs(
@@ -132,8 +139,8 @@ const testPoolFactory: Function = (
             _secondPoolId,
             0,
             anyValue,
-            poolFactory.POOL_OPEN_CYCLE_DURATION,
-            poolFactory.POOL_CYCLE_DURATION
+            poolCycleParams.openCycleDuration,
+            poolCycleParams.cycleDuration
           )
           .to.emit(trancheFactory, "TrancheCreated")
           .withArgs(
@@ -146,15 +153,28 @@ const testPoolFactory: Function = (
       });
 
       it("...should start new pool cycles for created pools", async () => {
-        const poolCycleManager: PoolCycleManager = (await ethers.getContractAt("PoolCycleManager", await poolFactory.poolCycleManager())) as PoolCycleManager;
-        
-        expect(await poolCycleManager.getCurrentCycleIndex(_firstPoolId)).to.equal(0);
-        expect(await poolCycleManager.getCurrentCycleState(_firstPoolId)).to.equal(1);  // 1 = Open
+        const poolCycleManager: PoolCycleManager = (await ethers.getContractAt(
+          "PoolCycleManager",
+          await poolFactory.poolCycleManager()
+        )) as PoolCycleManager;
 
-        expect(await poolCycleManager.getCurrentCycleIndex(_secondPoolId)).to.equal(0);
-        expect(await poolCycleManager.getCurrentCycleState(_secondPoolId)).to.equal(1);  // 1 = Open
-        expect((await poolCycleManager.poolCycles(_secondPoolId)).currentCycleStartTime)
-          .to.equal((await ethers.provider.getBlock("latest")).timestamp);
+        expect(
+          await poolCycleManager.getCurrentCycleIndex(_firstPoolId)
+        ).to.equal(0);
+        expect(
+          await poolCycleManager.getCurrentCycleState(_firstPoolId)
+        ).to.equal(1); // 1 = Open
+
+        expect(
+          await poolCycleManager.getCurrentCycleIndex(_secondPoolId)
+        ).to.equal(0);
+        expect(
+          await poolCycleManager.getCurrentCycleState(_secondPoolId)
+        ).to.equal(1); // 1 = Open
+        expect(
+          (await poolCycleManager.poolCycles(_secondPoolId))
+            .currentCycleStartTime
+        ).to.equal((await ethers.provider.getBlock("latest")).timestamp);
       });
 
       // todo: test the generated address after implementing the address pre-computation method in solidity
@@ -178,4 +198,3 @@ const testPoolFactory: Function = (
 };
 
 export { testPoolFactory };
-
