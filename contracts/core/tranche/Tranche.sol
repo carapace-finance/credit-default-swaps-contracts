@@ -80,13 +80,13 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
   /// @notice Reference to the Pool contract which owns this tranche
   IPool public immutable pool;
 
-  /// @notice The total amount of capital from protection sellers accumulated in the tranche
-  uint256 public totalCollateral; // todo: is collateral the right name? maybe coverage?
+  /// @notice The total underlying amount of deposits from protection sellers accumulated in the tranche
+  uint256 public totalSellerDeposit;
 
-  /// @notice The total amount of premium from protection buyers accumulated in the tranche
+  /// @notice The total underlying amount of premium from protection buyers accumulated in the tranche
   uint256 public totalPremium;
 
-  /// @notice The total amount of protection bought from this tranche
+  /// @notice The total underlying amount of protection bought from this tranche
   uint256 public totalProtection;
 
   /// @notice Buyer account id counter
@@ -185,50 +185,62 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
   }
 
   /**
-   * @dev the total underlying balance is collateral plus interest including premium and interest from rehypothecation
-   */
-  function totalUnderlying() public view returns (uint256) {
-    return underlyingToken.balanceOf(address(this));
-  }
-
-  /**
-   * @dev the exchange rate = total capital - protocol fees / total SToken supply
-   * @dev total capital = total depoits from sellers + premium accued from buyers - default payouts
+   * @dev the exchange rate = total capital / total SToken supply
+   * @dev total capital = total seller deposits + premium accued - default payouts
    * @dev the rehypothecation and the protocol fees will be added in the upcoming versions
+   * @return the exchange rate scaled to 18 decimals
    */
   function _getExchangeRate() internal view returns (uint256) {
     // todo: this function needs to be tested thoroughly
-    uint256 _totalUnderlying = getTotalCapital();
+    uint256 _totalScaledCapital = scaleUnderlyingAmtTo18Decimals(
+      getTotalCapital()
+    );
     uint256 _totalSTokenSupply = totalSupply();
-    uint256 _exchangeRate = _totalUnderlying / _totalSTokenSupply;
+    uint256 _exchangeRate = (_totalScaledCapital * SCALE_18_DECIMALS) /
+      _totalSTokenSupply;
+
+    console.log(
+      "Total capital: %s, Total SToken Supply: %s, exchange rate: %s",
+      _totalScaledCapital,
+      _totalSTokenSupply,
+      _exchangeRate
+    );
+
     return _exchangeRate;
   }
 
   /**
+   * @notice Converts the given underlying amount to SToken shares/amount.
    * @param _underlyingAmount The amount of underlying assets to be converted.
+   * @return The SToken shares/amount scaled to 18 decimals.
    */
   function convertToSToken(uint256 _underlyingAmount)
     public
     view
     returns (uint256)
   {
-    if (totalSupply() == 0) return _underlyingAmount;
-    uint256 _sTokenShares = _underlyingAmount / _getExchangeRate();
+    uint256 _scaledUnderlyingAmt = scaleUnderlyingAmtTo18Decimals(
+      _underlyingAmount
+    );
+    if (totalSupply() == 0) return _scaledUnderlyingAmt;
+    uint256 _sTokenShares = (_scaledUnderlyingAmt * SCALE_18_DECIMALS) /
+      _getExchangeRate();
     return _sTokenShares;
   }
 
   /**
    * @dev A protection seller can calculate their balance of an underlying asset with their SToken balance and the exchange rate: SToken balance * the exchange rate
-   * @dev Your balance of an underlying asset is the sum of your collateral and interest minus protocol fees.
-   * @param _sTokenShares The amount of SToken balance to be converted.
+   * @param _sTokenShares The amount of SToken shares to be converted.
+   * @return underlying amount scaled to underlying decimals.
    */
   function convertToUnderlying(uint256 _sTokenShares)
     public
     view
     returns (uint256)
   {
-    uint256 _underlyingAmount = _sTokenShares * _getExchangeRate();
-    return _underlyingAmount;
+    uint256 _underlyingAmount = (_sTokenShares * _getExchangeRate()) /
+      SCALE_18_DECIMALS;
+    return scale18DecimalsAmtToUnderlyingDecimals(_underlyingAmount);
   }
 
   /*** state-changing functions ***/
@@ -320,10 +332,10 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
   }
 
   /**
-   * @notice Attempts to deposit the amount specified.
+   * @notice Attempts to deposit the underlying amount specified.
    * @notice Upon successful deposit, receiver will get sTokens based on current exchange rate.
    * @notice A deposit can only be made when the pool is in `Open` state.
-   * @notice Amount needs to be approved for transfer to this contract.
+   * @notice Underlying amount needs to be approved for transfer to this contract.
    * @param _underlyingAmount The amount of underlying token to deposit.
    * @param _receiver The address to receive the STokens.
    */
@@ -337,12 +349,12 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
     accruePremium();
 
     uint256 sTokenShares = convertToSToken(_underlyingAmount);
-    totalCollateral += _underlyingAmount;
+    totalSellerDeposit += _underlyingAmount;
     _safeMint(_receiver, sTokenShares);
     underlyingToken.transferFrom(msg.sender, address(this), _underlyingAmount);
 
     /// Verify leverage ratio only when total capital is higher than minimum capital requirement
-    if (totalCollateral > pool.getMinRequiredCapital()) {
+    if (totalSellerDeposit > pool.getMinRequiredCapital()) {
       /// calculate pool's current leverage ratio considering the new deposit
       uint256 leverageRatio = pool.calculateLeverageRatio();
 
@@ -489,7 +501,7 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
   function getTotalCapital() public view override returns (uint256) {
     /// Total capital is: sellers' deposits + accrued premiums from buyers - default payouts.
     /// TODO: consider default payouts
-    return totalCollateral + totalPremiumAccrued;
+    return totalSellerDeposit + totalPremiumAccrued;
   }
 
   /// @inheritdoc ITranche

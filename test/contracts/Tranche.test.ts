@@ -1,6 +1,8 @@
 import { BigNumber } from "@ethersproject/bignumber";
 import { expect } from "chai";
 import { Contract, Signer } from "ethers";
+import { parseEther, formatEther, formatUnits } from "ethers/lib/utils";
+
 import {
   CIRCLE_ACCOUNT_ADDRESS,
   USDC_ADDRESS,
@@ -353,24 +355,24 @@ const testTranche: Function = (
         expect(await tranche.totalPremiumAccrued()).to.be.gt(0);
       });
 
-      it("...receiver recieves sTokens", async () => {
+      it("...receiver recieves 10 sTokens", async () => {
         // sTokens balance of seller should be same as underlying deposit amount
         expect(await tranche.connect(seller).balanceOf(sellerAddress)).to.eq(
-          _underlyingAmount
+          parseEther("10")
         );
       });
 
-      it("...should return 10 USDC as total collateral", async () => {
+      it("...should return 10 USDC as total seller deposit", async () => {
         // sTokens balance of seller should be same as underlying deposit amount
-        expect(await tranche.totalCollateral()).to.eq(_underlyingAmount);
+        expect(await tranche.totalSellerDeposit()).to.eq(_underlyingAmount);
       });
 
       it("...total capital should be equal to total collateral plus total premium accrued", async () => {
         // sTokens balance of seller should be same as underlying deposit amount
         const totalPremiumAccrued = await tranche.totalPremiumAccrued();
-        const totalCollateral = await tranche.totalCollateral();
+        const totalSellerDeposit = await tranche.totalSellerDeposit();
         expect(await tranche.getTotalCapital()).to.eq(
-          totalPremiumAccrued.add(totalCollateral)
+          totalPremiumAccrued.add(totalSellerDeposit)
         );
       });
 
@@ -394,6 +396,38 @@ const testTranche: Function = (
         await expect(
           tranche.deposit(depositAmt, sellerAddress)
         ).to.be.revertedWith("PoolLeverageRatioTooHigh");
+      });
+
+      it("...2nd deposit is successfull", async () => {
+        await expect(tranche.deposit(_underlyingAmount, sellerAddress))
+          .to.emit(tranche, "PremiumAccrued")
+          .to.emit(tranche, "ProtectionSold")
+          .withArgs(sellerAddress, _underlyingAmount);
+        console.log(
+          "sToken Balance of seller after 2nd deposit: ",
+          formatEther(await tranche.connect(seller).balanceOf(sellerAddress))
+        );
+
+        // 2nd deposit will receive less sTokens shares than the first deposit because of the premium accrued
+        expect(await tranche.connect(seller).balanceOf(sellerAddress))
+          .to.be.gt(parseEther("19.9877"))
+          .and.lt(parseEther("19.9878"));
+      });
+
+      it("...should return 20 USDC as total seller deposit", async () => {
+        // sTokens balance of seller should be same as underlying deposit amount
+        expect(await tranche.totalSellerDeposit()).to.eq(
+          _underlyingAmount.mul(2)
+        );
+      });
+
+      it("... should convert sToken shares to correct underlying amount", async () => {
+        const convertedUnderlying = await tranche.convertToUnderlying(
+          await tranche.connect(seller).balanceOf(sellerAddress)
+        );
+
+        // Seller should receive little bit more USDC amt than deposited because of accrued premium
+        expect(formatUSDC(convertedUnderlying)).to.eq("20.0123");
       });
     });
 
@@ -426,5 +460,9 @@ const testTranche: Function = (
     });
   });
 };
+
+function formatUSDC(convertedUnderlying: BigNumber): string {
+  return formatUnits(convertedUnderlying, 6);
+}
 
 export { testTranche };
