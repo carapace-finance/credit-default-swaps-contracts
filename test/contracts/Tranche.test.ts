@@ -1,11 +1,23 @@
 import { BigNumber } from "@ethersproject/bignumber";
 import { expect } from "chai";
 import { Contract, Signer } from "ethers";
-import { CIRCLE_ACCOUNT_ADDRESS, USDC_ADDRESS, USDC_DECIMALS, USDC_ABI } from "../utils/constants";
+import {
+  CIRCLE_ACCOUNT_ADDRESS,
+  USDC_ADDRESS,
+  USDC_DECIMALS,
+  USDC_ABI
+} from "../utils/constants";
 import { PremiumPricing } from "../../typechain-types/contracts/core/PremiumPricing";
 import { Tranche } from "../../typechain-types/contracts/core/Tranche";
-import { getUnixTimestampOfSomeMonthAhead } from "../utils/time";
+import {
+  getUnixTimestampOfSomeMonthAhead,
+  moveForwardTime,
+  getDaysInSeconds,
+  getLatestBlockTimestamp
+} from "../utils/time";
 import { ethers } from "hardhat";
+import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
+import { Pool } from "../../typechain-types/contracts/core/pool/Pool";
 
 const testTranche: Function = (
   deployer: Signer,
@@ -21,6 +33,8 @@ const testTranche: Function = (
     let buyerAddress: string;
     let sellerAddress: string;
     let USDC: Contract;
+    let pool: Pool;
+    let poolCycleManager: PoolCycleManager;
 
     before("get addresses", async () => {
       deployerAddress = await deployer.getAddress();
@@ -29,13 +43,30 @@ const testTranche: Function = (
       sellerAddress = await seller.getAddress();
     });
 
-    before("instantiate USDC token contract and transfer USDC to deployer account", async () => {
-      USDC = await new Contract(USDC_ADDRESS, USDC_ABI, deployer);
+    before(
+      "instantiate USDC token contract and transfer USDC to deployer account",
+      async () => {
+        USDC = await new Contract(USDC_ADDRESS, USDC_ABI, deployer);
 
-      // Impersonate CIRCLE account and transfer some USDC to deployer to test with
-      const circleAccount = await ethers.getImpersonatedSigner(CIRCLE_ACCOUNT_ADDRESS);
-      USDC.connect(circleAccount).transfer(deployerAddress, BigNumber.from(10000).mul(USDC_DECIMALS));
-    });
+        // Impersonate CIRCLE account and transfer some USDC to deployer to test with
+        const circleAccount = await ethers.getImpersonatedSigner(
+          CIRCLE_ACCOUNT_ADDRESS
+        );
+        USDC.connect(circleAccount).transfer(
+          deployerAddress,
+          BigNumber.from(10000).mul(USDC_DECIMALS)
+        );
+
+        poolCycleManager = (await ethers.getContractAt(
+          "PoolCycleManager",
+          await tranche.poolCycleManager()
+        )) as PoolCycleManager;
+        pool = (await ethers.getContractAt(
+          "Pool",
+          await tranche.pool()
+        )) as Pool;
+      }
+    );
 
     describe("constructor", () => {
       it("...set the SToken name", async () => {
@@ -202,12 +233,11 @@ const testTranche: Function = (
       });
     });
 
-    describe("...sellProtection", async () => {
+    describe("...deposit", async () => {
       const _underlyingAmount: BigNumber =
         BigNumber.from(10).mul(USDC_DECIMALS);
       const _exceededAmount: BigNumber =
         BigNumber.from(100000000).mul(USDC_DECIMALS);
-      const _expirationTime: BigNumber = getUnixTimestampOfSomeMonthAhead(4);
       const _shortExpirationTime: BigNumber =
         getUnixTimestampOfSomeMonthAhead(2);
       const _zeroAddress: string = "0x0000000000000000000000000000000000000000";
@@ -235,16 +265,46 @@ const testTranche: Function = (
         );
       });
 
-      // TODO: update this test with new deposit functions
-      // it("...fail if USDC is not approved", async () => {
-      //   await expect(
-      //     tranche.sellProtection(
-      //       _underlyingAmount,
-      //       sellerAddress,
-      //       _expirationTime
-      //     )
-      //   ).to.be.revertedWith("ERC20: transfer amount exceeds allowance");
-      // });
+      it("...fail if pool cycle is not open for deposit", async () => {
+        const poolId = await pool.getId();
+        await expect(
+          tranche.deposit(_underlyingAmount, sellerAddress)
+        ).to.be.revertedWith(`PoolIsNotOpen(${poolId})`);
+      });
+
+      it("...fail if tranche is paused", async () => {
+        const poolId = await pool.getId();
+
+        // register the pool with pool cycle manager to open the pool cycle
+        await poolCycleManager
+          .connect(deployer)
+          .registerPool(
+            await pool.getId(),
+            getDaysInSeconds(10),
+            getDaysInSeconds(20)
+          );
+
+        expect(await poolCycleManager.getCurrentCycleState(poolId)).to.equal(1); // 1 = Open
+
+        // pause the tranche
+        await tranche.connect(deployer).pauseTranche();
+        expect(await tranche.paused()).to.be.true;
+
+        await expect(
+          tranche.deposit(_underlyingAmount, sellerAddress)
+        ).to.be.revertedWith("Pausable: paused");
+      });
+
+      it("...unpause the Tranche contract", async () => {
+        await tranche.unpauseTranche();
+        expect(await tranche.paused()).to.be.false;
+      });
+
+      it("...fail if USDC is not approved", async () => {
+        await expect(
+          tranche.deposit(_underlyingAmount, sellerAddress)
+        ).to.be.revertedWith("ERC20: transfer amount exceeds allowance");
+      });
 
       it("...approve 100000000 USDC to be transferred by the Tranche contract", async () => {
         expect(
@@ -269,60 +329,71 @@ const testTranche: Function = (
         );
       });
 
-      // TODO: update these tests with new deposit functions
-      // it("...fail if USDC balance is insufficient", async () => {
-      //   await expect(
-      //     tranche.sellProtection(
-      //       _exceededAmount,
-      //       sellerAddress,
-      //       _expirationTime
-      //     )
-      //   ).to.be.revertedWith("ERC20: transfer amount exceeds balance");
-      // });
-
-      // it("...fail if an SToken receiver is a zero address", async () => {
-      //   await expect(
-      //     tranche.sellProtection(
-      //       _underlyingAmount,
-      //       _zeroAddress,
-      //       _expirationTime
-      //     )
-      //   ).to.be.revertedWith("ERC20: mint to the zero address");
-      // });
-
-      it("...pause the Tranche contract", async () => {
-        await tranche.pauseTranche();
-        expect(await tranche.paused()).to.be.true;
-      });
-
-      it("...unpause the Tranche contract", async () => {
-        await tranche.unpauseTranche();
-        expect(await tranche.paused()).to.be.false;
+      it("...fail if an SToken receiver is a zero address", async () => {
+        await expect(
+          tranche.deposit(_underlyingAmount, _zeroAddress)
+        ).to.be.revertedWith("ERC20: mint to the zero address");
       });
 
       it("...reentrancy should fail", async () => {
         // todo: write this test later
       });
 
-      it("...interest accrued", async () => {
-        // todo: test accrueInterest
-        // expect(
-        //   await tranche.sellProtection(
-        //     _underlyingAmount,
-        //     sellerAddress,
-        //     _expirationTime
-        //   )
-        // )
-        //   .to.emit(tranche, "InterestAccrued")
-        //   .withArgs(sellerAddress, _underlyingAmount);
+      it("...is successfull", async () => {
+        await expect(tranche.deposit(_underlyingAmount, sellerAddress))
+          .to.emit(tranche, "PremiumAccrued")
+          .to.emit(tranche, "ProtectionSold")
+          .withArgs(sellerAddress, _underlyingAmount);
       });
 
-      // we don't have any capital from protection sellers yet. We have only 1000 USDC premium from the protection buyer.
-      it("...should return 1000 total underlying amount received as premium", async () => {
+      it("...interest accrued", async () => {
+        expect(await tranche.lastPremiumAccrualTimestamp()).to.eq(
+          await getLatestBlockTimestamp()
+        );
+        expect(await tranche.totalPremiumAccrued()).to.be.gt(0);
+      });
+
+      it("...receiver recieves sTokens", async () => {
+        // sTokens balance of seller should be same as underlying deposit amount
+        expect(await tranche.connect(seller).balanceOf(sellerAddress)).to.eq(
+          _underlyingAmount
+        );
+      });
+
+      it("...should return 10 USDC as total collateral", async () => {
+        // sTokens balance of seller should be same as underlying deposit amount
+        expect(await tranche.totalCollateral()).to.eq(_underlyingAmount);
+      });
+
+      it("...total capital should be equal to total collateral plus total premium accrued", async () => {
+        // sTokens balance of seller should be same as underlying deposit amount
+        const totalPremiumAccrued = await tranche.totalPremiumAccrued();
+        const totalCollateral = await tranche.totalCollateral();
+        expect(await tranche.getTotalCapital()).to.eq(
+          totalPremiumAccrued.add(totalCollateral)
+        );
+      });
+
+      // We have 1000 USDC premium from the protection buyer + 10 USDC from the deposit
+      it("...should return 1010 total underlying amount received as premium", async () => {
         const _totalUnderlying: BigNumber = await USDC.balanceOf(
           tranche.address
         );
-        expect(_totalUnderlying).to.eq(BigNumber.from(1000).mul(USDC_DECIMALS));
+        expect(_totalUnderlying).to.eq(BigNumber.from(1010).mul(USDC_DECIMALS));
+      });
+
+      // pool being used inside tranche contract is different than pool passed into this test via deploy.ts
+      // TODO: this needs to be fixed
+      xit("...fail if deposit causes to breach leverage ratio ceiling", async () => {
+        expect(await tranche.getTotalProtection()).to.eq(
+          BigNumber.from(10000).mul(USDC_DECIMALS)
+        );
+
+        const depositAmt: BigNumber = BigNumber.from(2100).mul(USDC_DECIMALS);
+
+        await expect(
+          tranche.deposit(depositAmt, sellerAddress)
+        ).to.be.revertedWith("PoolLeverageRatioTooHigh");
       });
     });
 

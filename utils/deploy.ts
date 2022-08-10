@@ -34,10 +34,13 @@ let accruedPremiumCalculatorInstance: AccruedPremiumCalculator;
   console.error(err);
 });
 
-const contractFactory: Function = async (contractName: string, libraries: any) => {
+const contractFactory: Function = async (
+  contractName: string,
+  libraries: any
+) => {
   const _contractFactory: ContractFactory = await ethers.getContractFactory(
     contractName,
-    {signer: deployer, libraries}
+    { signer: deployer, libraries }
   );
   console.log("Deploying " + contractName + "...");
   return _contractFactory;
@@ -45,10 +48,15 @@ const contractFactory: Function = async (contractName: string, libraries: any) =
 
 const deployContracts: Function = async () => {
   try {
-    const AccruedPremiumCalculator = await contractFactory("AccruedPremiumCalculator");
+    const AccruedPremiumCalculator = await contractFactory(
+      "AccruedPremiumCalculator"
+    );
     accruedPremiumCalculatorInstance = await AccruedPremiumCalculator.deploy();
     await accruedPremiumCalculatorInstance.deployed();
-    console.log("Deployed AccruedPremiumCalculator to:", accruedPremiumCalculatorInstance.address);
+    console.log(
+      "Deployed AccruedPremiumCalculator to:",
+      accruedPremiumCalculatorInstance.address
+    );
 
     const _premiumPricingInstance = await contractFactory("PremiumPricing");
     premiumPricingInstance = await _premiumPricingInstance.deploy(
@@ -78,26 +86,32 @@ const deployContracts: Function = async () => {
       poolCycleManagerInstance.address
     );
 
-    const _trancheFactoryFactory = await contractFactory("TrancheFactory", { AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address });
+    const _trancheFactoryFactory = await contractFactory("TrancheFactory", {
+      AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address
+    });
     trancheFactoryInstance = await _trancheFactoryFactory.deploy();
     await trancheFactoryInstance.deployed();
     console.log(
       "TrancheFactory" + " deployed to:",
       trancheFactoryInstance.address
     );
-    
+
     // Deploy PoolFactory
-    const _poolFactoryFactory = await contractFactory("PoolFactory", { AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address });
+    const _poolFactoryFactory = await contractFactory("PoolFactory", {
+      AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address
+    });
     poolFactoryInstance = await _poolFactoryFactory.deploy();
     await poolFactoryInstance.deployed();
     console.log("PoolFactory" + " deployed to:", poolFactoryInstance.address);
-    
+
     // Deploy Pool
-    const _poolFactory = await contractFactory("Pool", { AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address });
+    const _poolFactory = await contractFactory("Pool", {
+      AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address
+    });
     const _firstPoolFirstTrancheSalt: string = "0x".concat(
       process.env.FIRST_POOL_FIRST_TRANCHE_SALT
     );
-    
+
     const _name: string = "sToken11";
     const _symbol: string = "sT11";
     const poolParams: IPool.PoolParamsStruct = {
@@ -122,9 +136,11 @@ const deployContracts: Function = async () => {
     );
     await poolInstance.deployed();
     console.log("Pool" + " deployed to:", poolInstance.address);
-    
+
     // Deploy Tranche
-    const _trancheFactory = await contractFactory("Tranche", { AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address });
+    const _trancheFactory = await contractFactory("Tranche", {
+      AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address
+    });
     trancheInstance = await _trancheFactory.deploy(
       "sToken",
       "LPT",
@@ -136,6 +152,13 @@ const deployContracts: Function = async () => {
     );
     await trancheInstance.deployed();
     console.log("Tranche" + " deployed to:", trancheInstance.address);
+
+    // TODO: we should use tranche instance created by pool in testing
+
+    // trancheInstance = (await ethers.getContractAt(
+    //   "Tranche",
+    //   await poolInstance.tranche()
+    // )) as Tranche;
   } catch (e) {
     console.log(e);
   }

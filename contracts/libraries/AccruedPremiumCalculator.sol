@@ -5,11 +5,15 @@ pragma solidity ^0.8.13;
 import "hardhat/console.sol";
 import "@prb/math/contracts/PRBMathSD59x18.sol";
 
+// TODO: add natspec comments
+
 library AccruedPremiumCalculator {
   using PRBMathSD59x18 for int256;
 
-  uint256 public constant DAYS_IN_YEAR = 365;
+  int256 public constant DAYS_IN_YEAR = 365;
   int256 public constant SECONDS_IN_DAY = 60 * 60 * 24;
+
+  // TODO: make buffer a pool parameter
   uint256 public constant BUFFER = 5 * 10**16; // 0.05
 
   /**
@@ -25,7 +29,6 @@ library AccruedPremiumCalculator {
     uint256 _leverageRatioFloor,
     uint256 _leverageRatioCeiling
   ) public view returns (int256) {
-    /// TODO: add buffer to leverageRatioCeiling and leverageRatioFloor
     console.log(
       "Calculating risk factor... leverage ratio: %s, floor: %s, ceiling: %s",
       _currentLeverageRatio,
@@ -44,7 +47,7 @@ library AccruedPremiumCalculator {
    * @notice Formula for K: Total Premium / (1 - e^(-1 * protection duration in days * lamda))
    */
   function calculateKAndLambda(
-    uint256 _premium,
+    uint256 _protectionPremium,
     uint256 _totalDuration,
     uint256 _currentLeverageRatio,
     uint256 _curvature,
@@ -59,7 +62,7 @@ library AccruedPremiumCalculator {
     );
     console.logInt(riskFactor);
 
-    int256 lambda = riskFactor / int256(DAYS_IN_YEAR);
+    int256 lambda = riskFactor / DAYS_IN_YEAR;
     console.logInt(lambda);
 
     int256 power1 = (-1) * int256(_totalDuration) * lambda;
@@ -69,7 +72,7 @@ library AccruedPremiumCalculator {
     console.logInt(exp1);
 
     console.log("Calculating K");
-    int256 K = int256(_premium).div((1 * 10**18) - exp1);
+    int256 K = int256(_protectionPremium).div((1 * 10**18) - exp1);
     console.logInt(K);
 
     return (K, lambda);

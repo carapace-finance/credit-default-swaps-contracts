@@ -13,7 +13,8 @@ const testPoolCycleManager: Function = (
   poolCycleManager: PoolCycleManager
 ) => {
   describe("PoolCycleManager", () => {
-    const _firstPoolId: BigNumber = BigNumber.from(1);
+    // poolId 1 is already being used by the main pool instance
+    const _poolId: BigNumber = BigNumber.from(11);
     const _secondPoolId: BigNumber = BigNumber.from(2);
     const _openCycleDuration: BigNumber = BigNumber.from(7 * 24 * 60 * 60); // 7 days
     const _cycleDuration: BigNumber = BigNumber.from(30 * 24 * 60 * 60); // 30 days
@@ -23,7 +24,7 @@ const testPoolCycleManager: Function = (
         await expect(
           poolCycleManager
             .connect(account1)
-            .registerPool(_firstPoolId, _openCycleDuration, _cycleDuration)
+            .registerPool(_poolId, _openCycleDuration, _cycleDuration)
         ).to.be.revertedWith(
           `NotPoolFactory("${await account1.getAddress()}")`
         );
@@ -32,29 +33,23 @@ const testPoolCycleManager: Function = (
       it("...should be able callable by only pool factory contract", async () => {
         await expect(
           poolCycleManager.registerPool(
-            _firstPoolId,
+            _poolId,
             _openCycleDuration,
             _cycleDuration
           )
         )
           .to.emit(poolCycleManager, "PoolCycleCreated")
-          .withArgs(
-            _firstPoolId,
-            0,
-            anyValue,
-            _openCycleDuration,
-            _cycleDuration
-          );
+          .withArgs(_poolId, 0, anyValue, _openCycleDuration, _cycleDuration);
       });
 
       it("...should NOT be able to register pool twice", async () => {
         await expect(
           poolCycleManager.registerPool(
-            _firstPoolId,
+            _poolId,
             _openCycleDuration,
             _cycleDuration
           )
-        ).to.be.revertedWith(`PoolAlreadyRegistered(${_firstPoolId})`);
+        ).to.be.revertedWith(`PoolAlreadyRegistered(${_poolId})`);
       });
 
       it("...should NOT be able to register pool with openCycleduration > cycleDuration", async () => {

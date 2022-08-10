@@ -1,5 +1,5 @@
 import { BigNumber } from "@ethersproject/bignumber";
-import { network } from "hardhat";
+import { ethers, network } from "hardhat";
 
 const getUnixTimestampOfSomeMonthAhead: Function = async (months: number) => {
   let _expirationTime: number;
@@ -18,4 +18,17 @@ const moveForwardTime: Function = async (_duration: BigNumber) => {
   await network.provider.send("evm_mine", []);
 };
 
-export { getUnixTimestampOfSomeMonthAhead, moveForwardTime };
+const getDaysInSeconds: Function = (days: number) => {
+  return BigNumber.from(days * 24 * 60 * 60);
+};
+
+const getLatestBlockTimestamp: Function = async () => {
+  return (await ethers.provider.getBlock("latest")).timestamp;
+};
+
+export {
+  getUnixTimestampOfSomeMonthAhead,
+  moveForwardTime,
+  getDaysInSeconds,
+  getLatestBlockTimestamp
+};
