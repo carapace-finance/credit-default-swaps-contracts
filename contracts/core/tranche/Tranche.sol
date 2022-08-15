@@ -305,6 +305,7 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
     console.log("protectionPremium: ", _protectionPremium);
     uint256 _leverageRatio = pool.calculateLeverageRatio();
 
+    /// TODO: If total protection amt is less than min total protection amt, then don't check LR ceiling
     if (_leverageRatio > pool.getLeverageRatioCeiling()) {
       revert PoolLeverageRatioTooLow(pool.getId(), _leverageRatio);
     }
@@ -366,6 +367,7 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
     emit ProtectionSold(_receiver, _underlyingAmount);
   }
 
+  /// TODO: use sToken amount in WithdrawalRequest instead of underlying amt
   /**
    * @notice Creates a withdrawal request for the given amount to allow actual withdrawal at the next pool cycle.
    * @notice Each user can have single request at a time and hence this function will overwrite any existing request.
@@ -475,6 +477,7 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
     }
 
     /// TODO: optimize premium accrual to avoid array iteration
+    /// TODO: add check to remove expired protections
 
     /// Iterate through existing protections and calculate accrued premium
     for (uint256 i = 0; i < loanProtectionInfos.length; i++) {

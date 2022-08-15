@@ -1,7 +1,12 @@
 import { BigNumber } from "@ethersproject/bignumber";
 import { expect } from "chai";
 import { Contract, Signer } from "ethers";
-import { parseEther, formatEther, formatUnits } from "ethers/lib/utils";
+import {
+  parseEther,
+  formatEther,
+  formatUnits,
+  parseUnits
+} from "ethers/lib/utils";
 
 import {
   CIRCLE_ACCOUNT_ADDRESS,
@@ -427,7 +432,9 @@ const testTranche: Function = (
         );
 
         // Seller should receive little bit more USDC amt than deposited because of accrued premium
-        expect(formatUSDC(convertedUnderlying)).to.eq("20.0123");
+        expect(convertedUnderlying)
+          .to.be.gt(parseUSDC("19.9877"))
+          .and.lt(parseUSDC("20.1"));
       });
     });
 
@@ -463,6 +470,10 @@ const testTranche: Function = (
 
 function formatUSDC(convertedUnderlying: BigNumber): string {
   return formatUnits(convertedUnderlying, 6);
+}
+
+function parseUSDC(convertedUnderlying: string): BigNumber {
+  return parseUnits(convertedUnderlying, 6);
 }
 
 export { testTranche };
