@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/utils/Counters.sol";
 import "./pool/Pool.sol";
 import "../interfaces/IPremiumPricing.sol";
 import "../interfaces/IReferenceLoans.sol";
+import "./PoolCycleManager.sol";
 
 /// @notice PoolFactory creates a new pool and keeps track of them.
 contract PoolFactory is Ownable {
@@ -28,6 +29,8 @@ contract PoolFactory is Ownable {
   );
 
   /*** variables ***/
+  /// @notice reference to the pool cycle manager
+  PoolCycleManager public poolCycleManager;
 
   /// @notice pool id counter
   Counters.Counter public poolIdCounter;
@@ -41,27 +44,15 @@ contract PoolFactory is Ownable {
    */
   constructor() {
     poolIdCounter.increment();
+
+    poolCycleManager = new PoolCycleManager();
   }
 
   /*** state-changing functions ***/
 
-  /**
-   * @notice Create a new pool contract with create2(https://eips.ethereum.org/EIPS/eip-1014).
-   * @param _salt Each Pool contract should have a unique salt. We generate a random salt off-chain. // todo: can we test randomness of salt?
-   * @param _floor The minimum collateral in this pool. // todo: consider passing percentage
-   * @param _ceiling The maximum collateral in this pool. // todo: consider passing percentage
-   * @param _underlyingToken The address of the underlying token in this pool.
-   * @param _referenceLoans an address of a reference lending pools contract // todo: decide when and how we deploy a ReferenceLoans contract of this pool.
-   * @param _premiumPricing an address of a premium pricing contract
-   * @param _name a name of the sToken for the first tranche of this pool.
-   * @param _symbol a symbol of the sToken for the first tranche of this pool.
-   */
   function createPool(
     bytes32 _salt,
-    uint256 _floor,
-    uint256 _ceiling,
-    IERC20 _underlyingToken,
-    IReferenceLoans _referenceLoans,
+    IPool.PoolParams memory _poolParameters,
     IPremiumPricing _premiumPricing,
     string memory _name,
     string memory _symbol
@@ -70,25 +61,31 @@ contract PoolFactory is Ownable {
     address _poolAddress = address(
       new Pool{salt: _salt}(
         _salt,
-        _poolId,
-        _floor,
-        _ceiling,
-        _underlyingToken,
-        _referenceLoans,
+        IPool.PoolInfo({poolId: _poolId, params: _poolParameters}),
         _premiumPricing,
+        poolCycleManager,
         _name,
         _symbol
       )
     );
+
     poolIdToPoolAddress[_poolId] = _poolAddress;
     poolIdCounter.increment();
+
+    /// register newly created pool to the pool cycle manager
+    poolCycleManager.registerPool(
+      _poolId,
+      _poolParameters.poolCycleParams.openCycleDuration,
+      _poolParameters.poolCycleParams.cycleDuration
+    );
+
     emit PoolCreated(
       _poolId,
       _poolAddress,
-      _floor,
-      _ceiling,
-      _underlyingToken,
-      _referenceLoans,
+      _poolParameters.leverageRatioFloor,
+      _poolParameters.leverageRatioCeiling,
+      _poolParameters.underlyingToken,
+      _poolParameters.referenceLoans,
       _premiumPricing
     );
     return _poolAddress;

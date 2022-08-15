@@ -5,12 +5,16 @@ import { USDC_ADDRESS } from "../utils/constants";
 import { PremiumPricing } from "../../typechain-types/contracts/core/PremiumPricing";
 import { ReferenceLoans } from "../../typechain-types/contracts/core/pool/ReferenceLoans";
 import { TrancheFactory } from "../../typechain-types/contracts/core/TrancheFactory";
+import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
+import { Pool } from "../../typechain-types/contracts/core/pool/Pool";
 
-const trancheFactory: Function = (
+const testTrancheFactory: Function = (
   account1: Signer,
+  pool: Pool,
   trancheFactory: TrancheFactory,
   premiumPricing: PremiumPricing,
-  referenceLoans: ReferenceLoans
+  referenceLoans: ReferenceLoans,
+  poolCycleManager: PoolCycleManager
 ) => {
   describe("TrancheFactory", () => {
     describe("createTranche", async () => {
@@ -29,11 +33,13 @@ const trancheFactory: Function = (
             .createTranche(
               _firstPoolFirstTrancheSalt,
               _firstPoolId,
+              pool.address,
               "sToken11",
               "sT11",
               USDC_ADDRESS,
               referenceLoans.address,
               premiumPricing.address,
+              poolCycleManager.address,
               { gasLimit: 100000 }
             )
         ).to.be.revertedWith("Ownable: caller is not the owner");
@@ -44,15 +50,17 @@ const trancheFactory: Function = (
       });
 
       it("...create the first tranche in the first pool", async () => {
-        expect(
-          await trancheFactory.createTranche(
+        await expect(
+          trancheFactory.createTranche(
             _firstPoolSecondTrancheSalt,
             _firstPoolId,
+            pool.address,
             "sToken11",
             "sT11",
             USDC_ADDRESS,
             referenceLoans.address,
-            premiumPricing.address
+            premiumPricing.address,
+            poolCycleManager.address
           )
         )
           .to.emit(trancheFactory, "TrancheCreated")
@@ -74,11 +82,13 @@ const trancheFactory: Function = (
           await trancheFactory.createTranche(
             _firstPoolSecondTrancheSalt,
             _firstPoolId,
+            pool.address,
             "sToken12",
             "sT12",
             USDC_ADDRESS,
             referenceLoans.address,
-            premiumPricing.address
+            premiumPricing.address,
+            poolCycleManager.address
           )
         )
           .to.emit(trancheFactory, "TrancheCreated")
@@ -100,4 +110,4 @@ const trancheFactory: Function = (
   });
 };
 
-export { trancheFactory };
+export { testTrancheFactory };

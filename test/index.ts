@@ -1,8 +1,10 @@
-import { pool } from "./contracts/Pool.test";
-import { poolFactory } from "./contracts/PoolFactory.test";
-import { premiumPricing } from "./contracts/PremiumPricing.test";
-import { tranche } from "./contracts/Tranche.test";
-import { trancheFactory } from "./contracts/TrancheFactory.test";
+import { testPool } from "./contracts/Pool.test";
+import { testPoolFactory } from "./contracts/PoolFactory.test";
+import { testPremiumPricing } from "./contracts/PremiumPricing.test";
+import { testTranche } from "./contracts/Tranche.test";
+import { testTrancheFactory } from "./contracts/TrancheFactory.test";
+import { testPoolCycleManager } from "./contracts/PoolCycleManager.test";
+import { testAccruedPremiumCalculator } from "./contracts/AccruedPremiumCalculator.test";
 
 import {
   deployer,
@@ -16,7 +18,9 @@ import {
   premiumPricingInstance,
   referenceLoansInstance,
   trancheInstance,
-  trancheFactoryInstance
+  trancheFactoryInstance,
+  poolCycleManagerInstance,
+  accruedPremiumCalculatorInstance
 } from "../utils/deploy";
 
 describe("start testing", () => {
@@ -26,11 +30,11 @@ describe("start testing", () => {
 
   describe("run all the tests", () => {
     it("run the Pool test", async () => {
-      pool(account1, poolInstance, referenceLoansInstance);
+      testPool(account1, poolInstance, referenceLoansInstance);
     });
 
     it("run the PoolFactory test", async () => {
-      poolFactory(
+      testPoolFactory(
         account1,
         poolFactoryInstance,
         premiumPricingInstance,
@@ -40,11 +44,11 @@ describe("start testing", () => {
     });
 
     it("run the PremiumPricing test", async () => {
-      premiumPricing(premiumPricingInstance);
+      testPremiumPricing(premiumPricingInstance);
     });
 
     it("run the Tranche test", async () => {
-      tranche(
+      testTranche(
         deployer,
         account1,
         account2,
@@ -55,12 +59,22 @@ describe("start testing", () => {
     });
 
     it("run the TrancheFactory test", async () => {
-      trancheFactory(
+      testTrancheFactory(
         account1,
+        poolInstance,
         trancheFactoryInstance,
         premiumPricingInstance,
-        referenceLoansInstance
+        referenceLoansInstance,
+        poolCycleManagerInstance
       );
+    });
+
+    it("run the PoolCycleManager test", async () => {
+      testPoolCycleManager(deployer, account1, poolCycleManagerInstance);
+    });
+
+    it("run the AccruedPremiumCalculator test", async () => {
+      testAccruedPremiumCalculator(accruedPremiumCalculatorInstance);
     });
   });
 });
