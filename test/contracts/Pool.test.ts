@@ -31,8 +31,6 @@ const testPool: Function = (
     const _newFloor: BigNumber = BigNumber.from(100);
     const _newCeiling: BigNumber = BigNumber.from(500);
     let deployerAddress: string;
-    let ownerAddress: string;
-    let buyerAddress: string;
     let sellerAddress: string;
     let USDC: Contract;
     let poolInfo: any;
@@ -42,8 +40,6 @@ const testPool: Function = (
 
     before("setup", async () => {
       deployerAddress = await deployer.getAddress();
-      ownerAddress = await owner.getAddress();
-      buyerAddress = await buyer.getAddress();
       sellerAddress = await seller.getAddress();
 
       poolInfo = await pool.poolInfo();
@@ -139,7 +135,7 @@ const testPool: Function = (
       });
 
       // TODO: setup PoolCycleManager to allow for deposit and use new deposit function
-      // xit("...should return correct ratio when tranche has atleast 1 protection bought & sold", async () => {
+      // xit("...should return correct ratio when tranche has at least 1 protection bought & sold", async () => {
       //   const tranche: Tranche = (await ethers.getContractAt(
       //     "Tranche",
       //     await pool.tranche()
@@ -157,7 +153,7 @@ const testPool: Function = (
 
       //   // await pool.connect(account1).sellProtection(BigNumber.from(10000).mul(USDC_DECIMALS), await account1.getAddress(), expirationTime);
 
-      //   // Leverage ratio should be liitle bit higher than 0.1 (scaled by 10^18) because of accrued premium
+      //   // Leverage ratio should be little bit higher than 0.1 (scaled by 10^18) because of accrued premium
       //   expect(await pool.calculateLeverageRatio()).to.be.gt(parseEther("0.1"));
       //   expect(await pool.calculateLeverageRatio()).to.be.lt(
       //     parseEther("0.101")
@@ -335,25 +331,24 @@ const testPool: Function = (
       });
 
       it("...fail if pool cycle is not open for deposit", async () => {
-        const poolId = await pool.getId();
         await expect(
           pool.deposit(_underlyingAmount, sellerAddress)
-        ).to.be.revertedWith(`PoolIsNotOpen(${poolId})`);
+        ).to.be.revertedWith(`PoolIsNotOpen(${poolInfo.poolId})`);
       });
 
       it("...fail if tranche is paused", async () => {
-        const poolId = await pool.getId();
-
         // register the pool with pool cycle manager to open the pool cycle
         await poolCycleManager
           .connect(deployer)
           .registerPool(
-            await pool.getId(),
+            poolInfo.poolId,
             getDaysInSeconds(10),
             getDaysInSeconds(20)
           );
 
-        expect(await poolCycleManager.getCurrentCycleState(poolId)).to.equal(1); // 1 = Open
+        expect(
+          await poolCycleManager.getCurrentCycleState(poolInfo.poolId)
+        ).to.equal(1); // 1 = Open
 
         // pause the tranche
         await pool.connect(deployer).pauseTranche();
@@ -408,7 +403,7 @@ const testPool: Function = (
         // todo: write this test later
       });
 
-      it("...is successfull", async () => {
+      it("...is successful", async () => {
         await expect(pool.deposit(_underlyingAmount, sellerAddress))
           .to.emit(pool, "PremiumAccrued")
           .to.emit(pool, "ProtectionSold")
@@ -422,7 +417,7 @@ const testPool: Function = (
         expect(await pool.totalPremiumAccrued()).to.be.gt(0);
       });
 
-      it("...receiver recieves 10 sTokens", async () => {
+      it("...receiver receives 10 sTokens", async () => {
         // sTokens balance of seller should be same as underlying deposit amount
         expect(await pool.connect(seller).balanceOf(sellerAddress)).to.eq(
           parseEther("10")
@@ -463,7 +458,7 @@ const testPool: Function = (
         ).to.be.revertedWith("PoolLeverageRatioTooHigh");
       });
 
-      it("...2nd deposit is successfull", async () => {
+      it("...2nd deposit is successful", async () => {
         await expect(pool.deposit(_underlyingAmount, sellerAddress))
           .to.emit(pool, "PremiumAccrued")
           .to.emit(pool, "ProtectionSold")

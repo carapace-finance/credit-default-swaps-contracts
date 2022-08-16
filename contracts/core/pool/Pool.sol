@@ -276,7 +276,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
    * @notice Attempts to withdraw the amount specified in the user's withdrawal request.
    * @notice A withdrawal request must be created during previous pool cycle.
    * @notice A withdrawal can only be made when the lending pool is in `Open` state.
-   * @notice Requested amount will be transfered from this contract to the receiver address.
+   * @notice Requested amount will be transferred from this contract to the receiver address.
    * @param _underlyingAmount The amount of underlying token to withdraw.
    * @param _receiver The address to receive the underlying token.
    */
@@ -352,7 +352,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   }
 
   /**
-   * @notice Calculates the premuim accrued for all existing protections and updates the total premium accrued.
+   * @notice Calculates the premium accrued for all existing protections and updates the total premium accrued.
    * @notice This method calculates premium accrued from the last timestamp to the current timestamp.
    */
   function accruePremium() public {
@@ -409,7 +409,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /** view functions */
 
-  function getPoolInfo() public view returns (PoolInfo memory) {
+  /// @inheritdoc IPool
+  function getPoolInfo() public view override returns (PoolInfo memory) {
     return poolInfo;
   }
 
@@ -468,51 +469,11 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     return totalProtection;
   }
 
-  /// @inheritdoc IPool
-  function getId() public view override returns (uint256) {
-    return poolInfo.poolId;
-  }
-
-  /// @inheritdoc IPool
-  function getMinRequiredCapital() public view override returns (uint256) {
-    return poolInfo.params.minRequiredCapital;
-  }
-
-  /// @inheritdoc IPool
-  function getLeverageRatioFloor() public view override returns (uint256) {
-    return poolInfo.params.leverageRatioFloor;
-  }
-
-  /// @inheritdoc IPool
-  function getLeverageRatioCeiling() public view override returns (uint256) {
-    return poolInfo.params.leverageRatioCeiling;
-  }
-
-  /// @inheritdoc IPool
-  function getLeverageRatioBuffer() public view override returns (uint256) {
-    return poolInfo.params.leverageRatioBuffer;
-  }
-
-  /// @inheritdoc IPool
-  function getCurvature() public view override returns (uint256) {
-    return poolInfo.params.curvature;
-  }
-
-  /// @inheritdoc IPool
-  function getOpenCycleDuration() public view override returns (uint256) {
-    return poolInfo.params.poolCycleParams.openCycleDuration;
-  }
-
-  /// @inheritdoc IPool
-  function getCycleDuration() public view override returns (uint256) {
-    return poolInfo.params.poolCycleParams.cycleDuration;
-  }
-
   /*** internal functions */
 
   /**
    * @dev the exchange rate = total capital / total SToken supply
-   * @dev total capital = total seller deposits + premium accued - default payouts
+   * @dev total capital = total seller deposits + premium accrued - default payouts
    * @dev the rehypothecation and the protocol fees will be added in the upcoming versions
    * @return the exchange rate scaled to 18 decimals
    */
@@ -553,7 +514,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   }
 
   /**
-   * @dev Sacles the given underlying token amount to the amount with 18 decimals.
+   * @dev Scales the given underlying token amount to the amount with 18 decimals.
    */
   function scaleUnderlyingAmtTo18Decimals(uint256 underlyingAmt)
     private
@@ -566,7 +527,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   }
 
   /**
-   * @dev Sacles the given amount from 18 decimals to decimals used by underlying token.
+   * @dev Scales the given amount from 18 decimals to decimals used by underlying token.
    */
   function scale18DecimalsAmtToUnderlyingDecimals(uint256 amt)
     private
