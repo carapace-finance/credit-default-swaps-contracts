@@ -390,7 +390,6 @@ const testTranche: Function = (
       });
 
       // pool being used inside tranche contract is different than pool passed into this test via deploy.ts
-      // TODO: this needs to be fixed
       xit("...fail if deposit causes to breach leverage ratio ceiling", async () => {
         expect(await tranche.getTotalProtection()).to.eq(
           BigNumber.from(10000).mul(USDC_DECIMALS)
