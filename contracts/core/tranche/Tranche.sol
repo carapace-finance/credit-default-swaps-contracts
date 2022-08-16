@@ -11,7 +11,6 @@ import "../../interfaces/IPool.sol";
 import "../../interfaces/ITranche.sol";
 import "../../libraries/AccruedPremiumCalculator.sol";
 
-// TODO: remove after testing
 import "hardhat/console.sol";
 
 /// @notice Tranche coordinates a swap market in between a buyer and a seller. It stores premium from a protection buyer and capital from a protection seller.
@@ -191,7 +190,6 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
    * @return the exchange rate scaled to 18 decimals
    */
   function _getExchangeRate() internal view returns (uint256) {
-    // todo: this function needs to be tested thoroughly
     uint256 _totalScaledCapital = scaleUnderlyingAmtTo18Decimals(
       getTotalCapital()
     );

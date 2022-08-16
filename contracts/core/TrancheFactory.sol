@@ -60,7 +60,6 @@ contract TrancheFactory is Ownable {
     IPremiumPricing _premiumPricing,
     IPoolCycleManager _poolCycleManager
   ) public onlyOwner returns (address) {
-    // todo: add the onlyPool modifier
     if (poolIdToTrancheIdCounter[_poolId].current() == 0) {
       poolIdToTrancheIdCounter[_poolId].increment();
     }
