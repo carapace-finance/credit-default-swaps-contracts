@@ -130,7 +130,7 @@ const testPool: Function = (
     });
 
     describe("calculateLeverageRatio", () => {
-      it("...should return 0 when tranche has no protection sold", async () => {
+      it("...should return 0 when pool has no protection sold", async () => {
         expect(await pool.calculateLeverageRatio()).to.equal(0);
       });
 
@@ -190,19 +190,19 @@ const testPool: Function = (
         // even if a pool defaults, there may be more default from other loans in the pool. whenNotDefault should be valid only when all the loans in the lending pool default?
       });
 
-      it("...pause the Tranche contract", async () => {
-        await pool.pauseTranche();
+      it("...pause the pool contract", async () => {
+        await pool.pause();
         expect(await pool.paused()).to.be.true;
       });
 
-      it("...fails if the Tranche contract is paused", async () => {
+      it("...fails if the pool contract is paused", async () => {
         await expect(pool.buyProtection(0, 0, 0)).to.be.revertedWith(
           "Pausable: paused"
         );
       });
 
-      it("...unpause the Tranche contract", async () => {
-        await pool.unpauseTranche();
+      it("...unpause the pool contract", async () => {
+        await pool.unpause();
         expect(await pool.paused()).to.be.false;
       });
 
@@ -223,7 +223,7 @@ const testPool: Function = (
         ).to.be.revertedWith("ERC20: transfer amount exceeds allowance");
       });
 
-      it("...approve 1000 USDC to be transferred by the Tranche contract", async () => {
+      it("...approve 1000 USDC to be transferred by the Pool contract", async () => {
         expect(
           await USDC.approve(
             pool.address,
@@ -310,7 +310,7 @@ const testPool: Function = (
         getUnixTimestampOfSomeMonthAhead(2);
       const _zeroAddress: string = "0x0000000000000000000000000000000000000000";
 
-      it("...approve 0 USDC to be transferred by the Tranche contract", async () => {
+      it("...approve 0 USDC to be transferred by the Pool contract", async () => {
         expect(
           await USDC.approve(pool.address, BigNumber.from(0).mul(USDC_DECIMALS))
         )
@@ -336,7 +336,7 @@ const testPool: Function = (
         ).to.be.revertedWith(`PoolIsNotOpen(${poolInfo.poolId})`);
       });
 
-      it("...fail if tranche is paused", async () => {
+      it("...fail if pool is paused", async () => {
         // register the pool with pool cycle manager to open the pool cycle
         await poolCycleManager
           .connect(deployer)
@@ -350,8 +350,8 @@ const testPool: Function = (
           await poolCycleManager.getCurrentCycleState(poolInfo.poolId)
         ).to.equal(1); // 1 = Open
 
-        // pause the tranche
-        await pool.connect(deployer).pauseTranche();
+        // pause the pool
+        await pool.connect(deployer).pause();
         expect(await pool.paused()).to.be.true;
 
         await expect(
@@ -359,8 +359,8 @@ const testPool: Function = (
         ).to.be.revertedWith("Pausable: paused");
       });
 
-      it("...unpause the Tranche contract", async () => {
-        await pool.unpauseTranche();
+      it("...unpause the Pool contract", async () => {
+        await pool.unpause();
         expect(await pool.paused()).to.be.false;
       });
 
@@ -370,7 +370,7 @@ const testPool: Function = (
         ).to.be.revertedWith("ERC20: transfer amount exceeds allowance");
       });
 
-      it("...approve 100000000 USDC to be transferred by the Tranche contract", async () => {
+      it("...approve 100000000 USDC to be transferred by the Pool contract", async () => {
         expect(
           await USDC.approve(
             pool.address,
@@ -491,26 +491,23 @@ const testPool: Function = (
       });
     });
 
-    describe("pauseTranche", () => {
+    describe("pause", () => {
       it("...should allow the owner to pause contract", async () => {
-        await expect(pool.connect(owner).pauseTranche()).to.be.revertedWith(
+        await expect(pool.connect(owner).pause()).to.be.revertedWith(
           "Ownable: caller is not the owner"
         );
-        expect(await pool.connect(deployer).pauseTranche()).to.emit(
-          pool,
-          "Paused"
-        );
+        expect(await pool.connect(deployer).pause()).to.emit(pool, "Paused");
         const _paused: boolean = await pool.paused();
         expect(_paused).to.eq(true);
       });
     });
 
-    describe("unpauseTranche", () => {
+    describe("unpause", () => {
       it("...should allow the owner to unpause contract", async () => {
-        await expect(pool.connect(owner).unpauseTranche()).to.be.revertedWith(
+        await expect(pool.connect(owner).unpause()).to.be.revertedWith(
           "Ownable: caller is not the owner"
         );
-        expect(await pool.connect(deployer).unpauseTranche()).to.emit(
+        expect(await pool.connect(deployer).unpause()).to.emit(
           pool,
           "Unpaused"
         );

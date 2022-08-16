@@ -23,10 +23,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /*** variables ***/
 
-  /// @notice the total amount of underlying token in this pool
-  /// todo: interact with each tranche contract in the pool to calculate this value. you can make this into a function instead of using a storage.
-  uint256 public totalUnderlying;
-
   /// @notice some information about this pool
   PoolInfo public poolInfo;
 
@@ -38,13 +34,13 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /// @notice Reference to the PoolCycleManager contract
   IPoolCycleManager public immutable poolCycleManager;
 
-  /// @notice The total underlying amount of deposits from protection sellers accumulated in the tranche
+  /// @notice The total underlying amount of deposits from protection sellers accumulated in the pool
   uint256 public totalSellerDeposit;
 
-  /// @notice The total underlying amount of premium from protection buyers accumulated in the tranche
+  /// @notice The total underlying amount of premium from protection buyers accumulated in the pool
   uint256 public totalPremium;
 
-  /// @notice The total underlying amount of protection bought from this tranche
+  /// @notice The total underlying amount of protection bought from this pool
   uint256 public totalProtection;
 
   /// @notice Buyer account id counter
@@ -386,12 +382,12 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   }
 
   /// @notice allows the owner to pause the contract
-  function pauseTranche() external onlyOwner {
+  function pause() external onlyOwner {
     _pause();
   }
 
   /// @notice allows the owner to unpause the contract
-  function unpauseTranche() external onlyOwner {
+  function unpause() external onlyOwner {
     _unpause();
   }
 
