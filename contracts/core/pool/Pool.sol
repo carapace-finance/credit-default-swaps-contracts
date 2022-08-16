@@ -31,6 +31,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   PoolInfo public poolInfo;
 
   /*** state variables ***/
+
   /// @notice Reference to the PremiumPricing contract
   IPremiumPricing public immutable premiumPricing;
 
@@ -109,10 +110,12 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     _;
   }
 
+  /// TODO: Discuss whether each pool will have its own token.
   /*** constructor ***/
   // todo: error handling for the floor value
   // todo: error handling for the ceiling value
   /**
+   * @param _poolInfo The information about the pool.
    * @param _premiumPricing an address of a premium pricing contract
    * @param _poolCycleManager an address of a pool cycle manager contract
    * @param _name a name of the sToken

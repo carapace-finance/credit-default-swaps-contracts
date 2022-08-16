@@ -15,8 +15,7 @@ const testPoolFactory: Function = (
   account1: Signer,
   poolFactory: PoolFactory,
   premiumPricing: PremiumPricing,
-  referenceLoans: ReferenceLoans,
-  trancheFactory: TrancheFactory
+  referenceLoans: ReferenceLoans
 ) => {
   describe("PoolFactory", () => {
     describe("createPool", async () => {
@@ -40,9 +39,7 @@ const testPoolFactory: Function = (
         leverageRatioBuffer: BigNumber.from(5),
         minRequiredCapital: BigNumber.from(1000000),
         curvature: BigNumber.from(5),
-        poolCycleParams: poolCycleParams,
-        underlyingToken: USDC_ADDRESS,
-        referenceLoans: referenceLoans.address
+        poolCycleParams: poolCycleParams
       };
 
       it("...only the owner should be able to call the createPool function", async () => {
@@ -52,6 +49,8 @@ const testPoolFactory: Function = (
             .createPool(
               _firstPoolFirstTrancheSalt,
               _poolParams,
+              USDC_ADDRESS,
+              referenceLoans.address,
               premiumPricing.address,
               "sToken11",
               "sT11",
@@ -73,6 +72,8 @@ const testPoolFactory: Function = (
           await poolFactory.createPool(
             _firstPoolFirstTrancheSalt,
             _poolParams,
+            USDC_ADDRESS,
+            referenceLoans.address,
             premiumPricing.address,
             "sToken11",
             "sT11"
@@ -94,14 +95,6 @@ const testPoolFactory: Function = (
             anyValue,
             poolCycleParams.openCycleDuration,
             poolCycleParams.cycleDuration
-          )
-          .to.emit(trancheFactory, "TrancheCreated")
-          .withArgs(
-            _firstPoolId,
-            "sToken11",
-            "sT11",
-            USDC_ADDRESS,
-            referenceLoans.address
           );
       });
 
@@ -120,6 +113,8 @@ const testPoolFactory: Function = (
           await poolFactory.createPool(
             _secondPoolFirstTrancheSalt,
             _poolParams,
+            USDC_ADDRESS,
+            referenceLoans.address,
             premiumPricing.address,
             "sToken21",
             "sT21"
@@ -141,14 +136,6 @@ const testPoolFactory: Function = (
             anyValue,
             poolCycleParams.openCycleDuration,
             poolCycleParams.cycleDuration
-          )
-          .to.emit(trancheFactory, "TrancheCreated")
-          .withArgs(
-            _secondPoolId,
-            "sToken21",
-            "sT21",
-            USDC_ADDRESS,
-            referenceLoans.address
           );
       });
 
