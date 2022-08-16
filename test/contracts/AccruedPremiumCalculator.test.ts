@@ -62,7 +62,6 @@ const testAccruedPremiumCalculator: Function = (
           );
           leverageRatio = leverageRatio.add(step);
 
-          // TODO: discuss what should happen when denominator is zero in risk factor calculation
           if (leverageRatio.eq(parseEther("0.15"))) {
             // skip 0.15 leverage ratio step
             leverageRatio = leverageRatio.add(step);

@@ -104,8 +104,6 @@ const testTrancheFactory: Function = (
       it("...should increment the tranche id counter for a given pool id", async () => {
         expect(await trancheFactory.poolIdToTrancheIdCounter(1)).to.equal("3");
       });
-
-      // todo: test the generated tranche address after implementing the address pre-computation method in solidity
     });
   });
 };
