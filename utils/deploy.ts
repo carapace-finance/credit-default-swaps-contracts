@@ -94,9 +94,6 @@ const deployContracts: Function = async () => {
     const _poolFactory = await contractFactory("Pool", {
       AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address
     });
-    const _firstPoolFirstTrancheSalt: string = "0x".concat(
-      process.env.FIRST_POOL_FIRST_TRANCHE_SALT
-    );
 
     const _poolCycleParams: IPool.PoolCycleParamsStruct = {
       openCycleDuration: BigNumber.from(10 * 86400), // 10 days
