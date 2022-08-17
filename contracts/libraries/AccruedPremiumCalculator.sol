@@ -42,7 +42,7 @@ library AccruedPremiumCalculator {
         _leverageRatioCeiling + _leverageRatioBuffer - _currentLeverageRatio
       ) /
         (int256(_currentLeverageRatio) -
-          int256(_leverageRatioFloor + _leverageRatioBuffer)));
+          int256(_leverageRatioFloor - _leverageRatioBuffer)));
   }
 
   /**
