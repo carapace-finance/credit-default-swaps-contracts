@@ -55,14 +55,10 @@ contract Pool is IPool, TrancheFactory {
   }
 
   /*** state-changing functions ***/
-  // todo: calculate the floor based on the percentage
-  // todo: the floor = some adjustable % * the amount of active protection purchased
   function updateFloor(uint256 newFloor) external onlyOwner {
     poolInfo.params.leverageRatioFloor = newFloor;
   }
 
-  // todo: calculate the ceiling based on the percentage
-  // todo: The ceiling should be calculated based on the expected APY so I am thinking that I can somehow calculate the ceiling based on the minimal APY we want to produce to protection sellers.
   function updateCeiling(uint256 newCeiling) external onlyOwner {
     poolInfo.params.leverageRatioCeiling = newCeiling;
   }
