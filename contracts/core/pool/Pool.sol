@@ -410,7 +410,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /// @inheritdoc IPool
   function calculateLeverageRatio() public view override returns (uint256) {
-    uint256 totalProtection = tranche.getTotalProtection();
     if (totalProtection == 0) {
       return 0;
     }
