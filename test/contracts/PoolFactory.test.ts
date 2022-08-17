@@ -60,11 +60,9 @@ const testPoolFactory: Function = (
       });
 
       it("...fail if the floor is", async () => {
-        // todo: write this test with the error and revert
       });
 
       it("...fail if the ceiling is", async () => {
-        // todo: write this test with the error and revert
       });
 
       it("...create the first pool and tranche", async () => {
@@ -164,7 +162,6 @@ const testPoolFactory: Function = (
         ).to.equal((await ethers.provider.getBlock("latest")).timestamp);
       });
 
-      // todo: test the generated address after implementing the address pre-computation method in solidity
       // it("...the second pool address should match the second pool address in the poolIdToPoolAddress", async () => {
       //   const secondPoolAddress = await poolFactory.callStatic.createPool(
       //     _secondPoolFirstTrancheSalt,

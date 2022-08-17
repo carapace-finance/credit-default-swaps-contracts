@@ -5,7 +5,6 @@ import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "./IReferenceLoans.sol";
 
 abstract contract IPool {
-  // TODO: create a lib contract to contain common constants
   uint256 public constant SCALE_18_DECIMALS = 10**18;
 
   /*** structs ***/

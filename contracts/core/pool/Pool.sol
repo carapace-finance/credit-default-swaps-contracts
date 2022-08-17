@@ -14,7 +14,6 @@ import "../../libraries/AccruedPremiumCalculator.sol";
 // TODO: remove after testing
 import "hardhat/console.sol";
 
-// TODO: add setter functions for all pool parameters
 /// @notice Each pool is a market where protection sellers and buyers can swap credit default risks of designated underlying loans.
 contract Pool is IPool, SToken, ReentrancyGuard {
   /*** libraries ***/
@@ -22,6 +21,9 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   using Counters for Counters.Counter;
 
   /*** variables ***/
+
+  /// @notice the total amount of underlying token in this pool
+  uint256 public totalUnderlying;
 
   /// @notice some information about this pool
   PoolInfo public poolInfo;
@@ -108,8 +110,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /// TODO: Discuss whether each pool will have its own token.
   /*** constructor ***/
-  // todo: error handling for the floor value
-  // todo: error handling for the ceiling value
   /**
    * @param _poolInfo The information about the pool.
    * @param _premiumPricing an address of a premium pricing contract
@@ -397,8 +397,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     poolInfo.params.leverageRatioFloor = newFloor;
   }
 
-  // todo: calculate the ceiling based on the percentage
-  // todo: The ceiling should be calculated based on the expected APY so I am thinking that I can somehow calculate the ceiling based on the minimal APY we want to produce to protection sellers.
   function updateCeiling(uint256 newCeiling) external onlyOwner {
     poolInfo.params.leverageRatioCeiling = newCeiling;
   }
@@ -412,6 +410,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /// @inheritdoc IPool
   function calculateLeverageRatio() public view override returns (uint256) {
+    uint256 totalProtection = tranche.getTotalProtection();
     if (totalProtection == 0) {
       return 0;
     }
