@@ -78,7 +78,6 @@ const testPool: Function = (
       });
       it("...set the SToken symbol", async () => {
         const _symbol: string = await pool.symbol();
-        // todo: need to come up with a better symbol
         expect(_symbol).to.eq("sT11");
       });
       it("...set the pool id", async () => {
@@ -165,7 +164,6 @@ const testPool: Function = (
       let _protectionAmount: BigNumber;
 
       it("...should expire the referenceLoans", async () => {
-        // todo: write this test once you finish writing the ReferenceLoans contract
         //   await referenceLoans.setIsExpired(true);
         //   const _checkIsExpired: boolean =
         //     await referenceLoans.checkIsExpired();
@@ -173,12 +171,10 @@ const testPool: Function = (
       });
 
       it("...fails if the lending pool has expired already", async () => {
-        // todo: write this test once you finish writing the ReferenceLoans contract
         // await expect(pool.buyProtection(0,0,0)).to.be.revertedWith("Lending pool has expired");
       });
 
       it("...should roll back the expiration the referenceLoans for testing", async () => {
-        // todo: write this test once you finish writing the ReferenceLoans contract
         //   await referenceLoans.setIsExpired(true);
         //   const _checkIsExpired: boolean =
         //     await referenceLoans.checkIsExpired();
@@ -186,7 +182,6 @@ const testPool: Function = (
       });
 
       it("...fails if the lending pool has defaulted", async () => {
-        // todo: write this test once you finish writing the ReferenceLoans contract
         // even if a pool defaults, there may be more default from other loans in the pool. whenNotDefault should be valid only when all the loans in the lending pool default?
       });
 
@@ -207,7 +202,6 @@ const testPool: Function = (
       });
 
       it("...reentrancy should fail", async () => {
-        // todo: write this test later
       });
 
       it("...the buyer account doesn't exist for the msg.sender", async () => {
@@ -400,7 +394,6 @@ const testPool: Function = (
       });
 
       it("...reentrancy should fail", async () => {
-        // todo: write this test later
       });
 
       it("...is successful", async () => {

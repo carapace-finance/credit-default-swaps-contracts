@@ -391,8 +391,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     _unpause();
   }
 
-  // todo: calculate the floor based on the percentage
-  // todo: the floor = some adjustable % * the amount of active protection purchased
   function updateFloor(uint256 newFloor) external onlyOwner {
     poolInfo.params.leverageRatioFloor = newFloor;
   }
@@ -472,7 +470,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
    * @return the exchange rate scaled to 18 decimals
    */
   function _getExchangeRate() internal view returns (uint256) {
-    // todo: this function needs to be tested thoroughly
     uint256 _totalScaledCapital = scaleUnderlyingAmtTo18Decimals(
       getTotalCapital()
     );

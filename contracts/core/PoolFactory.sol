@@ -50,7 +50,7 @@ contract PoolFactory is Ownable {
 
   /*** state-changing functions ***/
   /**
-   * @param _salt Each Pool contract should have a unique salt. We generate a random salt off-chain. // todo: can we test randomness of salt?
+   * @param _salt Each Pool contract should have a unique salt. We generate a random salt off-chain.
    * @param _poolParameters struct containing pool related parameters.
    * @param _underlyingToken an address of an underlying token
    * @param _referenceLoans an address of a reference loans contract
