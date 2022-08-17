@@ -3,8 +3,8 @@ import { BigNumber } from "@ethersproject/bignumber";
 const CIRCLE_ACCOUNT_ADDRESS: string =
   "0x55FE002aefF02F77364de339a1292923A15844B8";
 const USDC_ADDRESS: string = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
-const USDC_NO_OF_DECIMALS: number = 6;
-const USDC_DECIMALS: BigNumber = BigNumber.from(10).pow(USDC_NO_OF_DECIMALS);
+const USDC_NUM_OF_DECIMALS: number = 6;
+const USDC_DECIMALS: BigNumber = BigNumber.from(10).pow(USDC_NUM_OF_DECIMALS);
 const USDC_ABI: object[] = [
   {
     anonymous: false,
@@ -686,5 +686,5 @@ export {
   USDC_ADDRESS,
   USDC_DECIMALS,
   USDC_ABI,
-  USDC_NO_OF_DECIMALS
+  USDC_NUM_OF_DECIMALS
 };

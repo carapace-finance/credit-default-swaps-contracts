@@ -5,7 +5,7 @@ import { Signer } from "ethers";
 import { USDC_ADDRESS } from "../utils/constants";
 import { PremiumPricing } from "../../typechain-types/contracts/core/PremiumPricing";
 import { PoolFactory } from "../../typechain-types/contracts/core/PoolFactory";
-import { ReferenceLoans } from "../../typechain-types/contracts/core/pool/ReferenceLoans";
+import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { ethers } from "hardhat";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
 import { IPool } from "../../typechain-types/contracts/core/pool/Pool";
@@ -14,7 +14,7 @@ const testPoolFactory: Function = (
   account1: Signer,
   poolFactory: PoolFactory,
   premiumPricing: PremiumPricing,
-  referenceLoans: ReferenceLoans
+  referenceLendingPools: ReferenceLendingPools
 ) => {
   describe("PoolFactory", () => {
     describe("createPool", async () => {
@@ -49,7 +49,7 @@ const testPoolFactory: Function = (
               _firstPoolFirstTrancheSalt,
               _poolParams,
               USDC_ADDRESS,
-              referenceLoans.address,
+              referenceLendingPools.address,
               premiumPricing.address,
               "sToken11",
               "sT11",
@@ -70,7 +70,7 @@ const testPoolFactory: Function = (
             _firstPoolFirstTrancheSalt,
             _poolParams,
             USDC_ADDRESS,
-            referenceLoans.address,
+            referenceLendingPools.address,
             premiumPricing.address,
             "sToken11",
             "sT11"
@@ -82,7 +82,7 @@ const testPoolFactory: Function = (
             _floor,
             _ceiling,
             USDC_ADDRESS,
-            referenceLoans.address,
+            referenceLendingPools.address,
             premiumPricing.address
           )
           .to.emit(poolFactory, "PoolCycleCreated")
@@ -111,7 +111,7 @@ const testPoolFactory: Function = (
             _secondPoolFirstTrancheSalt,
             _poolParams,
             USDC_ADDRESS,
-            referenceLoans.address,
+            referenceLendingPools.address,
             premiumPricing.address,
             "sToken21",
             "sT21"
@@ -123,7 +123,7 @@ const testPoolFactory: Function = (
             _floor,
             _ceiling,
             USDC_ADDRESS,
-            referenceLoans.address,
+            referenceLendingPools.address,
             premiumPricing.address
           )
           .to.emit(poolFactory, "PoolCycleCreated")
@@ -167,7 +167,7 @@ const testPoolFactory: Function = (
       //     _floor,
       //     _ceiling,
       //     USDC_ADDRESS,
-      //     referenceLoans.address,
+      //     referenceLendingPools.address,
       //     premiumPricing.address,
       //     "sToken21",
       //     "sT21"

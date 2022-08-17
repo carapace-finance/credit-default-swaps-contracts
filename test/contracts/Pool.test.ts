@@ -9,7 +9,7 @@ import {
   USDC_ABI
 } from "../utils/constants";
 import { Pool } from "../../typechain-types/contracts/core/pool/Pool";
-import { ReferenceLoans } from "../../typechain-types/contracts/core/pool/ReferenceLoans";
+import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { ethers } from "hardhat";
 import { PremiumPricing } from "../../typechain-types/contracts/core/PremiumPricing";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
@@ -36,7 +36,7 @@ const testPool: Function = (
     let poolInfo: any;
     let poolCycleManager: PoolCycleManager;
     let premiumPricing: PremiumPricing;
-    let referenceLoans: ReferenceLoans;
+    let referenceLendingPools: ReferenceLendingPools;
 
     before("setup", async () => {
       deployerAddress = await deployer.getAddress();
@@ -65,10 +65,10 @@ const testPool: Function = (
         await pool.premiumPricing()
       )) as PremiumPricing;
 
-      referenceLoans = (await ethers.getContractAt(
-        "ReferenceLoans",
-        poolInfo.referenceLoans
-      )) as ReferenceLoans;
+      referenceLendingPools = (await ethers.getContractAt(
+        "ReferenceLendingPools",
+        poolInfo.referenceLendingPools
+      )) as ReferenceLendingPools;
     });
 
     describe("constructor", () => {
@@ -78,7 +78,6 @@ const testPool: Function = (
       });
       it("...set the SToken symbol", async () => {
         const _symbol: string = await pool.symbol();
-        // todo: need to come up with a better symbol
         expect(_symbol).to.eq("sT11");
       });
       it("...set the pool id", async () => {
@@ -103,8 +102,8 @@ const testPool: Function = (
         expect(poolInfo.underlyingToken.toString()).to.eq(USDC_ADDRESS);
       });
       it("...set the reference loans", async () => {
-        expect(poolInfo.referenceLoans.toString()).to.eq(
-          referenceLoans.address
+        expect(poolInfo.referenceLendingPools.toString()).to.eq(
+          referenceLendingPools.address
         );
       });
       it("...set the premium pricing contract address", async () => {
@@ -134,7 +133,6 @@ const testPool: Function = (
         expect(await pool.calculateLeverageRatio()).to.equal(0);
       });
 
-      // TODO: setup PoolCycleManager to allow for deposit and use new deposit function
       // xit("...should return correct ratio when tranche has at least 1 protection bought & sold", async () => {
       //   const tranche: Tranche = (await ethers.getContractAt(
       //     "Tranche",
@@ -164,29 +162,25 @@ const testPool: Function = (
     describe("buyProtection", () => {
       let _protectionAmount: BigNumber;
 
-      it("...should expire the referenceLoans", async () => {
-        // todo: write this test once you finish writing the ReferenceLoans contract
-        //   await referenceLoans.setIsExpired(true);
+      it("...should expire the referenceLendingPools", async () => {
+        //   await referenceLendingPools.setIsExpired(true);
         //   const _checkIsExpired: boolean =
-        //     await referenceLoans.checkIsExpired();
+        //     await referenceLendingPools.checkIsExpired();
         //   expect(_checkIsExpired.toString()).to.eq("true");
       });
 
       it("...fails if the lending pool has expired already", async () => {
-        // todo: write this test once you finish writing the ReferenceLoans contract
         // await expect(pool.buyProtection(0,0,0)).to.be.revertedWith("Lending pool has expired");
       });
 
-      it("...should roll back the expiration the referenceLoans for testing", async () => {
-        // todo: write this test once you finish writing the ReferenceLoans contract
-        //   await referenceLoans.setIsExpired(true);
+      it("...should roll back the expiration the referenceLendingPools for testing", async () => {
+        //   await referenceLendingPools.setIsExpired(true);
         //   const _checkIsExpired: boolean =
-        //     await referenceLoans.checkIsExpired();
+        //     await referenceLendingPools.checkIsExpired();
         //   expect(_checkIsExpired.toString()).to.eq("true");
       });
 
       it("...fails if the lending pool has defaulted", async () => {
-        // todo: write this test once you finish writing the ReferenceLoans contract
         // even if a pool defaults, there may be more default from other loans in the pool. whenNotDefault should be valid only when all the loans in the lending pool default?
       });
 
@@ -207,7 +201,6 @@ const testPool: Function = (
       });
 
       it("...reentrancy should fail", async () => {
-        // todo: write this test later
       });
 
       it("...the buyer account doesn't exist for the msg.sender", async () => {
@@ -400,7 +393,6 @@ const testPool: Function = (
       });
 
       it("...reentrancy should fail", async () => {
-        // todo: write this test later
       });
 
       it("...is successful", async () => {
@@ -445,7 +437,6 @@ const testPool: Function = (
       });
 
       // pool being used inside tranche contract is different than pool passed into this test via deploy.ts
-      // TODO: this needs to be fixed
       xit("...fail if deposit causes to breach leverage ratio ceiling", async () => {
         expect(await pool.getTotalProtection()).to.eq(
           BigNumber.from(10000).mul(USDC_DECIMALS)

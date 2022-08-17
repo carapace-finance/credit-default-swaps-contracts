@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "./pool/Pool.sol";
 import "../interfaces/IPremiumPricing.sol";
-import "../interfaces/IReferenceLoans.sol";
+import "../interfaces/IReferenceLendingPools.sol";
 import "./PoolCycleManager.sol";
 
 /// @notice PoolFactory creates a new pool and keeps track of them.
@@ -24,7 +24,7 @@ contract PoolFactory is Ownable {
     uint256 floor,
     uint256 ceiling,
     IERC20 underlyingToken,
-    IReferenceLoans referenceLoans,
+    IReferenceLendingPools referenceLendingPools,
     IPremiumPricing premiumPricing
   );
 
@@ -50,10 +50,10 @@ contract PoolFactory is Ownable {
 
   /*** state-changing functions ***/
   /**
-   * @param _salt Each Pool contract should have a unique salt. We generate a random salt off-chain. // todo: can we test randomness of salt?
+   * @param _salt Each Pool contract should have a unique salt. We generate a random salt off-chain.
    * @param _poolParameters struct containing pool related parameters.
    * @param _underlyingToken an address of an underlying token
-   * @param _referenceLoans an address of a reference loans contract
+   * @param _referenceLendingPools an address of the ReferenceLendingPools contract
    * @param _premiumPricing an address of a premium pricing contract
    * @param _name a name of the sToken
    * @param _symbol a symbol of the sToken
@@ -62,7 +62,7 @@ contract PoolFactory is Ownable {
     bytes32 _salt,
     IPool.PoolParams memory _poolParameters,
     IERC20Metadata _underlyingToken,
-    IReferenceLoans _referenceLoans,
+    IReferenceLendingPools _referenceLendingPools,
     IPremiumPricing _premiumPricing,
     string memory _name,
     string memory _symbol
@@ -74,7 +74,7 @@ contract PoolFactory is Ownable {
           poolId: _poolId,
           params: _poolParameters,
           underlyingToken: _underlyingToken,
-          referenceLoans: _referenceLoans
+          referenceLendingPools: _referenceLendingPools
         }),
         _premiumPricing,
         poolCycleManager,
@@ -99,7 +99,7 @@ contract PoolFactory is Ownable {
       _poolParameters.leverageRatioFloor,
       _poolParameters.leverageRatioCeiling,
       _underlyingToken,
-      _referenceLoans,
+      _referenceLendingPools,
       _premiumPricing
     );
     return _poolAddress;

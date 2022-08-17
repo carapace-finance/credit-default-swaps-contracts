@@ -6,7 +6,7 @@ import { USDC_ADDRESS } from "../test/utils/constants";
 import { IPool, Pool } from "../typechain-types/contracts/core/pool/Pool";
 import { PoolFactory } from "../typechain-types/contracts/core/PoolFactory";
 import { PremiumPricing } from "../typechain-types/contracts/core/PremiumPricing";
-import { ReferenceLoans } from "../typechain-types/contracts/core/pool/ReferenceLoans";
+import { ReferenceLendingPools } from "../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { PoolCycleManager } from "../typechain-types/contracts/core/PoolCycleManager";
 import { AccruedPremiumCalculator } from "../typechain-types/contracts/libraries/AccruedPremiumCalculator";
 
@@ -19,7 +19,7 @@ let account4: Signer;
 let poolInstance: Pool;
 let poolFactoryInstance: PoolFactory;
 let premiumPricingInstance: PremiumPricing;
-let referenceLoansInstance: ReferenceLoans;
+let referenceLendingPoolsInstance: ReferenceLendingPools;
 let poolCycleManagerInstance: PoolCycleManager;
 let accruedPremiumCalculatorInstance: AccruedPremiumCalculator;
 
@@ -66,12 +66,12 @@ const deployContracts: Function = async () => {
       premiumPricingInstance.address
     );
 
-    const referenceLoansFactory = await contractFactory("ReferenceLoans");
-    referenceLoansInstance = await referenceLoansFactory.deploy();
-    await referenceLoansInstance.deployed();
+    const referenceLendingPoolsFactory = await contractFactory("ReferenceLendingPools");
+    referenceLendingPoolsInstance = await referenceLendingPoolsFactory.deploy();
+    await referenceLendingPoolsInstance.deployed();
     console.log(
-      "ReferenceLoans" + " deployed to:",
-      referenceLoansInstance.address
+      "ReferenceLendingPools" + " deployed to:",
+      referenceLendingPoolsInstance.address
     );
 
     const _poolCycleManagerFactory = await contractFactory("PoolCycleManager");
@@ -112,7 +112,7 @@ const deployContracts: Function = async () => {
       poolId: BigNumber.from(1),
       params: _poolParams,
       underlyingToken: USDC_ADDRESS,
-      referenceLoans: referenceLoansInstance.address
+      referenceLendingPools: referenceLendingPoolsInstance.address
     };
 
     poolInstance = await _poolFactory.deploy(
@@ -139,7 +139,7 @@ export {
   poolInstance,
   poolFactoryInstance,
   premiumPricingInstance,
-  referenceLoansInstance,
+  referenceLendingPoolsInstance,
   poolCycleManagerInstance,
   accruedPremiumCalculatorInstance
 };
