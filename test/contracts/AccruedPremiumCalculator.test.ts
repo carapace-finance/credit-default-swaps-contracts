@@ -88,12 +88,6 @@ const testAccruedPremiumCalculator: Function = (
             _curvature
           );
           leverageRatio = leverageRatio.add(parseEther("0.005"));
-
-          if (leverageRatio.eq(parseEther("0.15"))) {
-            // skip 0.15 leverage ratio step
-            leverageRatio = leverageRatio.add(parseEther("0.005"));
-            continue;
-          }
         }
         expect(true).to.be.true;
       });
