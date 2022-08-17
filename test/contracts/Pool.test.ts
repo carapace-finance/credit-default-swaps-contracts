@@ -133,7 +133,6 @@ const testPool: Function = (
         expect(await pool.calculateLeverageRatio()).to.equal(0);
       });
 
-      // TODO: setup PoolCycleManager to allow for deposit and use new deposit function
       // xit("...should return correct ratio when tranche has at least 1 protection bought & sold", async () => {
       //   const tranche: Tranche = (await ethers.getContractAt(
       //     "Tranche",
@@ -438,7 +437,6 @@ const testPool: Function = (
       });
 
       // pool being used inside tranche contract is different than pool passed into this test via deploy.ts
-      // TODO: this needs to be fixed
       xit("...fail if deposit causes to breach leverage ratio ceiling", async () => {
         expect(await pool.getTotalProtection()).to.eq(
           BigNumber.from(10000).mul(USDC_DECIMALS)
