@@ -177,7 +177,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     totalProtection += _protectionAmount;
 
     /// Capture loan protection data for premium accrual calculation
-    uint256 _totalDurationInDays = (_expirationTime - block.timestamp) /
+    uint256 _protectionDurationInDays = (_expirationTime - block.timestamp) /
       uint256(AccruedPremiumCalculator.SECONDS_IN_DAY);
     uint256 _protectionPremium = scaleUnderlyingAmtTo18Decimals(_premiumAmount);
     uint256 _leverageRatio = calculateLeverageRatio();
@@ -188,15 +188,15 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     }
 
     console.log(
-      "totalDurationInDays: %s, protectionPremium: %s, leverageRatio: ",
-      _totalDurationInDays,
+      "protectionDurationInDays: %s, protectionPremium: %s, leverageRatio: ",
+      _protectionDurationInDays,
       _protectionPremium,
       _leverageRatio
     );
 
     (int256 K, int256 lambda) = AccruedPremiumCalculator.calculateKAndLambda(
       _protectionPremium,
-      _totalDurationInDays,
+      _protectionDurationInDays,
       _leverageRatio,
       poolInfo.params.leverageRatioFloor,
       poolInfo.params.leverageRatioCeiling,
@@ -206,8 +206,9 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
     loanProtectionInfos.push(
       LoanProtectionInfo({
-        totalPremium: _premiumAmount,
-        totalDurationInDays: _totalDurationInDays,
+        protectionPremium: _premiumAmount,
+        protectionDurationInDays: _protectionDurationInDays,
+        startTimestamp: block.timestamp,
         K: K,
         lambda: lambda
       })
@@ -367,17 +368,33 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     /// TODO: optimize premium accrual to avoid array iteration
     /// TODO: add check to remove expired protections
 
-    /// Iterate through existing protections and calculate accrued premium
+    /// Iterate through existing protections and calculate accrued premium for seconds elapsed since last accrual
     for (uint256 i = 0; i < loanProtectionInfos.length; i++) {
       LoanProtectionInfo storage loanProtectionInfo = loanProtectionInfos[i];
+
+      /**
+       * <-Protection Bought(second: 0) --- last accrual(fromSecond) --- now(toSecond) --- Expiration->
+       * The time line starts when protection is bought and ends when protection is expired.
+       * fromSeconds is the second elapsed since the last accrual timestamp after the protection is bought.
+       * toSeconds is the second elapsed until now after protection is bought.
+       */
+      uint256 startTimestamp = loanProtectionInfo.startTimestamp;
+      uint256 fromSecond = lastPremiumAccrualTimestamp - startTimestamp;
+      uint256 toSecond = block.timestamp - startTimestamp;
+
       uint256 accruedPremium = AccruedPremiumCalculator.calculateAccruedPremium(
-        lastPremiumAccrualTimestamp,
-        block.timestamp,
+        fromSecond,
+        toSecond,
         loanProtectionInfo.K,
         loanProtectionInfo.lambda
       );
 
-      console.log("accruedPremium: ", accruedPremium);
+      console.log(
+        "accruedPremium from second %s to %s: ",
+        fromSecond,
+        toSecond,
+        accruedPremium
+      );
 
       totalPremiumAccrued += scale18DecimalsAmtToUnderlyingDecimals(
         accruedPremium
