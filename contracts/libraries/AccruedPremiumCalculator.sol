@@ -39,10 +39,13 @@ library AccruedPremiumCalculator {
     return
       int256(_curvature) *
       (int256(
-        _leverageRatioCeiling + _leverageRatioBuffer - _currentLeverageRatio
+        (_leverageRatioCeiling + _leverageRatioBuffer) - _currentLeverageRatio
       ) /
-        (int256(_currentLeverageRatio) -
-          int256(_leverageRatioFloor - _leverageRatioBuffer)));
+        (
+          int256(
+            _currentLeverageRatio - (_leverageRatioFloor - _leverageRatioBuffer)
+          )
+        ));
   }
 
   /**
