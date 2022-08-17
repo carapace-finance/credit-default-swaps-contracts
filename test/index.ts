@@ -14,7 +14,7 @@ import {
   poolInstance,
   poolFactoryInstance,
   premiumPricingInstance,
-  referenceLoansInstance,
+  referenceLendingPoolsInstance,
   poolCycleManagerInstance,
   accruedPremiumCalculatorInstance
 } from "../utils/deploy";
@@ -34,7 +34,7 @@ describe("start testing", () => {
         account1,
         poolFactoryInstance,
         premiumPricingInstance,
-        referenceLoansInstance
+        referenceLendingPoolsInstance
       );
     });
 

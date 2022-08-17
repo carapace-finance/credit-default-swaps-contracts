@@ -9,7 +9,7 @@ import {
   USDC_ABI
 } from "../utils/constants";
 import { Pool } from "../../typechain-types/contracts/core/pool/Pool";
-import { ReferenceLoans } from "../../typechain-types/contracts/core/pool/ReferenceLoans";
+import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { ethers } from "hardhat";
 import { PremiumPricing } from "../../typechain-types/contracts/core/PremiumPricing";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
@@ -36,7 +36,7 @@ const testPool: Function = (
     let poolInfo: any;
     let poolCycleManager: PoolCycleManager;
     let premiumPricing: PremiumPricing;
-    let referenceLoans: ReferenceLoans;
+    let referenceLendingPools: ReferenceLendingPools;
 
     before("setup", async () => {
       deployerAddress = await deployer.getAddress();
@@ -65,10 +65,10 @@ const testPool: Function = (
         await pool.premiumPricing()
       )) as PremiumPricing;
 
-      referenceLoans = (await ethers.getContractAt(
-        "ReferenceLoans",
-        poolInfo.referenceLoans
-      )) as ReferenceLoans;
+      referenceLendingPools = (await ethers.getContractAt(
+        "ReferenceLendingPools",
+        poolInfo.referenceLendingPools
+      )) as ReferenceLendingPools;
     });
 
     describe("constructor", () => {
@@ -102,8 +102,8 @@ const testPool: Function = (
         expect(poolInfo.underlyingToken.toString()).to.eq(USDC_ADDRESS);
       });
       it("...set the reference loans", async () => {
-        expect(poolInfo.referenceLoans.toString()).to.eq(
-          referenceLoans.address
+        expect(poolInfo.referenceLendingPools.toString()).to.eq(
+          referenceLendingPools.address
         );
       });
       it("...set the premium pricing contract address", async () => {
@@ -162,10 +162,10 @@ const testPool: Function = (
     describe("buyProtection", () => {
       let _protectionAmount: BigNumber;
 
-      it("...should expire the referenceLoans", async () => {
-        //   await referenceLoans.setIsExpired(true);
+      it("...should expire the referenceLendingPools", async () => {
+        //   await referenceLendingPools.setIsExpired(true);
         //   const _checkIsExpired: boolean =
-        //     await referenceLoans.checkIsExpired();
+        //     await referenceLendingPools.checkIsExpired();
         //   expect(_checkIsExpired.toString()).to.eq("true");
       });
 
@@ -173,10 +173,10 @@ const testPool: Function = (
         // await expect(pool.buyProtection(0,0,0)).to.be.revertedWith("Lending pool has expired");
       });
 
-      it("...should roll back the expiration the referenceLoans for testing", async () => {
-        //   await referenceLoans.setIsExpired(true);
+      it("...should roll back the expiration the referenceLendingPools for testing", async () => {
+        //   await referenceLendingPools.setIsExpired(true);
         //   const _checkIsExpired: boolean =
-        //     await referenceLoans.checkIsExpired();
+        //     await referenceLendingPools.checkIsExpired();
         //   expect(_checkIsExpired.toString()).to.eq("true");
       });
 

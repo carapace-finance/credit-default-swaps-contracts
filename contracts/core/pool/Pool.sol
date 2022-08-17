@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./SToken.sol";
 import "../../interfaces/IPremiumPricing.sol";
-import "../../interfaces/IReferenceLoans.sol";
+import "../../interfaces/IReferenceLendingPools.sol";
 import "../../interfaces/IPoolCycleManager.sol";
 import "../../interfaces/IPool.sol";
 import "../../libraries/AccruedPremiumCalculator.sol";
@@ -75,7 +75,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
    * @param _lendingPoolId The id of the lending pool.
    */
   modifier whenNotExpired(uint256 _lendingPoolId) {
-    //   if (referenceLoans.checkIsExpired(_lendingPoolId) == true)
+    //   if (referenceLendingPools.checkIsExpired(_lendingPoolId) == true)
     //     revert PoolExpired(_lendingPoolId);
     _;
   }
@@ -130,7 +130,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _name,
       _symbol,
       poolInfo.underlyingToken,
-      poolInfo.referenceLoans
+      poolInfo.referenceLendingPools
     );
   }
 
