@@ -94,7 +94,6 @@ const testPool: Function = (
         expect(await pool.calculateLeverageRatio()).to.equal(0);
       });
 
-      // TODO: setup PoolCycleManager to allow for deposit and use new deposit function
       xit("...should return correct ratio when tranche has atleast 1 protection bought & sold", async () => {
         const tranche: Tranche = (await ethers.getContractAt(
           "Tranche",

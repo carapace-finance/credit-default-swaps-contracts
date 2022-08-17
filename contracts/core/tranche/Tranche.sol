@@ -11,7 +11,6 @@ import "../../interfaces/IPool.sol";
 import "../../interfaces/ITranche.sol";
 import "../../libraries/AccruedPremiumCalculator.sol";
 
-// TODO: remove after testing
 import "hardhat/console.sol";
 
 /// @notice Tranche coordinates a swap market in between a buyer and a seller. It stores premium from a protection buyer and capital from a protection seller.
@@ -191,7 +190,6 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
    * @return the exchange rate scaled to 18 decimals
    */
   function _getExchangeRate() internal view returns (uint256) {
-    // todo: this function needs to be tested thoroughly
     uint256 _totalScaledCapital = scaleUnderlyingAmtTo18Decimals(
       getTotalCapital()
     );
@@ -305,7 +303,6 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
     console.log("protectionPremium: ", _protectionPremium);
     uint256 _leverageRatio = pool.calculateLeverageRatio();
 
-    /// TODO: If total protection amt is less than min total protection amt, then don't check LR ceiling
     if (_leverageRatio > pool.getLeverageRatioCeiling()) {
       revert PoolLeverageRatioTooLow(pool.getId(), _leverageRatio);
     }
@@ -367,7 +364,6 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
     emit ProtectionSold(_receiver, _underlyingAmount);
   }
 
-  /// TODO: use sToken amount in WithdrawalRequest instead of underlying amt
   /**
    * @notice Creates a withdrawal request for the given amount to allow actual withdrawal at the next pool cycle.
    * @notice Each user can have single request at a time and hence this function will overwrite any existing request.
@@ -434,7 +430,6 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
     } else {
       sTokenAmountToBurn = convertToSToken(_underlyingAmount);
       if (sTokenAmountToBurn > sTokenBalance) {
-        /// TODO: should we let user withdraw available amount instead of failing?
         revert InsufficientSTokenBalance(msg.sender, sTokenBalance);
       }
     }
@@ -476,9 +471,6 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
       return;
     }
 
-    /// TODO: optimize premium accrual to avoid array iteration
-    /// TODO: add check to remove expired protections
-
     /// Iterate through existing protections and calculate accrued premium
     for (uint256 i = 0; i < loanProtectionInfos.length; i++) {
       LoanProtectionInfo storage loanProtectionInfo = loanProtectionInfos[i];
@@ -503,7 +495,6 @@ contract Tranche is SToken, ReentrancyGuard, ITranche {
   /// @inheritdoc ITranche
   function getTotalCapital() public view override returns (uint256) {
     /// Total capital is: sellers' deposits + accrued premiums from buyers - default payouts.
-    /// TODO: consider default payouts
     return totalSellerDeposit + totalPremiumAccrued;
   }
 

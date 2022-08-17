@@ -10,13 +10,11 @@ import "../../interfaces/IPoolCycleManager.sol";
 import "../../interfaces/IPool.sol";
 import "../../interfaces/ITranche.sol";
 
-// TODO: add setter functions for all pool parameters
 /// @notice Each pool is a market where protection sellers and buyers can swap credit default risks of designated underlying loans.
 contract Pool is IPool, TrancheFactory {
   /*** variables ***/
 
   /// @notice the total amount of underlying token in this pool
-  /// todo: interact with each tranche contract in the pool to calculate this value. you can make this into a function instead of using a storage.
   uint256 public totalUnderlying;
 
   /// @notice some information about this pool
@@ -26,10 +24,8 @@ contract Pool is IPool, TrancheFactory {
   ITranche public tranche;
 
   /*** constructor ***/
-  // todo: error handling for the floor value
-  // todo: error handling for the ceiling value
   /**
-   * @param _salt Each Pool contract should have a unique salt. We generate a random salt off-chain. // todo: can we test randomness of salt?
+   * @param _salt Each Pool contract should have a unique salt. We generate a random salt off-chain.
    * @param _premiumPricing an address of a premium pricing contract
    * @param _poolCycleManager an address of a pool cycle manager contract
    * @param _name a name of the sToken
@@ -59,21 +55,16 @@ contract Pool is IPool, TrancheFactory {
   }
 
   /*** state-changing functions ***/
-  // todo: calculate the floor based on the percentage
-  // todo: the floor = some adjustable % * the amount of active protection purchased
   function updateFloor(uint256 newFloor) external onlyOwner {
     poolInfo.params.leverageRatioFloor = newFloor;
   }
 
-  // todo: calculate the ceiling based on the percentage
-  // todo: The ceiling should be calculated based on the expected APY so I am thinking that I can somehow calculate the ceiling based on the minimal APY we want to produce to protection sellers.
   function updateCeiling(uint256 newCeiling) external onlyOwner {
     poolInfo.params.leverageRatioCeiling = newCeiling;
   }
 
   /// @inheritdoc IPool
   function calculateLeverageRatio() public view override returns (uint256) {
-    /// TODO: consider multiple tranches
     uint256 totalProtection = tranche.getTotalProtection();
     if (totalProtection == 0) {
       return 0;
