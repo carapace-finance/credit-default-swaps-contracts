@@ -1,8 +1,6 @@
 import { testPool } from "./contracts/Pool.test";
 import { testPoolFactory } from "./contracts/PoolFactory.test";
 import { testPremiumPricing } from "./contracts/PremiumPricing.test";
-import { testTranche } from "./contracts/Tranche.test";
-import { testTrancheFactory } from "./contracts/TrancheFactory.test";
 import { testPoolCycleManager } from "./contracts/PoolCycleManager.test";
 import { testAccruedPremiumCalculator } from "./contracts/AccruedPremiumCalculator.test";
 
@@ -17,8 +15,6 @@ import {
   poolFactoryInstance,
   premiumPricingInstance,
   referenceLoansInstance,
-  trancheInstance,
-  trancheFactoryInstance,
   poolCycleManagerInstance,
   accruedPremiumCalculatorInstance
 } from "../utils/deploy";
@@ -30,7 +26,7 @@ describe("start testing", () => {
 
   describe("run all the tests", () => {
     it("run the Pool test", async () => {
-      testPool(account1, poolInstance, referenceLoansInstance);
+      testPool(deployer, account1, account2, account3, poolInstance);
     });
 
     it("run the PoolFactory test", async () => {
@@ -38,35 +34,12 @@ describe("start testing", () => {
         account1,
         poolFactoryInstance,
         premiumPricingInstance,
-        referenceLoansInstance,
-        trancheFactoryInstance
+        referenceLoansInstance
       );
     });
 
     it("run the PremiumPricing test", async () => {
       testPremiumPricing(premiumPricingInstance);
-    });
-
-    it("run the Tranche test", async () => {
-      testTranche(
-        deployer,
-        account1,
-        account2,
-        account3,
-        premiumPricingInstance,
-        trancheInstance
-      );
-    });
-
-    it("run the TrancheFactory test", async () => {
-      testTrancheFactory(
-        account1,
-        poolInstance,
-        trancheFactoryInstance,
-        premiumPricingInstance,
-        referenceLoansInstance,
-        poolCycleManagerInstance
-      );
     });
 
     it("run the PoolCycleManager test", async () => {

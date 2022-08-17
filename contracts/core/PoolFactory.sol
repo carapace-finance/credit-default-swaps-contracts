@@ -49,10 +49,20 @@ contract PoolFactory is Ownable {
   }
 
   /*** state-changing functions ***/
-
+  /**
+   * @param _salt Each Pool contract should have a unique salt. We generate a random salt off-chain. // todo: can we test randomness of salt?
+   * @param _poolParameters struct containing pool related parameters.
+   * @param _underlyingToken an address of an underlying token
+   * @param _referenceLoans an address of a reference loans contract
+   * @param _premiumPricing an address of a premium pricing contract
+   * @param _name a name of the sToken
+   * @param _symbol a symbol of the sToken
+   */
   function createPool(
     bytes32 _salt,
     IPool.PoolParams memory _poolParameters,
+    IERC20Metadata _underlyingToken,
+    IReferenceLoans _referenceLoans,
     IPremiumPricing _premiumPricing,
     string memory _name,
     string memory _symbol
@@ -60,8 +70,12 @@ contract PoolFactory is Ownable {
     uint256 _poolId = poolIdCounter.current();
     address _poolAddress = address(
       new Pool{salt: _salt}(
-        _salt,
-        IPool.PoolInfo({poolId: _poolId, params: _poolParameters}),
+        IPool.PoolInfo({
+          poolId: _poolId,
+          params: _poolParameters,
+          underlyingToken: _underlyingToken,
+          referenceLoans: _referenceLoans
+        }),
         _premiumPricing,
         poolCycleManager,
         _name,
@@ -84,8 +98,8 @@ contract PoolFactory is Ownable {
       _poolAddress,
       _poolParameters.leverageRatioFloor,
       _poolParameters.leverageRatioCeiling,
-      _poolParameters.underlyingToken,
-      _poolParameters.referenceLoans,
+      _underlyingToken,
+      _referenceLoans,
       _premiumPricing
     );
     return _poolAddress;

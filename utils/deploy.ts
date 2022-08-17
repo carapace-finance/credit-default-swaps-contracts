@@ -7,8 +7,6 @@ import { IPool, Pool } from "../typechain-types/contracts/core/pool/Pool";
 import { PoolFactory } from "../typechain-types/contracts/core/PoolFactory";
 import { PremiumPricing } from "../typechain-types/contracts/core/PremiumPricing";
 import { ReferenceLoans } from "../typechain-types/contracts/core/pool/ReferenceLoans";
-import { Tranche } from "../typechain-types/contracts/core/tranche/Tranche";
-import { TrancheFactory } from "../typechain-types/contracts/core/TrancheFactory";
 import { PoolCycleManager } from "../typechain-types/contracts/core/PoolCycleManager";
 import { AccruedPremiumCalculator } from "../typechain-types/contracts/libraries/AccruedPremiumCalculator";
 
@@ -22,8 +20,6 @@ let poolInstance: Pool;
 let poolFactoryInstance: PoolFactory;
 let premiumPricingInstance: PremiumPricing;
 let referenceLoansInstance: ReferenceLoans;
-let trancheInstance: Tranche;
-let trancheFactoryInstance: TrancheFactory;
 let poolCycleManagerInstance: PoolCycleManager;
 let accruedPremiumCalculatorInstance: AccruedPremiumCalculator;
 
@@ -86,16 +82,6 @@ const deployContracts: Function = async () => {
       poolCycleManagerInstance.address
     );
 
-    const _trancheFactoryFactory = await contractFactory("TrancheFactory", {
-      AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address
-    });
-    trancheFactoryInstance = await _trancheFactoryFactory.deploy();
-    await trancheFactoryInstance.deployed();
-    console.log(
-      "TrancheFactory" + " deployed to:",
-      trancheFactoryInstance.address
-    );
-
     // Deploy PoolFactory
     const _poolFactoryFactory = await contractFactory("PoolFactory", {
       AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address
@@ -108,64 +94,36 @@ const deployContracts: Function = async () => {
     const _poolFactory = await contractFactory("Pool", {
       AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address
     });
-    const _firstPoolFirstTrancheSalt: string = "0x".concat(
-      process.env.FIRST_POOL_FIRST_TRANCHE_SALT
-    );
 
-    const _name: string = "sToken11";
-    const _symbol: string = "sT11";
-    const poolCycleParams: IPool.PoolCycleParamsStruct = {
+    const _poolCycleParams: IPool.PoolCycleParamsStruct = {
       openCycleDuration: BigNumber.from(10 * 86400), // 10 days
       cycleDuration: BigNumber.from(30 * 86400) // 30 days
     };
-    const poolParams: IPool.PoolParamsStruct = {
+
+    const _poolParams: IPool.PoolParamsStruct = {
       leverageRatioFloor: parseEther("0.1"),
       leverageRatioCeiling: parseEther("0.2"),
       leverageRatioBuffer: parseEther("0.05"),
       minRequiredCapital: parseEther("100000"),
       curvature: parseEther("0.05"),
-      poolCycleParams: poolCycleParams,
+      poolCycleParams: _poolCycleParams
+    };
+    const _poolInfo: IPool.PoolInfoStruct = {
+      poolId: BigNumber.from(1),
+      params: _poolParams,
       underlyingToken: USDC_ADDRESS,
       referenceLoans: referenceLoansInstance.address
     };
-    const poolInfo: IPool.PoolInfoStruct = {
-      poolId: BigNumber.from(1),
-      params: poolParams
-    };
 
     poolInstance = await _poolFactory.deploy(
-      _firstPoolFirstTrancheSalt,
-      poolInfo,
+      _poolInfo,
       premiumPricingInstance.address,
       poolCycleManagerInstance.address,
-      _name,
-      _symbol
+      "sToken11",
+      "sT11"
     );
     await poolInstance.deployed();
     console.log("Pool" + " deployed to:", poolInstance.address);
-
-    // Deploy Tranche
-    const _trancheFactory = await contractFactory("Tranche", {
-      AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address
-    });
-    trancheInstance = await _trancheFactory.deploy(
-      "sToken",
-      "LPT",
-      USDC_ADDRESS,
-      poolInstance.address,
-      USDC_ADDRESS, // need to be changed to the address of the reference loans contract
-      premiumPricingInstance.address,
-      poolCycleManagerInstance.address
-    );
-    await trancheInstance.deployed();
-    console.log("Tranche" + " deployed to:", trancheInstance.address);
-
-    // TODO: we should use tranche instance created by pool in testing
-
-    // trancheInstance = (await ethers.getContractAt(
-    //   "Tranche",
-    //   await poolInstance.tranche()
-    // )) as Tranche;
   } catch (e) {
     console.log(e);
   }
@@ -182,8 +140,6 @@ export {
   poolFactoryInstance,
   premiumPricingInstance,
   referenceLoansInstance,
-  trancheInstance,
-  trancheFactoryInstance,
   poolCycleManagerInstance,
   accruedPremiumCalculatorInstance
 };
