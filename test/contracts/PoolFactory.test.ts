@@ -6,7 +6,6 @@ import { USDC_ADDRESS } from "../utils/constants";
 import { PremiumPricing } from "../../typechain-types/contracts/core/PremiumPricing";
 import { PoolFactory } from "../../typechain-types/contracts/core/PoolFactory";
 import { ReferenceLoans } from "../../typechain-types/contracts/core/pool/ReferenceLoans";
-import { TrancheFactory } from "../../typechain-types/contracts/core/TrancheFactory";
 import { ethers } from "hardhat";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
 import { IPool } from "../../typechain-types/contracts/core/pool/Pool";
