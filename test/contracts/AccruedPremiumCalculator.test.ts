@@ -46,7 +46,7 @@ const testAccruedPremiumCalculator: Function = (
           _leverageRatioBuffer,
           _curvature
         );
-        expect(riskFactor).to.be.eq(parseEther("-0.55"));
+        expect(riskFactor).to.be.eq(parseEther("0.061111111111111111"));
       });
 
       it("... calculates risk factor without underflow/overflow for range 0.1 to 0.2", async () => {
@@ -61,12 +61,6 @@ const testAccruedPremiumCalculator: Function = (
             _curvature
           );
           leverageRatio = leverageRatio.add(step);
-
-          if (leverageRatio.eq(parseEther("0.15"))) {
-            // skip 0.15 leverage ratio step
-            leverageRatio = leverageRatio.add(step);
-            continue;
-          }
         }
         expect(true).to.be.true;
       });
@@ -74,11 +68,11 @@ const testAccruedPremiumCalculator: Function = (
 
     describe("calculateKAndLambda", () => {
       it("... calculates correct K and lambda", async () => {
-        expect(K).to.be.lt(parseEther("-63309.5"));
-        expect(K).to.be.gt(parseEther("-63309.6"));
+        expect(K).to.be.gt(parseEther("664458.00774"));
+        expect(K).to.be.lt(parseEther("664458.00775"));
 
-        expect(lambda).to.be.lt(parseEther("-0.0015"));
-        expect(lambda).to.be.gt(parseEther("-0.0016"));
+        expect(lambda).to.be.gt(parseEther("0.0001674"));
+        expect(lambda).to.be.lt(parseEther("0.0001675"));
       });
 
       it("... calculates K & lambda without underflow/overflow for range 0.1 to 0.2", async () => {
@@ -129,8 +123,8 @@ const testAccruedPremiumCalculator: Function = (
             lambda
           );
 
-        expect(accruedPremium).to.be.gt(parseEther("95.469"));
-        expect(accruedPremium).to.be.lt(parseEther("95.47"));
+        expect(accruedPremium).to.be.gt(parseEther("111.239364"));
+        expect(accruedPremium).to.be.lt(parseEther("111.239365"));
       });
 
       it("... calculates correct accrued premium for a period from day 8 to day 10", async () => {
@@ -143,8 +137,8 @@ const testAccruedPremiumCalculator: Function = (
             lambda
           );
 
-        expect(accruedPremium).to.be.gt(parseEther("193.4011"));
-        expect(accruedPremium).to.be.lt(parseEther("193.4012"));
+        expect(accruedPremium).to.be.gt(parseEther("222.162337"));
+        expect(accruedPremium).to.be.lt(parseEther("222.162338"));
       });
 
       it("... calculates correct accrued premium for a period from second 100 to second 200", async () => {
@@ -157,8 +151,8 @@ const testAccruedPremiumCalculator: Function = (
           );
 
         console.log("Accrued premium = ", formatEther(accruedPremium));
-        expect(accruedPremium).to.be.gt(parseEther("0.11041"));
-        expect(accruedPremium).to.be.lt(parseEther("0.12"));
+        expect(accruedPremium).to.be.gt(parseEther("0.12876"));
+        expect(accruedPremium).to.be.lt(parseEther("0.12877"));
       });
     });
   });

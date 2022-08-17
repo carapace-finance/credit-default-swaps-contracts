@@ -36,16 +36,15 @@ library AccruedPremiumCalculator {
       _leverageRatioFloor,
       _leverageRatioCeiling
     );
-    return
-      int256(_curvature) *
-      (int256(
-        (_leverageRatioCeiling + _leverageRatioBuffer) - _currentLeverageRatio
-      ) /
-        (
-          int256(
-            _currentLeverageRatio - (_leverageRatioFloor - _leverageRatioBuffer)
-          )
-        ));
+
+    int256 _numerator = int256(
+      (_leverageRatioCeiling + _leverageRatioBuffer) - _currentLeverageRatio
+    );
+    // console.logInt(_numerator);
+    int256 _denominator = int256(_currentLeverageRatio) -
+      int256(_leverageRatioFloor - _leverageRatioBuffer);
+    // console.logInt(_denominator);
+    return (int256(_curvature) * _numerator) / _denominator;
   }
 
   /**
@@ -110,9 +109,13 @@ library AccruedPremiumCalculator {
     int256 K,
     int256 lambda
   ) public view returns (uint256) {
-    console.log("Calculating accrued premium....");
+    console.log(
+      "Calculating accrued premium from: %s to %s",
+      _startTimestamp,
+      _endTimestamp
+    );
     int256 power1 = -1 * ((int256(_startTimestamp) * lambda) / SECONDS_IN_DAY);
-    console.logInt(power1.toInt());
+    console.logInt(power1);
 
     int256 exp1 = power1.exp();
     console.logInt(exp1);
