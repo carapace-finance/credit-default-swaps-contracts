@@ -6,12 +6,11 @@ import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./SToken.sol";
 import "../../interfaces/IPremiumPricing.sol";
-import "../../interfaces/IReferenceLoans.sol";
+import "../../interfaces/IReferenceLendingPools.sol";
 import "../../interfaces/IPoolCycleManager.sol";
 import "../../interfaces/IPool.sol";
 import "../../libraries/AccruedPremiumCalculator.sol";
 
-// TODO: remove after testing
 import "hardhat/console.sol";
 
 /// @notice Each pool is a market where protection sellers and buyers can swap credit default risks of designated underlying loans.
@@ -76,7 +75,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
    * @param _lendingPoolId The id of the lending pool.
    */
   modifier whenNotExpired(uint256 _lendingPoolId) {
-    //   if (referenceLoans.checkIsExpired(_lendingPoolId) == true)
+    //   if (referenceLendingPools.checkIsExpired(_lendingPoolId) == true)
     //     revert PoolExpired(_lendingPoolId);
     _;
   }
@@ -108,7 +107,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     _;
   }
 
-  /// TODO: Discuss whether each pool will have its own token.
   /*** constructor ***/
   /**
    * @param _poolInfo The information about the pool.
@@ -128,13 +126,11 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     premiumPricing = _premiumPricing;
     poolCycleManager = _poolCycleManager;
     buyerAccountIdCounter.increment();
-
-    /// TODO: publish entire pool info to the event?
     emit PoolInitialized(
       _name,
       _symbol,
       poolInfo.underlyingToken,
-      poolInfo.referenceLoans
+      poolInfo.referenceLendingPools
     );
   }
 
@@ -182,7 +178,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     uint256 _protectionPremium = scaleUnderlyingAmtTo18Decimals(_premiumAmount);
     uint256 _leverageRatio = calculateLeverageRatio();
 
-    /// TODO: If total protection amt is less than min total protection amt, then don't check LR ceiling
     if (_leverageRatio > poolInfo.params.leverageRatioCeiling) {
       revert PoolLeverageRatioTooLow(poolInfo.poolId, _leverageRatio);
     }
@@ -256,7 +251,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     emit ProtectionSold(_receiver, _underlyingAmount);
   }
 
-  /// TODO: use sToken amount in WithdrawalRequest instead of underlying amt
   /**
    * @notice Creates a withdrawal request for the given amount to allow actual withdrawal at the next pool cycle.
    * @notice Each user can have single request at a time and hence this function will overwrite any existing request.
@@ -323,7 +317,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     } else {
       sTokenAmountToBurn = convertToSToken(_underlyingAmount);
       if (sTokenAmountToBurn > sTokenBalance) {
-        /// TODO: should we let user withdraw available amount instead of failing?
         revert InsufficientSTokenBalance(msg.sender, sTokenBalance);
       }
     }
@@ -365,10 +358,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       return;
     }
 
-    /// TODO: optimize premium accrual to avoid array iteration
-    /// TODO: add check to remove expired protections
-
-    /// Iterate through existing protections and calculate accrued premium for seconds elapsed since last accrual
+    /// Iterate through existing protections and calculate accrued premium
     for (uint256 i = 0; i < loanProtectionInfos.length; i++) {
       LoanProtectionInfo storage loanProtectionInfo = loanProtectionInfos[i];
 
@@ -415,8 +405,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     _unpause();
   }
 
-  // todo: calculate the floor based on the percentage
-  // todo: the floor = some adjustable % * the amount of active protection purchased
   function updateFloor(uint256 newFloor) external onlyOwner {
     poolInfo.params.leverageRatioFloor = newFloor;
   }
@@ -477,7 +465,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /// @inheritdoc IPool
   function getTotalCapital() public view override returns (uint256) {
     /// Total capital is: sellers' deposits + accrued premiums from buyers - default payouts.
-    /// TODO: consider default payouts
     return totalSellerDeposit + totalPremiumAccrued;
   }
 
@@ -496,7 +483,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
    * @return the exchange rate scaled to 18 decimals
    */
   function _getExchangeRate() internal view returns (uint256) {
-    // todo: this function needs to be tested thoroughly
     uint256 _totalScaledCapital = scaleUnderlyingAmtTo18Decimals(
       getTotalCapital()
     );

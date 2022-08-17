@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import "./IReferenceLoans.sol";
+import "./IReferenceLendingPools.sol";
 
 abstract contract IPool {
   uint256 public constant SCALE_18_DECIMALS = 10**18;
@@ -38,7 +38,7 @@ abstract contract IPool {
     uint256 poolId;
     PoolParams params;
     IERC20Metadata underlyingToken;
-    IReferenceLoans referenceLoans;
+    IReferenceLendingPools referenceLendingPools;
   }
 
   /// @notice A struct to store the details of a withdrawal request.
@@ -92,7 +92,7 @@ abstract contract IPool {
     string name,
     string symbol,
     IERC20 underlyingToken,
-    IReferenceLoans referenceLoans
+    IReferenceLendingPools referenceLendingPools
   );
 
   event ProtectionSold(address protectionSeller, uint256 protectionAmount);
