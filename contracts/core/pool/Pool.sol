@@ -182,6 +182,13 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       revert PoolLeverageRatioTooLow(poolInfo.poolId, _leverageRatio);
     }
 
+    console.log(
+      "totalDurationInDays: %s, protectionPremium: %s, leverageRatio: ",
+      _totalDurationInDays,
+      _protectionPremium,
+      _leverageRatio
+    );
+
     (int256 K, int256 lambda) = AccruedPremiumCalculator.calculateKAndLambda(
       _protectionPremium,
       _totalDurationInDays,

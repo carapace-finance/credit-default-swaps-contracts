@@ -431,7 +431,7 @@ const testPool: Function = (
       });
 
       // We have 1000 USDC premium from the protection buyer + 10 USDC from the deposit
-      it("...should return 1010 total underlying amount received as premium", async () => {
+      it("...should return 1010 total underlying amount received as premium + deposit", async () => {
         const _totalUnderlying: BigNumber = await USDC.balanceOf(pool.address);
         expect(_totalUnderlying).to.eq(BigNumber.from(1010).mul(USDC_DECIMALS));
       });

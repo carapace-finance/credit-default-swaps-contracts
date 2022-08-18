@@ -51,7 +51,7 @@ contract PremiumPricing is Ownable {
     // uint256 _premium = _riskFactor * _timeToExpiration * _protectionAmount;
     // return _premium;
 
-    // alwyas return 10% of the protection amount as premium for now
+    // always return 10% of the protection amount as premium for now
     return (_protectionAmount * 10) / 100;
   }
 }
