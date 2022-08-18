@@ -32,6 +32,8 @@ const testPool: Function = (
     const _newCeiling: BigNumber = BigNumber.from(500);
     let deployerAddress: string;
     let sellerAddress: string;
+    let buyerAddress: string;
+    let ownerAddress: string;
     let USDC: Contract;
     let poolInfo: any;
     let poolCycleManager: PoolCycleManager;
@@ -41,6 +43,8 @@ const testPool: Function = (
     before("setup", async () => {
       deployerAddress = await deployer.getAddress();
       sellerAddress = await seller.getAddress();
+      buyerAddress = await buyer.getAddress();
+      ownerAddress = await owner.getAddress();
 
       poolInfo = await pool.poolInfo();
 
@@ -54,7 +58,10 @@ const testPool: Function = (
         deployerAddress,
         BigNumber.from(10000).mul(USDC_DECIMALS)
       );
-
+      USDC.connect(circleAccount).transfer(
+        ownerAddress,
+        BigNumber.from(1000).mul(USDC_DECIMALS)
+      );
       poolCycleManager = (await ethers.getContractAt(
         "PoolCycleManager",
         await pool.poolCycleManager()
@@ -200,8 +207,7 @@ const testPool: Function = (
         expect(await pool.paused()).to.be.false;
       });
 
-      it("...reentrancy should fail", async () => {
-      });
+      it("...reentrancy should fail", async () => {});
 
       it("...the buyer account doesn't exist for the msg.sender", async () => {
         expect(await pool.ownerAddressToBuyerAccountId(deployerAddress)).to.eq(
@@ -392,8 +398,7 @@ const testPool: Function = (
         ).to.be.revertedWith("ERC20: mint to the zero address");
       });
 
-      it("...reentrancy should fail", async () => {
-      });
+      it("...reentrancy should fail", async () => {});
 
       it("...is successful", async () => {
         await expect(pool.deposit(_underlyingAmount, sellerAddress))
@@ -479,6 +484,89 @@ const testPool: Function = (
         expect(convertedUnderlying)
           .to.be.gt(parseUSDC("19.9877"))
           .and.lt(parseUSDC("20.1"));
+      });
+    });
+
+    describe("...requestWithdrawal", async () => {
+      it("...fail when pool is paused", async () => {
+        await pool.connect(deployer).pause();
+        expect(await pool.paused()).to.be.true;
+        const _tokenAmt = parseEther("1");
+        await expect(pool.requestWithdrawal(_tokenAmt)).to.be.revertedWith(
+          "Pausable: paused"
+        );
+      });
+
+      it("...unpause the pool", async () => {
+        await pool.connect(deployer).unpause();
+        expect(await pool.paused()).to.be.false;
+      });
+
+      it("...fail when an user has zero balance", async () => {
+        const _tokenAmt = parseEther("0.001");
+        await expect(
+          pool.connect(buyer).requestWithdrawal(_tokenAmt)
+        ).to.be.revertedWith(`InsufficientSTokenBalance("${buyerAddress}", 0)`);
+      });
+
+      it("...fail when withdrawal amount is higher than token balance", async () => {
+        const _tokenAmt = parseEther("21");
+        const _tokenBalance = await pool.balanceOf(sellerAddress);
+        await expect(
+          pool.connect(seller).requestWithdrawal(_tokenAmt)
+        ).to.be.revertedWith(
+          `InsufficientSTokenBalance("${sellerAddress}", ${_tokenBalance})`
+        );
+      });
+
+      it("...1st request is successful", async () => {
+        const _tokenAmt = parseEther("11");
+        const _minPoolCycleIndex = 1;
+        expect(await pool.connect(seller).requestWithdrawal(_tokenAmt))
+          .to.emit("Pool", "WithdrawalRequested")
+          .withArgs(sellerAddress, _tokenAmt, _minPoolCycleIndex);
+
+        const request = await pool.withdrawalRequests(sellerAddress);
+        expect(request.tokenAmount).to.eq(_tokenAmt);
+        expect(request.minPoolCycleIndex).to.eq(_minPoolCycleIndex);
+      });
+
+      it("...2nd request by same user should update existing request", async () => {
+        const _tokenAmt = parseEther("5");
+        const _minPoolCycleIndex = 1;
+        expect(await pool.connect(seller).requestWithdrawal(_tokenAmt))
+          .to.emit("Pool", "WithdrawalRequested")
+          .withArgs(sellerAddress, _tokenAmt, _minPoolCycleIndex);
+
+        const request = await pool.withdrawalRequests(sellerAddress);
+        expect(request.tokenAmount).to.eq(_tokenAmt);
+        expect(request.minPoolCycleIndex).to.eq(1);
+      });
+
+      it("...fail when amount in updating request is higher than token balance", async () => {
+        const _tokenAmt = parseEther("21");
+        const _tokenBalance = await pool.balanceOf(sellerAddress);
+        await expect(
+          pool.connect(seller).requestWithdrawal(_tokenAmt)
+        ).to.be.revertedWith(
+          `InsufficientSTokenBalance("${sellerAddress}", ${_tokenBalance})`
+        );
+      });
+
+      it("...2nd request by another user is successful", async () => {
+        const _underlyingAmount = parseUSDC("20");
+        await USDC.connect(owner).approve(pool.address, _underlyingAmount);
+        await pool.connect(owner).deposit(_underlyingAmount, ownerAddress);
+
+        const _minPoolCycleIndex = 1;
+        const _tokenBalance = await pool.balanceOf(ownerAddress);
+        expect(await pool.connect(owner).requestWithdrawal(_tokenBalance))
+          .to.emit("Pool", "WithdrawalRequested")
+          .withArgs(sellerAddress, _tokenBalance, _minPoolCycleIndex);
+
+        const request = await pool.withdrawalRequests(ownerAddress);
+        expect(request.tokenAmount).to.eq(_tokenBalance);
+        expect(request.minPoolCycleIndex).to.eq(_minPoolCycleIndex);
       });
     });
 
