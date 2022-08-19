@@ -43,12 +43,10 @@ abstract contract IPool {
 
   /// @notice A struct to store the details of a withdrawal request.
   struct WithdrawalRequest {
-    /// @notice The amount of underlying token to withdraw.
-    uint256 amount;
+    /// @notice The amount of sTokens to withdraw.
+    uint256 tokenAmount;
     /// @notice Minimum index at or after which the actual withdrawal can be made
     uint256 minPoolCycleIndex;
-    /// @notice Flag to indicate whether the withdrawal request is for entire balance or not.
-    bool all;
   }
 
   struct LoanProtectionInfo {
@@ -108,6 +106,20 @@ abstract contract IPool {
   event PremiumAccrued(
     uint256 lastPremiumAccrualTimestamp,
     uint256 totalPremiumAccrued
+  );
+
+  /// @notice Emitted when a withdrawal request is made.
+  event WithdrawalRequested(
+    address msgSender,
+    uint256 tokenAmount,
+    uint256 minPoolCycleIndex
+  );
+
+  /// @notice Emitted when a withdrawal is made.
+  event WithdrawalMade(
+    address msgSender,
+    uint256 tokenAmount,
+    address receiver
   );
 
   /**

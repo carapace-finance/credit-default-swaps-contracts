@@ -66,7 +66,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /// @notice The timestamp of last premium accrual
   uint256 public lastPremiumAccrualTimestamp;
 
-  /// @notice The total premium accrued in underlying token upto the last premium accrual timestamp
+  /// @notice The total premium accrued in underlying token up to the last premium accrual timestamp
   uint256 public totalPremiumAccrued;
 
   /*** modifiers ***/
@@ -252,33 +252,36 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   }
 
   /**
-   * @notice Creates a withdrawal request for the given amount to allow actual withdrawal at the next pool cycle.
+   * @notice Creates a withdrawal request for the given sToken amount to allow actual withdrawal at the next pool cycle.
    * @notice Each user can have single request at a time and hence this function will overwrite any existing request.
    * @notice The actual withdrawal could be made when next pool cycle is opened for withdrawal with other constraints.
-   * @param _amount The amount of underlying token to withdraw.
-   * @param _withdrawAll If true, specified amount will be ignored & all the underlying token will be withdrawn.
+   * @param _tokenAmount The amount of token (sToken shares) to withdraw.
    */
-  function requestWithdrawal(uint256 _amount, bool _withdrawAll)
-    external
-    whenNotPaused
-  {
+  function requestWithdrawal(uint256 _tokenAmount) external whenNotPaused {
+    uint256 sTokenBalance = balanceOf(msg.sender);
+    if (_tokenAmount > sTokenBalance) {
+      revert InsufficientSTokenBalance(msg.sender, sTokenBalance);
+    }
+
+    uint256 minPoolCycleIndex = poolCycleManager.getCurrentCycleIndex(
+      poolInfo.poolId
+    ) + 1;
     WithdrawalRequest storage request = withdrawalRequests[msg.sender];
-    request.amount = _amount;
-    request.all = _withdrawAll;
-    request.minPoolCycleIndex =
-      poolCycleManager.getCurrentCycleIndex(poolInfo.poolId) +
-      1;
+    request.tokenAmount = _tokenAmount;
+    request.minPoolCycleIndex = minPoolCycleIndex;
+
+    emit WithdrawalRequested(msg.sender, _tokenAmount, minPoolCycleIndex);
   }
 
   /**
-   * @notice Attempts to withdraw the amount specified in the user's withdrawal request.
+   * @notice Attempts to withdraw the sToken amount specified in the user's withdrawal request.
    * @notice A withdrawal request must be created during previous pool cycle.
-   * @notice A withdrawal can only be made when the lending pool is in `Open` state.
-   * @notice Requested amount will be transferred from this contract to the receiver address.
-   * @param _underlyingAmount The amount of underlying token to withdraw.
+   * @notice A withdrawal can only be made when the pool is in `Open` state.
+   * @notice Proportional Underlying amount based on current exchange rate will be transferred to the receiver address.
+   * @param _tokenAmount The amount of sToken to withdraw.
    * @param _receiver The address to receive the underlying token.
    */
-  function withdraw(uint256 _underlyingAmount, address _receiver)
+  function withdraw(uint256 _tokenAmount, address _receiver)
     external
     whenPoolIsOpen
     whenNotPaused
@@ -286,7 +289,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   {
     /// Step 1: Verify withdrawal request exists
     WithdrawalRequest storage request = withdrawalRequests[msg.sender];
-    if (request.amount == 0 && request.all == false) {
+    if (request.tokenAmount == 0) {
       revert NoWithdrawalRequested(msg.sender);
     }
 
@@ -302,50 +305,45 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       );
     }
 
-    if (!request.all && _underlyingAmount > request.amount) {
-      revert WithdrawalHigherThanRequested(msg.sender, request.amount);
+    /// Step 3: Verify that withdrawal is for the correct amount and has sufficient balance
+    if (_tokenAmount > request.tokenAmount) {
+      revert WithdrawalHigherThanRequested(msg.sender, request.tokenAmount);
     }
 
-    /// Step 3: accrue interest/premium before calculating sTokens shares
+    uint256 sTokenBalance = balanceOf(msg.sender);
+    if (sTokenBalance < _tokenAmount) {
+      revert InsufficientSTokenBalance(msg.sender, sTokenBalance);
+    }
+
+    /// Step 4: accrue premium before calculating underlying amount to be transferred
     accruePremium();
 
-    /// Step 4: calculate sTokens shares required to withdraw requested amount using current exchange rate
-    uint256 sTokenBalance = balanceOf(msg.sender);
-    uint256 sTokenAmountToBurn;
-    if (request.all == true) {
-      sTokenAmountToBurn = sTokenBalance;
-    } else {
-      sTokenAmountToBurn = convertToSToken(_underlyingAmount);
-      if (sTokenAmountToBurn > sTokenBalance) {
-        revert InsufficientSTokenBalance(msg.sender, sTokenBalance);
-      }
+    /// Step 5: calculate underlying amount to transfer
+    uint256 underlyingAmountToTransfer = convertToUnderlying(_tokenAmount);
+
+    /// Step 6: burn sTokens shares.
+    /// This step must be done after calculating underlying amount to be transferred
+    _burn(msg.sender, _tokenAmount);
+
+    /// Step 7: update/delete withdrawal request
+    request.tokenAmount -= _tokenAmount;
+
+    if (request.tokenAmount == 0) {
+      delete withdrawalRequests[msg.sender];
     }
 
-    /// Step 5: burn sTokens shares
-    _burn(msg.sender, sTokenAmountToBurn);
-
-    /// Step 6: transfer underlying token to receiver
-    uint256 underlyingAmountToTransfer = convertToUnderlying(
-      sTokenAmountToBurn
-    );
+    /// Step 8: transfer underlying token to receiver
+    totalSellerDeposit -= underlyingAmountToTransfer;
     poolInfo.underlyingToken.transfer(_receiver, underlyingAmountToTransfer);
 
-    /// Step 7: Verify the leverage ratio is still within the limit
+    /// Step 9: Verify that the leverage ratio does not breach the floor.
+    /// This step must be done after transferring underlying token to receiver.
     uint256 leverageRatio = calculateLeverageRatio();
     if (leverageRatio < poolInfo.params.leverageRatioFloor) {
       revert PoolLeverageRatioTooLow(poolInfo.poolId, leverageRatio);
     }
 
-    /// Step 7: update withdrawal request
-    if (request.all == true) {
-      request.amount = 0;
-    } else {
-      request.amount -= underlyingAmountToTransfer;
-    }
-
-    if (request.amount == 0) {
-      delete withdrawalRequests[msg.sender];
-    }
+    emit WithdrawalMade(msg.sender, _tokenAmount, _receiver);
   }
 
   /**
