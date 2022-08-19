@@ -95,38 +95,41 @@ library AccruedPremiumCalculator {
   }
 
   /**
-   * @notice Calculates the accrued premium between start time and end time, scaled to 18 decimals.
+   * @notice Calculates the accrued premium from start to end second, scaled to 18 decimals.
+   * @notice The time line starts when protection is bought and ends when protection is expired.
    * @notice For example: 150 is returned as 150 x 10**18 = 15 * 10**19
    * @notice Formula used to calculate accrued premium from time t to T is: K * ( e^(-t * L)   -  e^(-T * L) )
    * @notice L is lambda, which is calculated using the risk factor.
    * @notice K is the constant calculated using protection premium, protection duration and lambda
-   * @param _startTimestamp the start time of the premium accrual in seconds
-   * @param _endTimestamp the end time of the premium accrual in seconds
+   * @param _fromSecond from second in time line
+   * @param _toSecond to second in time line
+   * @param _k the constant calculated using protection premium, protection duration and lambda
+   * @param _lambda the constant calculated using the risk factor
    */
   function calculateAccruedPremium(
-    uint256 _startTimestamp,
-    uint256 _endTimestamp,
-    int256 K,
-    int256 lambda
+    uint256 _fromSecond,
+    uint256 _toSecond,
+    int256 _k,
+    int256 _lambda
   ) public view returns (uint256) {
     console.log(
       "Calculating accrued premium from: %s to %s",
-      _startTimestamp,
-      _endTimestamp
+      _fromSecond,
+      _toSecond
     );
-    int256 power1 = -1 * ((int256(_startTimestamp) * lambda) / SECONDS_IN_DAY);
+    int256 power1 = -1 * ((int256(_fromSecond) * _lambda) / SECONDS_IN_DAY);
     console.logInt(power1);
 
     int256 exp1 = power1.exp();
     console.logInt(exp1);
 
-    int256 power2 = -1 * ((int256(_endTimestamp) * lambda) / SECONDS_IN_DAY);
+    int256 power2 = -1 * ((int256(_toSecond) * _lambda) / SECONDS_IN_DAY);
     console.logInt(power2);
 
     int256 exp2 = power2.exp();
     console.logInt(exp2);
 
-    int256 accruedPremium = K.mul(exp1 - exp2);
+    int256 accruedPremium = _k.mul(exp1 - exp2);
     console.logInt(accruedPremium);
 
     return uint256(accruedPremium);

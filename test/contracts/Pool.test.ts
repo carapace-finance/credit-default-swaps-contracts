@@ -461,8 +461,8 @@ const testPool: Function = (
 
         // 2nd deposit will receive less sTokens shares than the first deposit because of the premium accrued
         expect(await pool.connect(seller).balanceOf(sellerAddress))
-          .to.be.gt(parseEther("19.9877"))
-          .and.lt(parseEther("19.9878"));
+          .to.be.gt(parseEther("19.999138"))
+          .and.lt(parseEther("19.999139"));
       });
 
       it("...should return 20 USDC as total seller deposit", async () => {
@@ -470,7 +470,7 @@ const testPool: Function = (
         expect(await pool.totalSellerDeposit()).to.eq(_underlyingAmount.mul(2));
       });
 
-      it("... should convert sToken shares to correct underlying amount", async () => {
+      it("...should convert sToken shares to correct underlying amount", async () => {
         const convertedUnderlying = await pool.convertToUnderlying(
           await pool.connect(seller).balanceOf(sellerAddress)
         );

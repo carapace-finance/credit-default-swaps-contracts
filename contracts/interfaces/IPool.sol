@@ -52,11 +52,17 @@ abstract contract IPool {
   }
 
   struct LoanProtectionInfo {
-    /// @notice The amount of premium paid in underlying token
-    uint256 totalPremium;
+    /// @notice The amount of premium paid for the protection in underlying token
+    uint256 protectionPremium;
     /// @notice The total duration of the loan protection in days
-    uint256 totalDurationInDays;
+    uint256 protectionDurationInDays;
+    /// @notice The timestamp at which the loan protection is bought
+    uint256 startTimestamp;
+    /// @notice Constant K is calculated & captured at the time of loan protection purchase
+    /// @notice It is used in accrued premium calculation
     int256 K;
+    /// @notice Lambda is calculated & captured at the time of loan protection purchase
+    /// @notice It is used in accrued premium calculation
     int256 lambda;
   }
 
