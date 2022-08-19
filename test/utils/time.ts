@@ -13,6 +13,10 @@ const getUnixTimestampOfSomeMonthAhead: Function = async (months: number) => {
   return _expirationTime;
 };
 
+/**
+ * Move forward time by specified number of seconds and mines the block
+ * @param _duration in seconds
+ */
 const moveForwardTime: Function = async (_duration: BigNumber) => {
   await network.provider.send("evm_increaseTime", [_duration.toNumber()]);
   await network.provider.send("evm_mine", []);

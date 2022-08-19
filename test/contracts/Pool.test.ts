@@ -2,6 +2,7 @@ import { BigNumber } from "@ethersproject/bignumber";
 import { expect } from "chai";
 import { Contract, Signer } from "ethers";
 import { parseEther, formatEther } from "ethers/lib/utils";
+import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import {
   CIRCLE_ACCOUNT_ADDRESS,
   USDC_ADDRESS,
@@ -18,7 +19,7 @@ import {
   getDaysInSeconds,
   getLatestBlockTimestamp
 } from "../utils/time";
-import { parseUSDC } from "../utils/usdc";
+import { formatUSDC, parseUSDC } from "../utils/usdc";
 
 const testPool: Function = (
   deployer: Signer,
@@ -522,24 +523,24 @@ const testPool: Function = (
       it("...1st request is successful", async () => {
         const _tokenAmt = parseEther("11");
         const _minPoolCycleIndex = 1;
-        expect(await pool.connect(seller).requestWithdrawal(_tokenAmt))
-          .to.emit("Pool", "WithdrawalRequested")
+        await expect(pool.connect(seller).requestWithdrawal(_tokenAmt))
+          .to.emit(pool, "WithdrawalRequested")
           .withArgs(sellerAddress, _tokenAmt, _minPoolCycleIndex);
 
         const request = await pool.withdrawalRequests(sellerAddress);
-        expect(request.tokenAmount).to.eq(_tokenAmt);
+        expect(request.sTokenAmount).to.eq(_tokenAmt);
         expect(request.minPoolCycleIndex).to.eq(_minPoolCycleIndex);
       });
 
       it("...2nd request by same user should update existing request", async () => {
         const _tokenAmt = parseEther("5");
         const _minPoolCycleIndex = 1;
-        expect(await pool.connect(seller).requestWithdrawal(_tokenAmt))
-          .to.emit("Pool", "WithdrawalRequested")
+        await expect(pool.connect(seller).requestWithdrawal(_tokenAmt))
+          .to.emit(pool, "WithdrawalRequested")
           .withArgs(sellerAddress, _tokenAmt, _minPoolCycleIndex);
 
         const request = await pool.withdrawalRequests(sellerAddress);
-        expect(request.tokenAmount).to.eq(_tokenAmt);
+        expect(request.sTokenAmount).to.eq(_tokenAmt);
         expect(request.minPoolCycleIndex).to.eq(1);
       });
 
@@ -560,12 +561,12 @@ const testPool: Function = (
 
         const _minPoolCycleIndex = 1;
         const _tokenBalance = await pool.balanceOf(ownerAddress);
-        expect(await pool.connect(owner).requestWithdrawal(_tokenBalance))
-          .to.emit("Pool", "WithdrawalRequested")
-          .withArgs(sellerAddress, _tokenBalance, _minPoolCycleIndex);
+        await expect(pool.connect(owner).requestWithdrawal(_tokenBalance))
+          .to.emit(pool, "WithdrawalRequested")
+          .withArgs(ownerAddress, _tokenBalance, _minPoolCycleIndex);
 
         const request = await pool.withdrawalRequests(ownerAddress);
-        expect(request.tokenAmount).to.eq(_tokenBalance);
+        expect(request.sTokenAmount).to.eq(_tokenBalance);
         expect(request.minPoolCycleIndex).to.eq(_minPoolCycleIndex);
       });
     });
@@ -592,6 +593,14 @@ const testPool: Function = (
         );
         const _paused: boolean = await pool.paused();
         expect(_paused).to.eq(false);
+      });
+    });
+
+    describe("accruePremium", async () => {
+      it("...should accrue correct premium", async () => {
+        await expect(pool.accruePremium())
+          .to.emit(pool, "PremiumAccrued")
+          .withArgs(anyValue, parseUSDC("0.002094"));
       });
     });
   });
