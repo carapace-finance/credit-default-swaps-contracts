@@ -25,7 +25,7 @@ describe("start testing", () => {
   });
 
   describe("run all the tests", () => {
-    it.only("run the Pool test", async () => {
+    it("run the Pool test", async () => {
       testPool(deployer, account1, account2, account3, poolInstance);
     });
 

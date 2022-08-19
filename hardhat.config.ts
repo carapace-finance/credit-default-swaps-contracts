@@ -8,6 +8,7 @@ import "solidity-coverage";
 import "@primitivefi/hardhat-dodoc";
 import "dotenv/config";
 import "hardhat-contract-sizer";
+import "hardhat-gas-reporter";
 
 const config: HardhatUserConfig = {
   defaultNetwork: "hardhat",
@@ -67,6 +68,9 @@ const config: HardhatUserConfig = {
   dodoc: {
     runOnCompile: false,
     debugMode: true
+  },
+  gasReporter: {
+    enabled: false
   }
 };
 

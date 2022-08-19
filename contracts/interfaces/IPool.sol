@@ -50,6 +50,8 @@ abstract contract IPool {
   }
 
   struct LoanProtectionInfo {
+    /// @notice The amount of protection purchased.
+    uint256 protectionAmount;
     /// @notice The amount of premium paid in underlying token
     uint256 protectionPremium;
     /// @notice The total duration of the loan protection in days

@@ -201,6 +201,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
     loanProtectionInfos.push(
       LoanProtectionInfo({
+        protectionAmount: _protectionAmount,
         protectionPremium: _premiumAmount,
         protectionDurationInDays: _protectionDurationInDays,
         startTimestamp: block.timestamp,
@@ -367,12 +368,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     for (uint256 i = 0; i < loanProtectionInfos.length; i++) {
       LoanProtectionInfo storage loanProtectionInfo = loanProtectionInfos[i];
 
-      /// if loan protection is expired, remove it from the list
-      if (block.timestamp > loanProtectionInfo.expirationTimestamp) {
-        expiredProtections[removalIndex] = i;
-        removalIndex++;
-      }
-
       /**
        * <-Protection Bought(second: 0) --- last accrual --- now --- Expiration->
        * The time line starts when protection is bought and ends when protection is expired.
@@ -384,10 +379,12 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         startTimestamp;
       uint256 secondsUntilNow;
 
-      /// if loan protection is expired, then accrue interest till expiration and remove it from the list
+      /// if loan protection is expired, then accrue interest till expiration and mark it for removal
       if (block.timestamp > loanProtectionInfo.expirationTimestamp) {
+        totalProtection -= loanProtectionInfo.protectionAmount;
         expiredProtections[removalIndex] = i;
         removalIndex++;
+
         secondsUntilNow =
           loanProtectionInfo.expirationTimestamp -
           startTimestamp;
@@ -408,11 +405,10 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         secondsUntilNow,
         accruedPremium
       );
-      uint256 premiumInUsdc = scale18DecimalsAmtToUnderlyingDecimals(
+
+      totalPremiumAccrued += scale18DecimalsAmtToUnderlyingDecimals(
         accruedPremium
       );
-      console.log("accruedPremium in USDC: ", premiumInUsdc);
-      totalPremiumAccrued += premiumInUsdc;
     }
 
     /// Remove expired protections from the list
@@ -462,6 +458,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     if (totalProtection == 0) {
       return 0;
     }
+
     return (getTotalCapital() * SCALE_18_DECIMALS) / totalProtection;
   }
 
@@ -509,6 +506,15 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   function getTotalProtection() public view override returns (uint256) {
     /// total amount of the protection bought
     return totalProtection;
+  }
+
+  /// @notice Returns all the protections bought from the pool.
+  function getAllProtections()
+    external
+    view
+    returns (LoanProtectionInfo[] memory)
+  {
+    return loanProtectionInfos;
   }
 
   /*** internal functions */

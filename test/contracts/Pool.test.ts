@@ -1,6 +1,7 @@
 import { BigNumber } from "@ethersproject/bignumber";
 import { expect } from "chai";
 import { Contract, Signer } from "ethers";
+import { ethers } from "hardhat";
 import { parseEther, formatEther } from "ethers/lib/utils";
 import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import {
@@ -11,13 +12,14 @@ import {
 } from "../utils/constants";
 import { Pool } from "../../typechain-types/contracts/core/pool/Pool";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
-import { ethers } from "hardhat";
 import { PremiumPricing } from "../../typechain-types/contracts/core/PremiumPricing";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
 import {
   getUnixTimestampOfSomeMonthAhead,
+  getUnixTimestampAheadByDays,
   getDaysInSeconds,
-  getLatestBlockTimestamp
+  getLatestBlockTimestamp,
+  moveForwardTime
 } from "../utils/time";
 import { formatUSDC, parseUSDC } from "../utils/usdc";
 
@@ -57,7 +59,7 @@ const testPool: Function = (
       );
       USDC.connect(circleAccount).transfer(
         deployerAddress,
-        BigNumber.from(10000).mul(USDC_DECIMALS)
+        BigNumber.from(1000000).mul(USDC_DECIMALS)
       );
       USDC.connect(circleAccount).transfer(
         ownerAddress,
@@ -601,6 +603,89 @@ const testPool: Function = (
         await expect(pool.accruePremium())
           .to.emit(pool, "PremiumAccrued")
           .withArgs(anyValue, parseUSDC("0.002094"));
+      });
+
+      it("...should remove single expired protection", async () => {
+        const protectionCount = (await pool.getAllProtections()).length;
+        expect(protectionCount).to.eq(1);
+        expect(await pool.getTotalProtection()).to.eq(parseUSDC("10000"));
+        await pool.buyProtection(
+          BigNumber.from(1),
+          getUnixTimestampOfSomeMonthAhead(1),
+          parseUSDC("20000")
+        );
+        expect(await pool.getTotalProtection()).to.eq(parseUSDC("30000"));
+        expect(await pool.getAllProtections()).to.have.lengthOf(2);
+
+        // move forward time by 31 days
+        await moveForwardTime(BigNumber.from(31 * 24 * 60 * 60));
+
+        // 2nd protection should be expired and removed
+        await pool.accruePremium();
+        expect(await pool.getAllProtections()).to.have.lengthOf(1);
+        expect(await pool.getTotalProtection()).to.eq(parseUSDC("10000"));
+
+        // all premium for expired protection should be accrued
+        expect(await pool.totalPremiumAccrued()).to.be.gt(parseUSDC("2000"));
+      });
+
+      it("...should remove multiple expired protection", async () => {
+        const protectionCount = (await pool.getAllProtections()).length;
+        expect(protectionCount).to.eq(1);
+        expect(await pool.getTotalProtection()).to.eq(parseUSDC("10000"));
+
+        // add bunch of protections
+        await pool.buyProtection(
+          BigNumber.from(2),
+          await getUnixTimestampAheadByDays(10),
+          parseUSDC("20000")
+        );
+
+        await pool.buyProtection(
+          BigNumber.from(1),
+          await getUnixTimestampAheadByDays(20),
+          parseUSDC("30000")
+        );
+
+        await pool.buyProtection(
+          BigNumber.from(1),
+          await getUnixTimestampAheadByDays(30),
+          parseUSDC("40000")
+        );
+
+        expect(await pool.getTotalProtection()).to.eq(parseUSDC("100000")); // 100K USDC
+        expect(await pool.getAllProtections()).to.have.lengthOf(4);
+
+        // move forward time by 21 days
+        await moveForwardTime(BigNumber.from(21 * 24 * 60 * 60));
+
+        // 2nd & 3rd protections should be expired and removed
+        await pool.accruePremium();
+        expect(await pool.getAllProtections()).to.have.lengthOf(2);
+        expect(await pool.getTotalProtection()).to.eq(parseUSDC("50000"));
+      });
+
+      // This test is meant to report gas usage for accruePremium with large numbers of protections in the pool
+      xit("...gas consumption test", async () => {
+        const gasUsage = [];
+        for (let index = 0; index < 151; index++) {
+          const tx = await pool.buyProtection(
+            BigNumber.from(1),
+            getUnixTimestampOfSomeMonthAhead(1),
+            parseUSDC("10000"),
+            { gasLimit: 10_000_000 } // 30_000_000 is block gas limit
+          );
+
+          const receipt = await tx.wait();
+          console.log(
+            `Gas used for protection# ${
+              index + 1
+            }: ${receipt.gasUsed.toString()}`
+          );
+          gasUsage.push(`${receipt.gasUsed}`);
+          // console.log(`***** Buy Protection + Accrue premium ${index}`);
+        }
+        console.log(`***** Gas Usage: ${gasUsage.join("\n")}`);
       });
     });
   });
