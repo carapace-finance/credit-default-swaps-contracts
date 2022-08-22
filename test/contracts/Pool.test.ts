@@ -1,7 +1,7 @@
 import { BigNumber } from "@ethersproject/bignumber";
 import { expect } from "chai";
 import { Contract, Signer } from "ethers";
-import { ethers } from "hardhat";
+import { ethers, network } from "hardhat";
 import { parseEther, formatEther } from "ethers/lib/utils";
 import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import {
@@ -42,6 +42,7 @@ const testPool: Function = (
     let poolCycleManager: PoolCycleManager;
     let premiumPricing: PremiumPricing;
     let referenceLendingPools: ReferenceLendingPools;
+    let snapshotId: string;
 
     before("setup", async () => {
       deployerAddress = await deployer.getAddress();
@@ -347,6 +348,7 @@ const testPool: Function = (
             getDaysInSeconds(10),
             getDaysInSeconds(20)
           );
+        snapshotId = await network.provider.send("evm_snapshot", []);
 
         expect(
           await poolCycleManager.getCurrentCycleState(poolInfo.poolId)
@@ -665,13 +667,13 @@ const testPool: Function = (
         expect(await pool.getTotalProtection()).to.eq(parseUSDC("50000"));
       });
 
-      // This test is meant to report gas usage for accruePremium with large numbers of protections in the pool
+      // This test is meant to report gas usage for buyProtection with large numbers of protections in the pool
       xit("...gas consumption test", async () => {
         const gasUsage = [];
         for (let index = 0; index < 151; index++) {
           const tx = await pool.buyProtection(
             BigNumber.from(1),
-            getUnixTimestampOfSomeMonthAhead(1),
+            getUnixTimestampOfSomeMonthAhead(3),
             parseUSDC("10000"),
             { gasLimit: 10_000_000 } // 30_000_000 is block gas limit
           );
@@ -683,9 +685,47 @@ const testPool: Function = (
             }: ${receipt.gasUsed.toString()}`
           );
           gasUsage.push(`${receipt.gasUsed}`);
-          // console.log(`***** Buy Protection + Accrue premium ${index}`);
+          // console.log(`***** Buy Protection ${index}`);
         }
-        console.log(`***** Gas Usage: ${gasUsage.join("\n")}`);
+        console.log(`***** buyProtection Gas Usage: ${gasUsage.join("\n")}`);
+      });
+
+      // This test is meant to report gas usage for deposit with large numbers of protections in the pool
+      xit("...gas consumption test for deposit", async () => {
+        const gasUsage = [];
+        // Revert the state of the pool to the open state
+        await network.provider.send("evm_revert", [snapshotId]);
+
+        console.log(
+          "***** Current Pool Cycle State: " +
+            (await poolCycleManager.getCurrentCycleState(poolInfo.poolId))
+        );
+
+        // Approve the pool to spend USDC
+        await USDC.approve(pool.address, parseUSDC("1000000"));
+
+        for (let index = 0; index < 150; index++) {
+          await pool.buyProtection(
+            BigNumber.from(1),
+            getUnixTimestampOfSomeMonthAhead(6),
+            parseUSDC("10000"),
+            { gasLimit: 10_000_000 } // 30_000_000 is block gas limit
+          );
+
+          const tx = await pool.deposit(parseUSDC("1000"), deployerAddress, {
+            gasLimit: 10_000_000
+          }); // 30_000_000 is block gas limit
+
+          const receipt = await tx.wait();
+          console.log(
+            `Gas used for deposit after protection# ${
+              index + 1
+            }: ${receipt.gasUsed.toString()}`
+          );
+          gasUsage.push(`${receipt.gasUsed}`);
+          console.log(`***** Buy Protection + Deposit ${index}`);
+        }
+        console.log(`***** deposit Gas Usage: \n ${gasUsage.join("\n")}`);
       });
     });
   });
