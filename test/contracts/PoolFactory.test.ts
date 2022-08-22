@@ -9,6 +9,7 @@ import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool
 import { ethers } from "hardhat";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
 import { IPool } from "../../typechain-types/contracts/core/pool/Pool";
+import { parseUSDC } from "../utils/usdc";
 
 const testPoolFactory: Function = (
   account1: Signer,
@@ -36,7 +37,8 @@ const testPoolFactory: Function = (
         leverageRatioFloor: _floor,
         leverageRatioCeiling: _ceiling,
         leverageRatioBuffer: BigNumber.from(5),
-        minRequiredCapital: BigNumber.from(1000000),
+        minRequiredCapital: parseUSDC("10000"),
+        minRequiredProtection: parseUSDC("20000"),
         curvature: BigNumber.from(5),
         poolCycleParams: poolCycleParams
       };

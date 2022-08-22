@@ -25,8 +25,10 @@ abstract contract IPool {
     uint256 leverageRatioCeiling;
     /// @notice the leverage ratio buffer used in risk factor calculation scaled to 18 decimals
     uint256 leverageRatioBuffer;
-    /// @notice the minimum capital required capital in the pool scaled to 18 decimals
+    /// @notice the minimum capital required capital in the pool in underlying tokens
     uint256 minRequiredCapital;
+    /// @notice the minimum protection required in the pool in underlying tokens
+    uint256 minRequiredProtection;
     /// @notice curvature used in risk premium calculation scaled to 18 decimals
     uint256 curvature;
     /// @notice pool cycle related parameters
