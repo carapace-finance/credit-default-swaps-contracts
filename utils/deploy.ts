@@ -9,6 +9,7 @@ import { PremiumPricing } from "../typechain-types/contracts/core/PremiumPricing
 import { ReferenceLendingPools } from "../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { PoolCycleManager } from "../typechain-types/contracts/core/PoolCycleManager";
 import { AccruedPremiumCalculator } from "../typechain-types/contracts/libraries/AccruedPremiumCalculator";
+import { parseUSDC } from "../test/utils/usdc";
 
 let deployer: Signer;
 let account1: Signer;
@@ -66,7 +67,9 @@ const deployContracts: Function = async () => {
       premiumPricingInstance.address
     );
 
-    const referenceLendingPoolsFactory = await contractFactory("ReferenceLendingPools");
+    const referenceLendingPoolsFactory = await contractFactory(
+      "ReferenceLendingPools"
+    );
     referenceLendingPoolsInstance = await referenceLendingPoolsFactory.deploy();
     await referenceLendingPoolsInstance.deployed();
     console.log(
@@ -104,7 +107,8 @@ const deployContracts: Function = async () => {
       leverageRatioFloor: parseEther("0.1"),
       leverageRatioCeiling: parseEther("0.2"),
       leverageRatioBuffer: parseEther("0.05"),
-      minRequiredCapital: parseEther("100000"),
+      minRequiredCapital: parseUSDC("50000"),
+      minRequiredProtection: parseUSDC("100000"),
       curvature: parseEther("0.05"),
       poolCycleParams: _poolCycleParams
     };

@@ -104,7 +104,12 @@ const testPool: Function = (
         expect(poolInfo.params.leverageRatioBuffer).to.eq(parseEther("0.05"));
       });
       it("...set the min required capital", async () => {
-        expect(poolInfo.params.minRequiredCapital).to.eq(parseEther("100000"));
+        expect(poolInfo.params.minRequiredCapital).to.eq(parseUSDC("50000"));
+      });
+      it("...set the min required protection", async () => {
+        expect(poolInfo.params.minRequiredProtection).to.eq(
+          parseUSDC("100000")
+        );
       });
       it("...set the curvature", async () => {
         expect(poolInfo.params.curvature).to.eq(parseEther("0.05"));
@@ -272,6 +277,7 @@ const testPool: Function = (
             _protectionAmount
           )
         )
+          .emit(pool, "PremiumAccrued")
           .to.emit(pool, "BuyerAccountCreated")
           .withArgs(deployerAddress, _initialBuyerAccountId)
           .to.emit(pool, "CoverageBought")
@@ -302,15 +308,21 @@ const testPool: Function = (
             .toString()) === "0";
         expect(_noBuyerAccountExist).to.eq(false);
       });
+
+      it("...fail when total protection crosses min requirement with leverage ratio breaching floor", async () => {
+        const _expirationTime: BigNumber = getUnixTimestampAheadByDays(30);
+        const _protectionAmount = parseUSDC("100000");
+
+        await USDC.approve(pool.address, _protectionAmount);
+
+        await expect(
+          pool.buyProtection(1, _expirationTime, _protectionAmount)
+        ).to.be.revertedWith("PoolLeverageRatioTooLow(1, 2236363636)");
+      });
     });
 
     describe("...deposit", async () => {
-      const _underlyingAmount: BigNumber =
-        BigNumber.from(10).mul(USDC_DECIMALS);
-      const _exceededAmount: BigNumber =
-        BigNumber.from(100000000).mul(USDC_DECIMALS);
-      const _shortExpirationTime: BigNumber =
-        getUnixTimestampOfSomeMonthAhead(2);
+      const _underlyingAmount: BigNumber = parseUSDC("10");
       const _zeroAddress: string = "0x0000000000000000000000000000000000000000";
 
       it("...approve 0 USDC to be transferred by the Pool contract", async () => {
@@ -464,15 +476,11 @@ const testPool: Function = (
           .to.emit(pool, "PremiumAccrued")
           .to.emit(pool, "ProtectionSold")
           .withArgs(sellerAddress, _underlyingAmount);
-        console.log(
-          "sToken Balance of seller after 2nd deposit: ",
-          formatEther(await pool.connect(seller).balanceOf(sellerAddress))
-        );
 
         // 2nd deposit will receive less sTokens shares than the first deposit because of the premium accrued
         expect(await pool.connect(seller).balanceOf(sellerAddress))
-          .to.be.gt(parseEther("19.999138"))
-          .and.lt(parseEther("19.999139"));
+          .to.be.gt(parseEther("19.999"))
+          .and.lt(parseEther("20"));
       });
 
       it("...should return 20 USDC as total seller deposit", async () => {
@@ -604,7 +612,7 @@ const testPool: Function = (
       it("...should accrue correct premium", async () => {
         await expect(pool.accruePremium())
           .to.emit(pool, "PremiumAccrued")
-          .withArgs(anyValue, parseUSDC("0.002094"));
+          .withArgs(anyValue, parseUSDC("0.002217"));
       });
 
       it("...should remove single expired protection", async () => {
@@ -726,6 +734,31 @@ const testPool: Function = (
           console.log(`***** Buy Protection + Deposit ${index}`);
         }
         console.log(`***** deposit Gas Usage: \n ${gasUsage.join("\n")}`);
+      });
+    });
+
+    describe("buyProtection after deposit", async () => {
+      it("...should succeed when total protection is higher than min requirement and leverage ratio higher than floor", async () => {
+        const _expirationTime: BigNumber = getUnixTimestampAheadByDays(30);
+        const _protectionAmount = parseUSDC("10000");
+        const _underlyingAmount = parseUSDC("1000");
+
+        // Revert the state of the pool to the open state
+        await network.provider.send("evm_revert", [snapshotId]);
+
+        await USDC.approve(
+          pool.address,
+          _underlyingAmount.add(_protectionAmount)
+        );
+
+        await pool.deposit(_underlyingAmount, sellerAddress);
+        await pool.buyProtection(1, _expirationTime, _protectionAmount);
+
+        expect(await pool.getAllProtections()).to.have.lengthOf(2);
+        expect(await pool.getTotalProtection()).to.eq(parseUSDC("20000"));
+
+        // state is reverted to just before 1st deposit, so we we can't count previous deposits
+        expect(await pool.totalSellerDeposit()).to.eq(parseUSDC("1000"));
       });
     });
   });

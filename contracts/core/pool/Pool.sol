@@ -178,8 +178,11 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     uint256 _protectionPremium = scaleUnderlyingAmtTo18Decimals(_premiumAmount);
     uint256 _leverageRatio = calculateLeverageRatio();
 
-    if (_leverageRatio > poolInfo.params.leverageRatioCeiling) {
-      revert PoolLeverageRatioTooLow(poolInfo.poolId, _leverageRatio);
+    /// Check for leverage ratio floor, when total protection is higher than required min protection
+    if (totalProtection > poolInfo.params.minRequiredProtection) {
+      if (_leverageRatio < poolInfo.params.leverageRatioFloor) {
+        revert PoolLeverageRatioTooLow(poolInfo.poolId, _leverageRatio);
+      }
     }
 
     console.log(
