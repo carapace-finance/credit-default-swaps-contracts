@@ -3,12 +3,10 @@ pragma solidity ^0.8.13;
 
 import "hardhat/console.sol";
 import "@prb/math/contracts/PRBMathSD59x18.sol";
+import "./Constants.sol";
 
 library AccruedPremiumCalculator {
   using PRBMathSD59x18 for int256;
-
-  int256 public constant DAYS_IN_YEAR = 365;
-  int256 public constant SECONDS_IN_DAY = 60 * 60 * 24;
 
   /**
    * @notice Calculates and returns the risk factor scaled to 18 decimals.
@@ -78,7 +76,7 @@ library AccruedPremiumCalculator {
     );
     console.logInt(riskFactor);
 
-    int256 lambda = riskFactor / DAYS_IN_YEAR;
+    int256 lambda = riskFactor / Constants.DAYS_IN_YEAR;
     console.logInt(lambda);
 
     int256 power1 = (-1) * int256(_protectionDuration) * lambda;
@@ -117,13 +115,15 @@ library AccruedPremiumCalculator {
       _fromSecond,
       _toSecond
     );
-    int256 power1 = -1 * ((int256(_fromSecond) * _lambda) / SECONDS_IN_DAY);
+    int256 power1 = -1 *
+      ((int256(_fromSecond) * _lambda) / Constants.SECONDS_IN_DAY);
     console.logInt(power1);
 
     int256 exp1 = power1.exp();
     console.logInt(exp1);
 
-    int256 power2 = -1 * ((int256(_toSecond) * _lambda) / SECONDS_IN_DAY);
+    int256 power2 = -1 *
+      ((int256(_toSecond) * _lambda) / Constants.SECONDS_IN_DAY);
     console.logInt(power2);
 
     int256 exp2 = power2.exp();

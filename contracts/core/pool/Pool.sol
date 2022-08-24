@@ -10,6 +10,7 @@ import "../../interfaces/IReferenceLendingPools.sol";
 import "../../interfaces/IPoolCycleManager.sol";
 import "../../interfaces/IPool.sol";
 import "../../libraries/AccruedPremiumCalculator.sol";
+import "../../libraries/Constants.sol";
 
 import "hardhat/console.sol";
 
@@ -174,7 +175,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
     /// Capture loan protection data for premium accrual calculation
     uint256 _protectionDurationInDays = (_expirationTime - block.timestamp) /
-      uint256(AccruedPremiumCalculator.SECONDS_IN_DAY);
+      uint256(Constants.SECONDS_IN_DAY);
     uint256 _protectionPremium = scaleUnderlyingAmtTo18Decimals(_premiumAmount);
     uint256 _leverageRatio = calculateLeverageRatio();
 
@@ -462,7 +463,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       return 0;
     }
 
-    return (getTotalCapital() * SCALE_18_DECIMALS) / totalProtection;
+    return (getTotalCapital() * Constants.SCALE_18_DECIMALS) / totalProtection;
   }
 
   /**
@@ -479,8 +480,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _underlyingAmount
     );
     if (totalSupply() == 0) return _scaledUnderlyingAmt;
-    uint256 _sTokenShares = (_scaledUnderlyingAmt * SCALE_18_DECIMALS) /
-      _getExchangeRate();
+    uint256 _sTokenShares = (_scaledUnderlyingAmt *
+      Constants.SCALE_18_DECIMALS) / _getExchangeRate();
     return _sTokenShares;
   }
 
@@ -495,7 +496,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     returns (uint256)
   {
     uint256 _underlyingAmount = (_sTokenShares * _getExchangeRate()) /
-      SCALE_18_DECIMALS;
+      Constants.SCALE_18_DECIMALS;
     return scale18DecimalsAmtToUnderlyingDecimals(_underlyingAmount);
   }
 
@@ -527,8 +528,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       getTotalCapital()
     );
     uint256 _totalSTokenSupply = totalSupply();
-    uint256 _exchangeRate = (_totalScaledCapital * SCALE_18_DECIMALS) /
-      _totalSTokenSupply;
+    uint256 _exchangeRate = (_totalScaledCapital *
+      Constants.SCALE_18_DECIMALS) / _totalSTokenSupply;
 
     console.log(
       "Total capital: %s, Total SToken Supply: %s, exchange rate: %s",
@@ -566,7 +567,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     returns (uint256)
   {
     return
-      (underlyingAmt * SCALE_18_DECIMALS) /
+      (underlyingAmt * Constants.SCALE_18_DECIMALS) /
       10**(poolInfo.underlyingToken.decimals());
   }
 
@@ -579,6 +580,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     returns (uint256)
   {
     return
-      (amt * 10**(poolInfo.underlyingToken.decimals())) / SCALE_18_DECIMALS;
+      (amt * 10**(poolInfo.underlyingToken.decimals())) /
+      Constants.SCALE_18_DECIMALS;
   }
 }
