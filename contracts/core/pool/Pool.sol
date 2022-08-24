@@ -505,12 +505,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     return totalSellerDeposit + totalPremiumAccrued;
   }
 
-  /// @inheritdoc IPool
-  function getTotalProtection() public view override returns (uint256) {
-    /// total amount of the protection bought
-    return totalProtection;
-  }
-
   /// @notice Returns all the protections bought from the pool.
   function getAllProtections()
     external

@@ -143,35 +143,10 @@ const testPool: Function = (
       });
     });
 
-    describe("calculateLeverageRatio", () => {
+    describe("calculateLeverageRatio without any protection buyers or sellers", () => {
       it("...should return 0 when pool has no protection sold", async () => {
         expect(await pool.calculateLeverageRatio()).to.equal(0);
       });
-
-      // xit("...should return correct ratio when tranche has at least 1 protection bought & sold", async () => {
-      //   const tranche: Tranche = (await ethers.getContractAt(
-      //     "Tranche",
-      //     await pool.tranche()
-      //   )) as Tranche;
-      //   let expirationTime: BigNumber = getUnixTimestampOfSomeMonthAhead(4);
-      //   let protectionAmount = BigNumber.from(100000).mul(USDC_DECIMALS); // 100K USDC
-
-      //   await USDC.approve(
-      //     pool.address,
-      //     BigNumber.from(20000).mul(USDC_DECIMALS)
-      //   ); // 20K USDC
-      //   await tranche
-      //     .connect(account1)
-      //     .buyProtection(0, expirationTime, protectionAmount);
-
-      //   // await pool.connect(account1).sellProtection(BigNumber.from(10000).mul(USDC_DECIMALS), await account1.getAddress(), expirationTime);
-
-      //   // Leverage ratio should be little bit higher than 0.1 (scaled by 10^18) because of accrued premium
-      //   expect(await pool.calculateLeverageRatio()).to.be.gt(parseEther("0.1"));
-      //   expect(await pool.calculateLeverageRatio()).to.be.lt(
-      //     parseEther("0.101")
-      //   );
-      // });
     });
 
     describe("buyProtection", () => {
@@ -297,7 +272,7 @@ const testPool: Function = (
         expect(_premiumTotalOfLendingPoolIdBefore.add(_premiumAmount)).to.eq(
           _premiumTotalOfLendingPoolIdAfter
         );
-        expect(await pool.getTotalProtection()).to.eq(_protectionAmount);
+        expect(await pool.totalProtection()).to.eq(_protectionAmount);
       });
 
       it("...the buyer account for the msg.sender exists already", async () => {
@@ -317,6 +292,12 @@ const testPool: Function = (
         await expect(
           pool.buyProtection(1, _expirationTime, _protectionAmount)
         ).to.be.revertedWith("PoolLeverageRatioTooLow(1, 2236363636)");
+      });
+    });
+
+    describe("calculateLeverageRatio after 1st protection", () => {
+      it("...should return 0 when pool has no protection sellers", async () => {
+        expect(await pool.calculateLeverageRatio()).to.equal(0);
       });
     });
 
@@ -444,7 +425,7 @@ const testPool: Function = (
       });
 
       it("...fail if deposit causes to breach leverage ratio ceiling", async () => {
-        expect(await pool.getTotalProtection()).to.eq(parseUSDC("10000"));
+        expect(await pool.totalProtection()).to.eq(parseUSDC("10000"));
 
         const depositAmt: BigNumber = parseUSDC("52000");
 
@@ -479,6 +460,14 @@ const testPool: Function = (
         expect(convertedUnderlying)
           .to.be.gt(parseUSDC("19.9877"))
           .and.lt(parseUSDC("20.1"));
+      });
+    });
+
+    describe("calculateLeverageRatio after 1 protection & 2 deposits", () => {
+      it("...should return correct leverage ratio", async () => {
+        expect(await pool.calculateLeverageRatio())
+          .to.be.gt(parseEther("0.002"))
+          .and.lt(parseEther("0.0021"));
       });
     });
 
@@ -606,13 +595,13 @@ const testPool: Function = (
       it("...should remove single expired protection", async () => {
         const protectionCount = (await pool.getAllProtections()).length;
         expect(protectionCount).to.eq(1);
-        expect(await pool.getTotalProtection()).to.eq(parseUSDC("10000"));
+        expect(await pool.totalProtection()).to.eq(parseUSDC("10000"));
         await pool.buyProtection(
           BigNumber.from(1),
           getUnixTimestampOfSomeMonthAhead(1),
           parseUSDC("20000")
         );
-        expect(await pool.getTotalProtection()).to.eq(parseUSDC("30000"));
+        expect(await pool.totalProtection()).to.eq(parseUSDC("30000"));
         expect(await pool.getAllProtections()).to.have.lengthOf(2);
 
         // move forward time by 31 days
@@ -621,7 +610,7 @@ const testPool: Function = (
         // 2nd protection should be expired and removed
         await pool.accruePremium();
         expect(await pool.getAllProtections()).to.have.lengthOf(1);
-        expect(await pool.getTotalProtection()).to.eq(parseUSDC("10000"));
+        expect(await pool.totalProtection()).to.eq(parseUSDC("10000"));
 
         // all premium for expired protection should be accrued
         expect(await pool.totalPremiumAccrued()).to.be.gt(parseUSDC("2000"));
@@ -630,7 +619,7 @@ const testPool: Function = (
       it("...should remove multiple expired protection", async () => {
         const protectionCount = (await pool.getAllProtections()).length;
         expect(protectionCount).to.eq(1);
-        expect(await pool.getTotalProtection()).to.eq(parseUSDC("10000"));
+        expect(await pool.totalProtection()).to.eq(parseUSDC("10000"));
 
         // add bunch of protections
         await pool.buyProtection(
@@ -651,7 +640,7 @@ const testPool: Function = (
           parseUSDC("40000")
         );
 
-        expect(await pool.getTotalProtection()).to.eq(parseUSDC("100000")); // 100K USDC
+        expect(await pool.totalProtection()).to.eq(parseUSDC("100000")); // 100K USDC
         expect(await pool.getAllProtections()).to.have.lengthOf(4);
 
         // move forward time by 21 days
@@ -660,7 +649,7 @@ const testPool: Function = (
         // 2nd & 3rd protections should be expired and removed
         await pool.accruePremium();
         expect(await pool.getAllProtections()).to.have.lengthOf(2);
-        expect(await pool.getTotalProtection()).to.eq(parseUSDC("50000"));
+        expect(await pool.totalProtection()).to.eq(parseUSDC("50000"));
       });
 
       // This test is meant to report gas usage for buyProtection with large numbers of protections in the pool
@@ -743,7 +732,7 @@ const testPool: Function = (
         await pool.buyProtection(1, _expirationTime, _protectionAmount);
 
         expect(await pool.getAllProtections()).to.have.lengthOf(2);
-        expect(await pool.getTotalProtection()).to.eq(parseUSDC("20000"));
+        expect(await pool.totalProtection()).to.eq(parseUSDC("20000"));
 
         // state is reverted to just before 1st deposit, so we we can't count previous deposits
         expect(await pool.totalSellerDeposit()).to.eq(parseUSDC("1000"));
