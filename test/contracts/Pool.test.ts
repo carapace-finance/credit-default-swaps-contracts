@@ -2,8 +2,7 @@ import { BigNumber } from "@ethersproject/bignumber";
 import { expect } from "chai";
 import { Contract, Signer } from "ethers";
 import { ethers, network } from "hardhat";
-import { parseEther, formatEther } from "ethers/lib/utils";
-import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
+import { parseEther } from "ethers/lib/utils";
 import {
   CIRCLE_ACCOUNT_ADDRESS,
   USDC_ADDRESS,
@@ -21,7 +20,7 @@ import {
   getLatestBlockTimestamp,
   moveForwardTime
 } from "../utils/time";
-import { formatUSDC, parseUSDC } from "../utils/usdc";
+import { parseUSDC } from "../utils/usdc";
 
 const testPool: Function = (
   deployer: Signer,
@@ -345,21 +344,7 @@ const testPool: Function = (
         );
       });
 
-      it("...fail if pool cycle is not open for deposit", async () => {
-        await expect(
-          pool.deposit(_underlyingAmount, sellerAddress)
-        ).to.be.revertedWith(`PoolIsNotOpen(${poolInfo.poolId})`);
-      });
-
       it("...fail if pool is paused", async () => {
-        // register the pool with pool cycle manager to open the pool cycle
-        await poolCycleManager
-          .connect(deployer)
-          .registerPool(
-            poolInfo.poolId,
-            getDaysInSeconds(10),
-            getDaysInSeconds(20)
-          );
         snapshotId = await network.provider.send("evm_snapshot", []);
 
         expect(
@@ -458,13 +443,10 @@ const testPool: Function = (
         expect(_totalUnderlying).to.eq(BigNumber.from(1010).mul(USDC_DECIMALS));
       });
 
-      // pool being used inside tranche contract is different than pool passed into this test via deploy.ts
-      xit("...fail if deposit causes to breach leverage ratio ceiling", async () => {
-        expect(await pool.getTotalProtection()).to.eq(
-          BigNumber.from(10000).mul(USDC_DECIMALS)
-        );
+      it("...fail if deposit causes to breach leverage ratio ceiling", async () => {
+        expect(await pool.getTotalProtection()).to.eq(parseUSDC("10000"));
 
-        const depositAmt: BigNumber = BigNumber.from(2100).mul(USDC_DECIMALS);
+        const depositAmt: BigNumber = parseUSDC("52000");
 
         await expect(
           pool.deposit(depositAmt, sellerAddress)
@@ -609,10 +591,16 @@ const testPool: Function = (
     });
 
     describe("accruePremium", async () => {
-      it("...should accrue correct premium", async () => {
-        await expect(pool.accruePremium())
-          .to.emit(pool, "PremiumAccrued")
-          .withArgs(anyValue, parseUSDC("0.002217"));
+      it("...should accrue premium and update last accrual timestamp", async () => {
+        const totalPremiumAccruedBefore = await pool.totalPremiumAccrued();
+        await expect(pool.accruePremium()).to.emit(pool, "PremiumAccrued");
+
+        expect(await pool.totalPremiumAccrued()).to.be.gt(
+          totalPremiumAccruedBefore
+        );
+        expect(await pool.lastPremiumAccrualTimestamp()).to.eq(
+          await getLatestBlockTimestamp()
+        );
       });
 
       it("...should remove single expired protection", async () => {
@@ -759,6 +747,17 @@ const testPool: Function = (
 
         // state is reverted to just before 1st deposit, so we we can't count previous deposits
         expect(await pool.totalSellerDeposit()).to.eq(parseUSDC("1000"));
+      });
+    });
+
+    describe("...deposit after pool cycle is locked", async () => {
+      it("...should fail", async () => {
+        await moveForwardTime(getDaysInSeconds(11));
+
+        // pool cycle should be in locked state
+        await expect(
+          pool.deposit(parseUSDC("1"), sellerAddress)
+        ).to.be.revertedWith(`PoolIsNotOpen(${poolInfo.poolId})`);
       });
     });
   });

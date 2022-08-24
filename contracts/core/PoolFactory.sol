@@ -68,20 +68,19 @@ contract PoolFactory is Ownable {
     string memory _symbol
   ) public onlyOwner returns (address) {
     uint256 _poolId = poolIdCounter.current();
-    address _poolAddress = address(
-      new Pool{salt: _salt}(
-        IPool.PoolInfo({
-          poolId: _poolId,
-          params: _poolParameters,
-          underlyingToken: _underlyingToken,
-          referenceLendingPools: _referenceLendingPools
-        }),
-        _premiumPricing,
-        poolCycleManager,
-        _name,
-        _symbol
-      )
+    Pool pool = new Pool{salt: _salt}(
+      IPool.PoolInfo({
+        poolId: _poolId,
+        params: _poolParameters,
+        underlyingToken: _underlyingToken,
+        referenceLendingPools: _referenceLendingPools
+      }),
+      _premiumPricing,
+      poolCycleManager,
+      _name,
+      _symbol
     );
+    address _poolAddress = address(pool);
 
     poolIdToPoolAddress[_poolId] = _poolAddress;
     poolIdCounter.increment();
@@ -102,6 +101,10 @@ contract PoolFactory is Ownable {
       _referenceLendingPools,
       _premiumPricing
     );
+
+    /// transfer pool's ownership to the owner of the pool factory to enable pool's administration functions such as changing pool parameters
+    pool.transferOwnership(owner());
+
     return _poolAddress;
   }
 }

@@ -680,11 +680,13 @@ const USDC_ABI: object[] = [
     type: "function"
   }
 ];
+const SECONDS_PER_DAY = 86400;
 
 export {
   CIRCLE_ACCOUNT_ADDRESS,
   USDC_ADDRESS,
   USDC_DECIMALS,
   USDC_ABI,
-  USDC_NUM_OF_DECIMALS
+  USDC_NUM_OF_DECIMALS,
+  SECONDS_PER_DAY
 };

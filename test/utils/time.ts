@@ -1,7 +1,10 @@
 import { BigNumber } from "@ethersproject/bignumber";
 import { ethers, network } from "hardhat";
+import { SECONDS_PER_DAY } from "./constants";
 
-const getUnixTimestampOfSomeMonthAhead: Function = async (months: number) => {
+const getUnixTimestampOfSomeMonthAhead: Function = async (
+  months: number
+): Promise<number> => {
   let _expirationTime: number;
   let _date: Date = new Date();
   // Set the date to some months later
@@ -18,12 +21,14 @@ const getUnixTimestampOfSomeMonthAhead: Function = async (months: number) => {
  * @param days
  * @returns
  */
-const getUnixTimestampAheadByDays: Function = async (days: number) => {
-  return (await getLatestBlockTimestamp()) + days * 24 * 60 * 60;
+const getUnixTimestampAheadByDays: Function = async (
+  days: number
+): Promise<number> => {
+  return (await getLatestBlockTimestamp()) + days * SECONDS_PER_DAY;
 };
 
 /**
- * Move forward time by specified number of seconds and mines the block
+ * Moves forward time by specified number of seconds and mines the block
  * @param _duration in seconds
  */
 const moveForwardTime: Function = async (_duration: BigNumber) => {
@@ -31,11 +36,11 @@ const moveForwardTime: Function = async (_duration: BigNumber) => {
   await network.provider.send("evm_mine", []);
 };
 
-const getDaysInSeconds: Function = (days: number) => {
-  return BigNumber.from(days * 24 * 60 * 60);
+const getDaysInSeconds: Function = (days: number): BigNumber => {
+  return BigNumber.from(days * SECONDS_PER_DAY);
 };
 
-const getLatestBlockTimestamp: Function = async () => {
+const getLatestBlockTimestamp: Function = async (): Promise<number> => {
   return (await ethers.provider.getBlock("latest")).timestamp;
 };
 

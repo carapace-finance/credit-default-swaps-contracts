@@ -93,11 +93,6 @@ const deployContracts: Function = async () => {
     await poolFactoryInstance.deployed();
     console.log("PoolFactory" + " deployed to:", poolFactoryInstance.address);
 
-    // Deploy Pool
-    const _poolFactory = await contractFactory("Pool", {
-      AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address
-    });
-
     const _poolCycleParams: IPool.PoolCycleParamsStruct = {
       openCycleDuration: BigNumber.from(10 * 86400), // 10 days
       cycleDuration: BigNumber.from(30 * 86400) // 30 days
@@ -112,22 +107,27 @@ const deployContracts: Function = async () => {
       curvature: parseEther("0.05"),
       poolCycleParams: _poolCycleParams
     };
-    const _poolInfo: IPool.PoolInfoStruct = {
-      poolId: BigNumber.from(1),
-      params: _poolParams,
-      underlyingToken: USDC_ADDRESS,
-      referenceLendingPools: referenceLendingPoolsInstance.address
-    };
 
-    poolInstance = await _poolFactory.deploy(
-      _poolInfo,
+    // Create a pool using PoolFactory instead of deploying new pool directly to mimic the prod behavior
+    const _firstPoolFirstTrancheSalt: string = "0x".concat(
+      process.env.FIRST_POOL_FIRST_TRANCHE_SALT
+    );
+    const tx = await poolFactoryInstance.createPool(
+      _firstPoolFirstTrancheSalt,
+      _poolParams,
+      USDC_ADDRESS,
+      referenceLendingPoolsInstance.address,
       premiumPricingInstance.address,
-      poolCycleManagerInstance.address,
       "sToken11",
       "sT11"
     );
-    await poolInstance.deployed();
-    console.log("Pool" + " deployed to:", poolInstance.address);
+
+    const receipt: any = await tx.wait();
+    poolInstance = (await ethers.getContractAt(
+      "Pool",
+      receipt.events[4].args.poolAddress
+    )) as Pool;
+    console.log("Pool created at: ", poolInstance.address);
   } catch (e) {
     console.log(e);
   }

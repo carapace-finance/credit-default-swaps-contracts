@@ -20,7 +20,7 @@ const testPoolCycleManager: Function = (
     const _cycleDuration: BigNumber = BigNumber.from(30 * 24 * 60 * 60); // 30 days
 
     describe("registerPool", async () => {
-      it("...should NOT be able to callable by non-pool-factory address", async () => {
+      it("...should NOT be callable by non-pool-factory address", async () => {
         await expect(
           poolCycleManager
             .connect(account1)
@@ -52,7 +52,7 @@ const testPoolCycleManager: Function = (
         ).to.be.revertedWith(`PoolAlreadyRegistered(${_poolId})`);
       });
 
-      it("...should NOT be able to register pool with openCycleduration > cycleDuration", async () => {
+      it("...should NOT be able to register pool with openCycleDuration > cycleDuration", async () => {
         await expect(
           poolCycleManager.registerPool(
             _secondPoolId,
