@@ -21,14 +21,13 @@ export DEPLOYMENT_ACCOUNT_PRIVATE_KEY = <deployment_account_private_key>
 export MNEMONIC_WORDS = <mnemonic_words>
 export WALLET_INITIAL_INDEX = "0"
 export ETHERSCAN_API_KEY = <etherscan_api_key>
-export FIRST_POOL_FIRST_TRANCHE_SALT = <first_pool_first_tranche_salt>
-export SECOND_POOL_FIRST_TRANCHE_SALT = <second_pool_first_tranche_salt>
-export FIRST_POOL_SECOND_TRANCHE_SALT = <first_pool_second_tranche_salt>
+export FIRST_POOL_SALT = <first_pool_salt>
+export SECOND_POOL_SALT = <second_pool_salt>
 ```
 
-I recommend obtaining your mnemonic words from MetaMask and storing in `MNEMONIC_WORDS` so that you can use the same account when you test a dapp. Each word should be divided by space. You can create a new private key for `DEPLOYMENT_ACCOUNT_PRIVATE_KEY`or export your private key in MetaMask.  
+I recommend obtaining your mnemonic words from MetaMask and storing in `MNEMONIC_WORDS` so that you can use the same account when you test a dapp. Each word should be divided by space. You can create a new private key for `DEPLOYMENT_ACCOUNT_PRIVATE_KEY`or export your private key in MetaMask.
 
-You can keep `ETHERSCAN_API_KEY` empty until you deploy to the mainnet. Ask the team about salt values is when you create a new pool. 
+You can keep `ETHERSCAN_API_KEY` empty until you deploy to the mainnet. Ask the team about salt values is when you create a new pool.
 
 You are ready to write code!
 
@@ -51,10 +50,10 @@ $ npm run cover
 // generate a code coverage report for testing.
 
 $ npm run tenderly:verify
-// 
+//
 
 $ npm run tenderly:push
-// 
+//
 
 $ npm run doc
 // generate a documentation from NatSpec comments.

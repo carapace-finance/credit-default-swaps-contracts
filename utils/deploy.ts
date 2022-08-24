@@ -110,7 +110,7 @@ const deployContracts: Function = async () => {
 
     // Create a pool using PoolFactory instead of deploying new pool directly to mimic the prod behavior
     const _firstPoolFirstTrancheSalt: string = "0x".concat(
-      process.env.FIRST_POOL_FIRST_TRANCHE_SALT
+      process.env.FIRST_POOL_SALT
     );
     const tx = await poolFactoryInstance.createPool(
       _firstPoolFirstTrancheSalt,

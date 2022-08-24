@@ -29,7 +29,7 @@ const testPoolFactory: Function = (
     });
     describe("createPool", async () => {
       const _secondPoolFirstTrancheSalt: string = "0x".concat(
-        process.env.SECOND_POOL_FIRST_TRANCHE_SALT
+        process.env.SECOND_POOL_SALT
       );
       const poolCycleParams: IPool.PoolCycleParamsStruct = {
         openCycleDuration: BigNumber.from(10 * 86400), // 10 days
