@@ -30,3 +30,4 @@ docs
 #vscode config
 .vscode
 .DS_Store
+*.log

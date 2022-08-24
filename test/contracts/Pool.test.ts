@@ -1,7 +1,9 @@
 import { BigNumber } from "@ethersproject/bignumber";
 import { expect } from "chai";
 import { Contract, Signer } from "ethers";
+import { ethers, network } from "hardhat";
 import { parseEther, formatEther } from "ethers/lib/utils";
+import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import {
   CIRCLE_ACCOUNT_ADDRESS,
   USDC_ADDRESS,
@@ -10,15 +12,16 @@ import {
 } from "../utils/constants";
 import { Pool } from "../../typechain-types/contracts/core/pool/Pool";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
-import { ethers } from "hardhat";
 import { PremiumPricing } from "../../typechain-types/contracts/core/PremiumPricing";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
 import {
   getUnixTimestampOfSomeMonthAhead,
+  getUnixTimestampAheadByDays,
   getDaysInSeconds,
-  getLatestBlockTimestamp
+  getLatestBlockTimestamp,
+  moveForwardTime
 } from "../utils/time";
-import { parseUSDC } from "../utils/usdc";
+import { formatUSDC, parseUSDC } from "../utils/usdc";
 
 const testPool: Function = (
   deployer: Signer,
@@ -39,6 +42,7 @@ const testPool: Function = (
     let poolCycleManager: PoolCycleManager;
     let premiumPricing: PremiumPricing;
     let referenceLendingPools: ReferenceLendingPools;
+    let snapshotId: string;
 
     before("setup", async () => {
       deployerAddress = await deployer.getAddress();
@@ -56,7 +60,7 @@ const testPool: Function = (
       );
       USDC.connect(circleAccount).transfer(
         deployerAddress,
-        BigNumber.from(10000).mul(USDC_DECIMALS)
+        BigNumber.from(1000000).mul(USDC_DECIMALS)
       );
       USDC.connect(circleAccount).transfer(
         ownerAddress,
@@ -344,6 +348,7 @@ const testPool: Function = (
             getDaysInSeconds(10),
             getDaysInSeconds(20)
           );
+        snapshotId = await network.provider.send("evm_snapshot", []);
 
         expect(
           await poolCycleManager.getCurrentCycleState(poolInfo.poolId)
@@ -522,24 +527,24 @@ const testPool: Function = (
       it("...1st request is successful", async () => {
         const _tokenAmt = parseEther("11");
         const _minPoolCycleIndex = 1;
-        expect(await pool.connect(seller).requestWithdrawal(_tokenAmt))
-          .to.emit("Pool", "WithdrawalRequested")
+        await expect(pool.connect(seller).requestWithdrawal(_tokenAmt))
+          .to.emit(pool, "WithdrawalRequested")
           .withArgs(sellerAddress, _tokenAmt, _minPoolCycleIndex);
 
         const request = await pool.withdrawalRequests(sellerAddress);
-        expect(request.tokenAmount).to.eq(_tokenAmt);
+        expect(request.sTokenAmount).to.eq(_tokenAmt);
         expect(request.minPoolCycleIndex).to.eq(_minPoolCycleIndex);
       });
 
       it("...2nd request by same user should update existing request", async () => {
         const _tokenAmt = parseEther("5");
         const _minPoolCycleIndex = 1;
-        expect(await pool.connect(seller).requestWithdrawal(_tokenAmt))
-          .to.emit("Pool", "WithdrawalRequested")
+        await expect(pool.connect(seller).requestWithdrawal(_tokenAmt))
+          .to.emit(pool, "WithdrawalRequested")
           .withArgs(sellerAddress, _tokenAmt, _minPoolCycleIndex);
 
         const request = await pool.withdrawalRequests(sellerAddress);
-        expect(request.tokenAmount).to.eq(_tokenAmt);
+        expect(request.sTokenAmount).to.eq(_tokenAmt);
         expect(request.minPoolCycleIndex).to.eq(1);
       });
 
@@ -560,12 +565,12 @@ const testPool: Function = (
 
         const _minPoolCycleIndex = 1;
         const _tokenBalance = await pool.balanceOf(ownerAddress);
-        expect(await pool.connect(owner).requestWithdrawal(_tokenBalance))
-          .to.emit("Pool", "WithdrawalRequested")
-          .withArgs(sellerAddress, _tokenBalance, _minPoolCycleIndex);
+        await expect(pool.connect(owner).requestWithdrawal(_tokenBalance))
+          .to.emit(pool, "WithdrawalRequested")
+          .withArgs(ownerAddress, _tokenBalance, _minPoolCycleIndex);
 
         const request = await pool.withdrawalRequests(ownerAddress);
-        expect(request.tokenAmount).to.eq(_tokenBalance);
+        expect(request.sTokenAmount).to.eq(_tokenBalance);
         expect(request.minPoolCycleIndex).to.eq(_minPoolCycleIndex);
       });
     });
@@ -592,6 +597,135 @@ const testPool: Function = (
         );
         const _paused: boolean = await pool.paused();
         expect(_paused).to.eq(false);
+      });
+    });
+
+    describe("accruePremium", async () => {
+      it("...should accrue correct premium", async () => {
+        await expect(pool.accruePremium())
+          .to.emit(pool, "PremiumAccrued")
+          .withArgs(anyValue, parseUSDC("0.002094"));
+      });
+
+      it("...should remove single expired protection", async () => {
+        const protectionCount = (await pool.getAllProtections()).length;
+        expect(protectionCount).to.eq(1);
+        expect(await pool.getTotalProtection()).to.eq(parseUSDC("10000"));
+        await pool.buyProtection(
+          BigNumber.from(1),
+          getUnixTimestampOfSomeMonthAhead(1),
+          parseUSDC("20000")
+        );
+        expect(await pool.getTotalProtection()).to.eq(parseUSDC("30000"));
+        expect(await pool.getAllProtections()).to.have.lengthOf(2);
+
+        // move forward time by 31 days
+        await moveForwardTime(BigNumber.from(31 * 24 * 60 * 60));
+
+        // 2nd protection should be expired and removed
+        await pool.accruePremium();
+        expect(await pool.getAllProtections()).to.have.lengthOf(1);
+        expect(await pool.getTotalProtection()).to.eq(parseUSDC("10000"));
+
+        // all premium for expired protection should be accrued
+        expect(await pool.totalPremiumAccrued()).to.be.gt(parseUSDC("2000"));
+      });
+
+      it("...should remove multiple expired protection", async () => {
+        const protectionCount = (await pool.getAllProtections()).length;
+        expect(protectionCount).to.eq(1);
+        expect(await pool.getTotalProtection()).to.eq(parseUSDC("10000"));
+
+        // add bunch of protections
+        await pool.buyProtection(
+          BigNumber.from(2),
+          await getUnixTimestampAheadByDays(10),
+          parseUSDC("20000")
+        );
+
+        await pool.buyProtection(
+          BigNumber.from(1),
+          await getUnixTimestampAheadByDays(20),
+          parseUSDC("30000")
+        );
+
+        await pool.buyProtection(
+          BigNumber.from(1),
+          await getUnixTimestampAheadByDays(30),
+          parseUSDC("40000")
+        );
+
+        expect(await pool.getTotalProtection()).to.eq(parseUSDC("100000")); // 100K USDC
+        expect(await pool.getAllProtections()).to.have.lengthOf(4);
+
+        // move forward time by 21 days
+        await moveForwardTime(BigNumber.from(21 * 24 * 60 * 60));
+
+        // 2nd & 3rd protections should be expired and removed
+        await pool.accruePremium();
+        expect(await pool.getAllProtections()).to.have.lengthOf(2);
+        expect(await pool.getTotalProtection()).to.eq(parseUSDC("50000"));
+      });
+
+      // This test is meant to report gas usage for buyProtection with large numbers of protections in the pool
+      xit("...gas consumption test", async () => {
+        const gasUsage = [];
+        for (let index = 0; index < 151; index++) {
+          const tx = await pool.buyProtection(
+            BigNumber.from(1),
+            getUnixTimestampOfSomeMonthAhead(3),
+            parseUSDC("10000"),
+            { gasLimit: 10_000_000 } // 30_000_000 is block gas limit
+          );
+
+          const receipt = await tx.wait();
+          console.log(
+            `Gas used for protection# ${
+              index + 1
+            }: ${receipt.gasUsed.toString()}`
+          );
+          gasUsage.push(`${receipt.gasUsed}`);
+          // console.log(`***** Buy Protection ${index}`);
+        }
+        console.log(`***** buyProtection Gas Usage: ${gasUsage.join("\n")}`);
+      });
+
+      // This test is meant to report gas usage for deposit with large numbers of protections in the pool
+      xit("...gas consumption test for deposit", async () => {
+        const gasUsage = [];
+        // Revert the state of the pool to the open state
+        await network.provider.send("evm_revert", [snapshotId]);
+
+        console.log(
+          "***** Current Pool Cycle State: " +
+            (await poolCycleManager.getCurrentCycleState(poolInfo.poolId))
+        );
+
+        // Approve the pool to spend USDC
+        await USDC.approve(pool.address, parseUSDC("1000000"));
+
+        for (let index = 0; index < 150; index++) {
+          await pool.buyProtection(
+            BigNumber.from(1),
+            getUnixTimestampOfSomeMonthAhead(6),
+            parseUSDC("10000"),
+            { gasLimit: 10_000_000 } // 30_000_000 is block gas limit
+          );
+
+          const tx = await pool.deposit(parseUSDC("1000"), deployerAddress, {
+            gasLimit: 10_000_000
+          }); // 30_000_000 is block gas limit
+
+          const receipt = await tx.wait();
+          console.log(
+            `Gas used for deposit after protection# ${
+              index + 1
+            }: ${receipt.gasUsed.toString()}`
+          );
+          gasUsage.push(`${receipt.gasUsed}`);
+          console.log(`***** Buy Protection + Deposit ${index}`);
+        }
+        console.log(`***** deposit Gas Usage: \n ${gasUsage.join("\n")}`);
       });
     });
   });

@@ -13,6 +13,19 @@ const getUnixTimestampOfSomeMonthAhead: Function = async (months: number) => {
   return _expirationTime;
 };
 
+/**
+ * Returns future timestamp by adding specified number of days to the current timestamp in seconds
+ * @param days
+ * @returns
+ */
+const getUnixTimestampAheadByDays: Function = async (days: number) => {
+  return (await getLatestBlockTimestamp()) + days * 24 * 60 * 60;
+};
+
+/**
+ * Move forward time by specified number of seconds and mines the block
+ * @param _duration in seconds
+ */
 const moveForwardTime: Function = async (_duration: BigNumber) => {
   await network.provider.send("evm_increaseTime", [_duration.toNumber()]);
   await network.provider.send("evm_mine", []);
@@ -28,6 +41,7 @@ const getLatestBlockTimestamp: Function = async () => {
 
 export {
   getUnixTimestampOfSomeMonthAhead,
+  getUnixTimestampAheadByDays,
   moveForwardTime,
   getDaysInSeconds,
   getLatestBlockTimestamp

@@ -5,7 +5,7 @@ pragma solidity ^0.8.13;
 abstract contract IPoolCycleManager {
   /// @notice Represents various states of a pool cycle.
   enum CycleState {
-    None, // The cycle state for unregeistered pools.
+    None, // The cycle state for unregistered pools.
     Open, // The cycle is open for deposit & withdraw
     Locked // The cycle is in progress & locked for deposit & withdraw
   }

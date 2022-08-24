@@ -58,13 +58,11 @@ const testPoolFactory: Function = (
         ).to.be.revertedWith("Ownable: caller is not the owner");
       });
 
-      it("...fail if the floor is", async () => {
-      });
+      it("...fail if the floor is", async () => {});
 
-      it("...fail if the ceiling is", async () => {
-      });
+      it("...fail if the ceiling is", async () => {});
 
-      it("...create the first pool and tranche", async () => {
+      it("...create the first pool", async () => {
         expect(
           await poolFactory.createPool(
             _firstPoolFirstTrancheSalt,
@@ -105,7 +103,7 @@ const testPoolFactory: Function = (
         expect(await poolFactory.poolIdCounter()).equal(2);
       });
 
-      it("...create the second pool and tranche", async () => {
+      it("...create the second pool", async () => {
         expect(
           await poolFactory.createPool(
             _secondPoolFirstTrancheSalt,

@@ -61,7 +61,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   mapping(address => WithdrawalRequest) public withdrawalRequests;
 
   /// @notice The array to track the loan protection info for all protection bought.
-  LoanProtectionInfo[] private loanProtectionInfos;
+  LoanProtectionInfo[] public loanProtectionInfos;
 
   /// @notice The timestamp of last premium accrual
   uint256 public lastPremiumAccrualTimestamp;
@@ -201,9 +201,11 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
     loanProtectionInfos.push(
       LoanProtectionInfo({
+        protectionAmount: _protectionAmount,
         protectionPremium: _premiumAmount,
         protectionDurationInDays: _protectionDurationInDays,
         startTimestamp: block.timestamp,
+        expirationTimestamp: _expirationTime,
         K: K,
         lambda: lambda
       })
@@ -255,11 +257,11 @@ contract Pool is IPool, SToken, ReentrancyGuard {
    * @notice Creates a withdrawal request for the given sToken amount to allow actual withdrawal at the next pool cycle.
    * @notice Each user can have single request at a time and hence this function will overwrite any existing request.
    * @notice The actual withdrawal could be made when next pool cycle is opened for withdrawal with other constraints.
-   * @param _tokenAmount The amount of token (sToken shares) to withdraw.
+   * @param _sTokenAmount The amount of token (sToken shares) to withdraw.
    */
-  function requestWithdrawal(uint256 _tokenAmount) external whenNotPaused {
+  function requestWithdrawal(uint256 _sTokenAmount) external whenNotPaused {
     uint256 sTokenBalance = balanceOf(msg.sender);
-    if (_tokenAmount > sTokenBalance) {
+    if (_sTokenAmount > sTokenBalance) {
       revert InsufficientSTokenBalance(msg.sender, sTokenBalance);
     }
 
@@ -267,10 +269,10 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       poolInfo.poolId
     ) + 1;
     WithdrawalRequest storage request = withdrawalRequests[msg.sender];
-    request.tokenAmount = _tokenAmount;
+    request.sTokenAmount = _sTokenAmount;
     request.minPoolCycleIndex = minPoolCycleIndex;
 
-    emit WithdrawalRequested(msg.sender, _tokenAmount, minPoolCycleIndex);
+    emit WithdrawalRequested(msg.sender, _sTokenAmount, minPoolCycleIndex);
   }
 
   /**
@@ -278,10 +280,10 @@ contract Pool is IPool, SToken, ReentrancyGuard {
    * @notice A withdrawal request must be created during previous pool cycle.
    * @notice A withdrawal can only be made when the pool is in `Open` state.
    * @notice Proportional Underlying amount based on current exchange rate will be transferred to the receiver address.
-   * @param _tokenAmount The amount of sToken to withdraw.
+   * @param _sTokenAmount The amount of sToken to withdraw.
    * @param _receiver The address to receive the underlying token.
    */
-  function withdraw(uint256 _tokenAmount, address _receiver)
+  function withdraw(uint256 _sTokenAmount, address _receiver)
     external
     whenPoolIsOpen
     whenNotPaused
@@ -289,7 +291,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   {
     /// Step 1: Verify withdrawal request exists
     WithdrawalRequest storage request = withdrawalRequests[msg.sender];
-    if (request.tokenAmount == 0) {
+    if (request.sTokenAmount == 0) {
       revert NoWithdrawalRequested(msg.sender);
     }
 
@@ -306,12 +308,12 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     }
 
     /// Step 3: Verify that withdrawal is for the correct amount and has sufficient balance
-    if (_tokenAmount > request.tokenAmount) {
-      revert WithdrawalHigherThanRequested(msg.sender, request.tokenAmount);
+    if (_sTokenAmount > request.sTokenAmount) {
+      revert WithdrawalHigherThanRequested(msg.sender, request.sTokenAmount);
     }
 
     uint256 sTokenBalance = balanceOf(msg.sender);
-    if (sTokenBalance < _tokenAmount) {
+    if (sTokenBalance < _sTokenAmount) {
       revert InsufficientSTokenBalance(msg.sender, sTokenBalance);
     }
 
@@ -319,16 +321,16 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     accruePremium();
 
     /// Step 5: calculate underlying amount to transfer
-    uint256 underlyingAmountToTransfer = convertToUnderlying(_tokenAmount);
+    uint256 underlyingAmountToTransfer = convertToUnderlying(_sTokenAmount);
 
     /// Step 6: burn sTokens shares.
     /// This step must be done after calculating underlying amount to be transferred
-    _burn(msg.sender, _tokenAmount);
+    _burn(msg.sender, _sTokenAmount);
 
     /// Step 7: update/delete withdrawal request
-    request.tokenAmount -= _tokenAmount;
+    request.sTokenAmount -= _sTokenAmount;
 
-    if (request.tokenAmount == 0) {
+    if (request.sTokenAmount == 0) {
       delete withdrawalRequests[msg.sender];
     }
 
@@ -343,50 +345,83 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       revert PoolLeverageRatioTooLow(poolInfo.poolId, leverageRatio);
     }
 
-    emit WithdrawalMade(msg.sender, _tokenAmount, _receiver);
+    emit WithdrawalMade(msg.sender, _sTokenAmount, _receiver);
   }
 
   /**
    * @notice Calculates the premium accrued for all existing protections and updates the total premium accrued.
    * @notice This method calculates premium accrued from the last timestamp to the current timestamp.
+   * @notice This method also removes expired protections.
    */
   function accruePremium() public {
-    // Ensure we accrue premium only once per the block
+    /// Ensure we accrue premium only once per the block
     if (block.timestamp == lastPremiumAccrualTimestamp) {
       return;
     }
 
-    /// Iterate through existing protections and calculate accrued premium
+    uint256 removalIndex = 0;
+    uint256[] memory expiredProtections = new uint256[](
+      loanProtectionInfos.length
+    );
+
+    /// Iterate through existing protections and calculate accrued premium for non-expired protections
     for (uint256 i = 0; i < loanProtectionInfos.length; i++) {
       LoanProtectionInfo storage loanProtectionInfo = loanProtectionInfos[i];
 
       /**
-       * <-Protection Bought(second: 0) --- last accrual(fromSecond) --- now(toSecond) --- Expiration->
+       * <-Protection Bought(second: 0) --- last accrual --- now --- Expiration->
        * The time line starts when protection is bought and ends when protection is expired.
-       * fromSeconds is the second elapsed since the last accrual timestamp after the protection is bought.
+       * secondsUntilLastPremiumAccrual is the second elapsed since the last accrual timestamp after the protection is bought.
        * toSeconds is the second elapsed until now after protection is bought.
        */
       uint256 startTimestamp = loanProtectionInfo.startTimestamp;
-      uint256 fromSecond = lastPremiumAccrualTimestamp - startTimestamp;
-      uint256 toSecond = block.timestamp - startTimestamp;
+      uint256 secondsUntilLastPremiumAccrual = lastPremiumAccrualTimestamp -
+        startTimestamp;
+      uint256 secondsUntilNow;
+
+      /// if loan protection is expired, then accrue interest till expiration and mark it for removal
+      if (block.timestamp > loanProtectionInfo.expirationTimestamp) {
+        totalProtection -= loanProtectionInfo.protectionAmount;
+        expiredProtections[removalIndex] = i;
+        removalIndex++;
+
+        secondsUntilNow =
+          loanProtectionInfo.expirationTimestamp -
+          startTimestamp;
+      } else {
+        secondsUntilNow = block.timestamp - startTimestamp;
+      }
 
       uint256 accruedPremium = AccruedPremiumCalculator.calculateAccruedPremium(
-        fromSecond,
-        toSecond,
+        secondsUntilLastPremiumAccrual,
+        secondsUntilNow,
         loanProtectionInfo.K,
         loanProtectionInfo.lambda
       );
 
       console.log(
         "accruedPremium from second %s to %s: ",
-        fromSecond,
-        toSecond,
+        secondsUntilLastPremiumAccrual,
+        secondsUntilNow,
         accruedPremium
       );
 
       totalPremiumAccrued += scale18DecimalsAmtToUnderlyingDecimals(
         accruedPremium
       );
+    }
+
+    /// Remove expired protections from the list
+    for (uint256 i = 0; i < removalIndex; i++) {
+      uint256 expiredProtectionIndex = expiredProtections[i];
+
+      /// move the last element to the expired protection index
+      loanProtectionInfos[expiredProtectionIndex] = loanProtectionInfos[
+        loanProtectionInfos.length - 1
+      ];
+
+      /// remove the last element
+      loanProtectionInfos.pop();
     }
 
     lastPremiumAccrualTimestamp = block.timestamp;
@@ -423,6 +458,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     if (totalProtection == 0) {
       return 0;
     }
+
     return (getTotalCapital() * SCALE_18_DECIMALS) / totalProtection;
   }
 
@@ -470,6 +506,15 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   function getTotalProtection() public view override returns (uint256) {
     /// total amount of the protection bought
     return totalProtection;
+  }
+
+  /// @notice Returns all the protections bought from the pool.
+  function getAllProtections()
+    external
+    view
+    returns (LoanProtectionInfo[] memory)
+  {
+    return loanProtectionInfos;
   }
 
   /*** internal functions */

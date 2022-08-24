@@ -8,6 +8,7 @@ import "solidity-coverage";
 import "@primitivefi/hardhat-dodoc";
 import "dotenv/config";
 import "hardhat-contract-sizer";
+import "hardhat-gas-reporter";
 
 const config: HardhatUserConfig = {
   defaultNetwork: "hardhat",
@@ -27,7 +28,7 @@ const config: HardhatUserConfig = {
           ? parseInt(process.env.WALLET_INITIAL_INDEX)
           : 0 // set index of account to use inside wallet (defaults to 0)
       },
-      allowUnlimitedContractSize: true
+      allowUnlimitedContractSize: false
     },
     mainnet: {
       url: `https://eth-mainnet.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`,
@@ -67,6 +68,9 @@ const config: HardhatUserConfig = {
   dodoc: {
     runOnCompile: false,
     debugMode: true
+  },
+  gasReporter: {
+    enabled: false
   }
 };
 

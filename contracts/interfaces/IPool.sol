@@ -44,18 +44,22 @@ abstract contract IPool {
   /// @notice A struct to store the details of a withdrawal request.
   struct WithdrawalRequest {
     /// @notice The amount of sTokens to withdraw.
-    uint256 tokenAmount;
+    uint256 sTokenAmount;
     /// @notice Minimum index at or after which the actual withdrawal can be made
     uint256 minPoolCycleIndex;
   }
 
   struct LoanProtectionInfo {
-    /// @notice The amount of premium paid for the protection in underlying token
+    /// @notice The amount of protection purchased.
+    uint256 protectionAmount;
+    /// @notice The amount of premium paid in underlying token
     uint256 protectionPremium;
     /// @notice The total duration of the loan protection in days
     uint256 protectionDurationInDays;
     /// @notice The timestamp at which the loan protection is bought
     uint256 startTimestamp;
+    /// @notice The timestamp at which the loan protection is expired
+    uint256 expirationTimestamp;
     /// @notice Constant K is calculated & captured at the time of loan protection purchase
     /// @notice It is used in accrued premium calculation
     int256 K;
@@ -111,7 +115,7 @@ abstract contract IPool {
   /// @notice Emitted when a withdrawal request is made.
   event WithdrawalRequested(
     address msgSender,
-    uint256 tokenAmount,
+    uint256 sTokenAmount,
     uint256 minPoolCycleIndex
   );
 
