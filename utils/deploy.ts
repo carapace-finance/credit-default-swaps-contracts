@@ -5,10 +5,11 @@ import { ethers } from "hardhat";
 import { USDC_ADDRESS } from "../test/utils/constants";
 import { IPool, Pool } from "../typechain-types/contracts/core/pool/Pool";
 import { PoolFactory } from "../typechain-types/contracts/core/PoolFactory";
-import { PremiumPricing } from "../typechain-types/contracts/core/PremiumPricing";
+import { RiskPremiumCalculator } from "../typechain-types/contracts/core/RiskPremiumCalculator";
 import { ReferenceLendingPools } from "../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { PoolCycleManager } from "../typechain-types/contracts/core/PoolCycleManager";
 import { AccruedPremiumCalculator } from "../typechain-types/contracts/libraries/AccruedPremiumCalculator";
+import { RiskFactorCalculator } from "../typechain-types/contracts/libraries/RiskFactorCalculator";
 import { parseUSDC } from "../test/utils/usdc";
 
 let deployer: Signer;
@@ -19,10 +20,11 @@ let account4: Signer;
 
 let poolInstance: Pool;
 let poolFactoryInstance: PoolFactory;
-let premiumPricingInstance: PremiumPricing;
+let riskPremiumCalculatorInstance: RiskPremiumCalculator;
 let referenceLendingPoolsInstance: ReferenceLendingPools;
 let poolCycleManagerInstance: PoolCycleManager;
 let accruedPremiumCalculatorInstance: AccruedPremiumCalculator;
+let riskFactorCalculatorInstance: RiskFactorCalculator;
 
 (async () => {
   [deployer, account1, account2, account3, account4] =
@@ -45,26 +47,39 @@ const contractFactory: Function = async (
 
 const deployContracts: Function = async () => {
   try {
+    const riskFactorCalculatorFactory = await contractFactory(
+      "RiskFactorCalculator"
+    );
+    riskFactorCalculatorInstance = await riskFactorCalculatorFactory.deploy();
+    await riskFactorCalculatorInstance.deployed();
+    console.log(
+      "RiskFactorCalculator deployed to:",
+      riskFactorCalculatorInstance.address
+    );
+
+    const riskFactorLibRef = {
+      RiskFactorCalculator: riskFactorCalculatorInstance.address
+    };
     const AccruedPremiumCalculator = await contractFactory(
-      "AccruedPremiumCalculator"
+      "AccruedPremiumCalculator",
+      riskFactorLibRef
     );
     accruedPremiumCalculatorInstance = await AccruedPremiumCalculator.deploy();
     await accruedPremiumCalculatorInstance.deployed();
     console.log(
-      "Deployed AccruedPremiumCalculator to:",
+      "AccruedPremiumCalculator deployed to:",
       accruedPremiumCalculatorInstance.address
     );
 
-    const _premiumPricingInstance = await contractFactory("PremiumPricing");
-    premiumPricingInstance = await _premiumPricingInstance.deploy(
-      "0",
-      "0",
-      "0"
+    const riskPremiumCalculatorFactory = await contractFactory(
+      "RiskPremiumCalculator",
+      riskFactorLibRef
     );
-    await premiumPricingInstance.deployed();
+    riskPremiumCalculatorInstance = await riskPremiumCalculatorFactory.deploy();
+    await riskPremiumCalculatorInstance.deployed();
     console.log(
-      "PremiumPricing" + " deployed to:",
-      premiumPricingInstance.address
+      "RiskPremiumCalculator deployed to:",
+      riskPremiumCalculatorInstance.address
     );
 
     const referenceLendingPoolsFactory = await contractFactory(
@@ -77,8 +92,8 @@ const deployContracts: Function = async () => {
       referenceLendingPoolsInstance.address
     );
 
-    const _poolCycleManagerFactory = await contractFactory("PoolCycleManager");
-    poolCycleManagerInstance = await _poolCycleManagerFactory.deploy();
+    const poolCycleManagerFactory = await contractFactory("PoolCycleManager");
+    poolCycleManagerInstance = await poolCycleManagerFactory.deploy();
     await poolCycleManagerInstance.deployed();
     console.log(
       "PoolCycleManager" + " deployed to:",
@@ -105,6 +120,8 @@ const deployContracts: Function = async () => {
       minRequiredCapital: parseUSDC("50000"),
       minRequiredProtection: parseUSDC("100000"),
       curvature: parseEther("0.05"),
+      minRiskPremiumPercent: parseEther("0.2"),
+      underlyingRiskPremiumPercent: parseEther("0.1"),
       poolCycleParams: _poolCycleParams
     };
 
@@ -117,7 +134,7 @@ const deployContracts: Function = async () => {
       _poolParams,
       USDC_ADDRESS,
       referenceLendingPoolsInstance.address,
-      premiumPricingInstance.address,
+      riskPremiumCalculatorInstance.address,
       "sToken11",
       "sT11"
     );
@@ -142,7 +159,7 @@ export {
   deployContracts,
   poolInstance,
   poolFactoryInstance,
-  premiumPricingInstance,
+  riskPremiumCalculatorInstance as premiumPricingInstance,
   referenceLendingPoolsInstance,
   poolCycleManagerInstance,
   accruedPremiumCalculatorInstance

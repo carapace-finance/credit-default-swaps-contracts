@@ -1,5 +1,6 @@
 import { BigNumber } from "@ethersproject/bignumber";
 import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
+import { parseEther } from "ethers/lib/utils";
 import { expect } from "chai";
 import { Signer } from "ethers";
 import { USDC_ADDRESS } from "../utils/constants";
@@ -46,6 +47,8 @@ const testPoolFactory: Function = (
         minRequiredCapital: parseUSDC("10000"),
         minRequiredProtection: parseUSDC("20000"),
         curvature: BigNumber.from(5),
+        minRiskPremiumPercent: parseEther("0.2"),
+        underlyingRiskPremiumPercent: parseEther("0.1"),
         poolCycleParams: poolCycleParams
       };
 

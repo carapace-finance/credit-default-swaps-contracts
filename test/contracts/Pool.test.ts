@@ -11,7 +11,7 @@ import {
 } from "../utils/constants";
 import { Pool } from "../../typechain-types/contracts/core/pool/Pool";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
-import { PremiumPricing } from "../../typechain-types/contracts/core/PremiumPricing";
+import { RiskPremiumCalculator } from "../../typechain-types/contracts/core/RiskPremiumCalculator";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
 import {
   getUnixTimestampOfSomeMonthAhead,
@@ -39,7 +39,7 @@ const testPool: Function = (
     let USDC: Contract;
     let poolInfo: any;
     let poolCycleManager: PoolCycleManager;
-    let premiumPricing: PremiumPricing;
+    let riskPremiumCalculator: RiskPremiumCalculator;
     let referenceLendingPools: ReferenceLendingPools;
     let snapshotId: string;
 
@@ -70,10 +70,10 @@ const testPool: Function = (
         await pool.poolCycleManager()
       )) as PoolCycleManager;
 
-      premiumPricing = (await ethers.getContractAt(
-        "PremiumPricing",
-        await pool.premiumPricing()
-      )) as PremiumPricing;
+      riskPremiumCalculator = (await ethers.getContractAt(
+        "RiskPremiumCalculator",
+        await pool.riskPremiumCalculator()
+      )) as RiskPremiumCalculator;
 
       referenceLendingPools = (await ethers.getContractAt(
         "ReferenceLendingPools",
@@ -122,8 +122,11 @@ const testPool: Function = (
         );
       });
       it("...set the premium pricing contract address", async () => {
-        const _premiumPricingAddress: string = await pool.premiumPricing();
-        expect(_premiumPricingAddress).to.eq(premiumPricing.address);
+        const _riskPremiumCalculatorAddress: string =
+          await pool.riskPremiumCalculator();
+        expect(_riskPremiumCalculatorAddress).to.eq(
+          riskPremiumCalculator.address
+        );
       });
     });
 
@@ -234,9 +237,9 @@ const testPool: Function = (
         let _expirationTime: BigNumber = getUnixTimestampOfSomeMonthAhead(3);
         _protectionAmount = BigNumber.from(10000).mul(USDC_DECIMALS);
 
-        const _premiumAmount: BigNumber = await premiumPricing.calculatePremium(
-          _expirationTime,
-          _protectionAmount
+        // 10% premium
+        const _premiumAmount: BigNumber = _protectionAmount.div(
+          BigNumber.from(10)
         );
 
         const _initialPremiumAmountOfAccount: BigNumber = BigNumber.from(0);

@@ -37,34 +37,34 @@ const testAccruedPremiumCalculator: Function = (
       lambda = KAndLamda[1];
     });
 
-    describe("calculateRiskFactor", () => {
-      it("... calculates correct risk factor", async () => {
-        const riskFactor = await accruedPremiumCalculator.calculateRiskFactor(
-          _currentLeverageRatio,
-          _leverageRatioFloor,
-          _leverageRatioCeiling,
-          _leverageRatioBuffer,
-          _curvature
-        );
-        expect(riskFactor).to.be.eq(parseEther("0.061111111111111111"));
-      });
+    // describe("calculateRiskFactor", () => {
+    //   it("... calculates correct risk factor", async () => {
+    //     const riskFactor = await accruedPremiumCalculator.calculateRiskFactor(
+    //       _currentLeverageRatio,
+    //       _leverageRatioFloor,
+    //       _leverageRatioCeiling,
+    //       _leverageRatioBuffer,
+    //       _curvature
+    //     );
+    //     expect(riskFactor).to.be.eq(parseEther("0.061111111111111111"));
+    //   });
 
-      it("... calculates risk factor without underflow/overflow for range 0.1 to 0.2", async () => {
-        const step = parseEther("0.005");
-        let leverageRatio = _leverageRatioFloor;
-        while (leverageRatio.lte(_leverageRatioCeiling)) {
-          await accruedPremiumCalculator.calculateRiskFactor(
-            leverageRatio,
-            _leverageRatioFloor,
-            _leverageRatioCeiling,
-            _leverageRatioBuffer,
-            _curvature
-          );
-          leverageRatio = leverageRatio.add(step);
-        }
-        expect(true).to.be.true;
-      });
-    });
+    //   it("... calculates risk factor without underflow/overflow for range 0.1 to 0.2", async () => {
+    //     const step = parseEther("0.005");
+    //     let leverageRatio = _leverageRatioFloor;
+    //     while (leverageRatio.lte(_leverageRatioCeiling)) {
+    //       await accruedPremiumCalculator.calculateRiskFactor(
+    //         leverageRatio,
+    //         _leverageRatioFloor,
+    //         _leverageRatioCeiling,
+    //         _leverageRatioBuffer,
+    //         _curvature
+    //       );
+    //       leverageRatio = leverageRatio.add(step);
+    //     }
+    //     expect(true).to.be.true;
+    //   });
+    // });
 
     describe("calculateKAndLambda", () => {
       it("... calculates correct K and lambda", async () => {

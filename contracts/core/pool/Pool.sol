@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./SToken.sol";
-import "../../interfaces/IPremiumPricing.sol";
+import "../../interfaces/IRiskPremiumCalculator.sol";
 import "../../interfaces/IReferenceLendingPools.sol";
 import "../../interfaces/IPoolCycleManager.sol";
 import "../../interfaces/IPool.sol";
@@ -31,7 +31,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /*** state variables ***/
 
   /// @notice Reference to the PremiumPricing contract
-  IPremiumPricing public immutable premiumPricing;
+  IRiskPremiumCalculator public immutable riskPremiumCalculator;
 
   /// @notice Reference to the PoolCycleManager contract
   IPoolCycleManager public immutable poolCycleManager;
@@ -111,20 +111,20 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /*** constructor ***/
   /**
    * @param _poolInfo The information about the pool.
-   * @param _premiumPricing an address of a premium pricing contract
+   * @param _riskPremiumCalculator an address of a premium pricing contract
    * @param _poolCycleManager an address of a pool cycle manager contract
    * @param _name a name of the sToken
    * @param _symbol a symbol of the sToken
    */
   constructor(
     PoolInfo memory _poolInfo,
-    IPremiumPricing _premiumPricing,
+    IRiskPremiumCalculator _riskPremiumCalculator,
     IPoolCycleManager _poolCycleManager,
     string memory _name,
     string memory _symbol
   ) SToken(_name, _symbol) {
     poolInfo = _poolInfo;
-    premiumPricing = _premiumPricing;
+    riskPremiumCalculator = _riskPremiumCalculator;
     poolCycleManager = _poolCycleManager;
     buyerAccountIdCounter.increment();
     emit PoolInitialized(
@@ -158,9 +158,13 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _createBuyerAccount();
     }
     accruePremium();
-    uint256 _premiumAmount = premiumPricing.calculatePremium(
+    //TODO: update buyProtection to add protectionBuyerApy param
+    uint256 _premiumAmount = riskPremiumCalculator.calculatePremium(
       _expirationTime,
-      _protectionAmount
+      _protectionAmount,
+      0,
+      0, // leverage ratio
+      poolInfo.params
     );
     uint256 _accountId = ownerAddressToBuyerAccountId[msg.sender];
     buyerAccounts[_accountId][_lendingPoolId] += _premiumAmount;
