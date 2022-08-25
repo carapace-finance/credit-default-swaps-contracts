@@ -5,8 +5,6 @@ import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "./IReferenceLendingPools.sol";
 
 abstract contract IPool {
-  uint256 public constant SCALE_18_DECIMALS = 10**18;
-
   /*** structs ***/
 
   /// @notice Contains pool cycle related parameters.
