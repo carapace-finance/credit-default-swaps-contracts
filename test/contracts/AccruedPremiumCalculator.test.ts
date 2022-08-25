@@ -37,6 +37,7 @@ const testAccruedPremiumCalculator: Function = (
       lambda = KAndLamda[1];
     });
 
+    // TODO: move to new RiskFactor spec
     // describe("calculateRiskFactor", () => {
     //   it("... calculates correct risk factor", async () => {
     //     const riskFactor = await accruedPremiumCalculator.calculateRiskFactor(

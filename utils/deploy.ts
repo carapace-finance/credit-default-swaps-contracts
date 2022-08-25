@@ -159,7 +159,7 @@ export {
   deployContracts,
   poolInstance,
   poolFactoryInstance,
-  riskPremiumCalculatorInstance as premiumPricingInstance,
+  riskPremiumCalculatorInstance,
   referenceLendingPoolsInstance,
   poolCycleManagerInstance,
   accruedPremiumCalculatorInstance

@@ -11,8 +11,16 @@ import "../libraries/RiskFactorCalculator.sol";
 contract RiskPremiumCalculator is IRiskPremiumCalculator {
   using PRBMathSD59x18 for int256;
 
+  /**
+   * @notice Calculates and returns the premium amount scaled to 18 decimals.
+   * @param _protectionExpirationTimestamp the expiration time of the pool in seconds
+   * @param _protectionAmount the protection amount scaled to 18 decimals
+   * @param _protectionBuyerApy the protection buyer's APY scaled to 18 decimals
+   * @param _leverageRatio the leverage ratio of the pool scaled to 18 decimals
+   * @param _poolParameters the pool parameters
+   */
   function calculatePremium(
-    uint256 _expirationTime,
+    uint256 _protectionExpirationTimestamp,
     uint256 _protectionAmount,
     uint256 _protectionBuyerApy,
     uint256 _leverageRatio,
@@ -20,7 +28,7 @@ contract RiskPremiumCalculator is IRiskPremiumCalculator {
   ) public view override returns (uint256) {
     console.log(
       "Calculating premium... expiration time: %s, protection amount: %s, leverage ratio: %s",
-      _expirationTime,
+      _protectionExpirationTimestamp,
       _protectionAmount,
       _leverageRatio
     );
@@ -32,37 +40,50 @@ contract RiskPremiumCalculator is IRiskPremiumCalculator {
       _poolParameters.leverageRatioBuffer,
       _poolParameters.curvature
     );
+    console.logInt(riskFactor);
 
     /// protection duration in years scaled to 18 decimals: ((expiration time - current time) / SECONDS_IN_DAY) / 365.24
-    int256 duration_in_years = int256(
-      (_expirationTime - block.timestamp) * 100 * Constants.SCALE_18_DECIMALS
+    int256 durationInYears = int256(
+      (_protectionExpirationTimestamp - block.timestamp) *
+        100 *
+        Constants.SCALE_18_DECIMALS
     ) / (Constants.SECONDS_IN_DAY * 36524);
 
-    // need to scale down because duration_in_years and risk factor both are in 18 decimals
-    int256 power = (-1 * duration_in_years * riskFactor) /
+    /// need to scale down once because durationInYears and riskFactor both are in 18 decimals
+    /// defaultRate = 1 - (e ** (-1 * durationInYears * risk_factor))
+    int256 power = (-1 * durationInYears * riskFactor) /
       int256(Constants.SCALE_18_DECIMALS);
     int256 exp = power.exp();
-    int256 default_rate = int256(1 * Constants.SCALE_18_DECIMALS) - exp;
-    console.logInt(default_rate);
+    int256 defaultRate = int256(1 * Constants.SCALE_18_DECIMALS) - exp;
+    console.logInt(defaultRate);
 
+    /// carapacePremiumRate = max(defaultRate, MIN_CARAPACE_RISK_PREMIUM)
     int256 minRiskPremiumPercent = int256(
       _poolParameters.minRiskPremiumPercent
     );
-    int256 carapace_premium_rate = default_rate > minRiskPremiumPercent
-      ? default_rate
+    int256 carapacePremiumRate = defaultRate > minRiskPremiumPercent
+      ? defaultRate
       : minRiskPremiumPercent;
-    console.logInt(carapace_premium_rate);
+    console.logInt(carapacePremiumRate);
 
-    int256 underlyingPremiumRate = int256(
+    /// need to scale down twice because all 3 params (underlyingRiskPremiumPercent, duration_in_years, protectionBuyerApy) are in 18 decimals
+    /// underlyingPremiumRate = UNDERLYING_RISK_PREMIUM_PERCENT * _protectionBuyerApy * durationInYears
+    int256 underlyingPremiumRate = (int256(
       _poolParameters.underlyingRiskPremiumPercent
     ) *
-      duration_in_years *
-      int256(_protectionBuyerApy);
+      durationInYears *
+      int256(_protectionBuyerApy)) /
+      int256(Constants.SCALE_18_DECIMALS * Constants.SCALE_18_DECIMALS);
     console.logInt(underlyingPremiumRate);
 
-    int256 premium_rate = carapace_premium_rate + underlyingPremiumRate;
+    int256 premiumRate = carapacePremiumRate + underlyingPremiumRate;
+    console.logInt(premiumRate);
 
-    assert(premium_rate >= 0);
-    return _protectionAmount * uint256(premium_rate);
+    assert(premiumRate > 0);
+
+    // need to scale down once because protectionAmount & premiumRate both are in 18 decimals
+    return
+      (_protectionAmount * uint256(premiumRate)) /
+      uint256(Constants.SCALE_18_DECIMALS);
   }
 }
