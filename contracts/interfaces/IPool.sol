@@ -144,9 +144,4 @@ abstract contract IPool {
    * @notice This is the total of capital deposited by sellers + accrued premiums from buyers - default payouts.
    */
   function getTotalCapital() public view virtual returns (uint256);
-
-  /**
-   * @notice Returns the total protection brought from the pool.
-   */
-  function getTotalProtection() public view virtual returns (uint256);
 }

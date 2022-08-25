@@ -31,6 +31,7 @@ describe("start testing", () => {
 
     it("run the PoolFactory test", async () => {
       testPoolFactory(
+        deployer,
         account1,
         poolFactoryInstance,
         premiumPricingInstance,

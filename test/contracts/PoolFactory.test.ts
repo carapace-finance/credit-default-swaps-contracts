@@ -8,22 +8,28 @@ import { PoolFactory } from "../../typechain-types/contracts/core/PoolFactory";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { ethers } from "hardhat";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
-import { IPool } from "../../typechain-types/contracts/core/pool/Pool";
+import { IPool, Pool } from "../../typechain-types/contracts/core/pool/Pool";
 import { parseUSDC } from "../utils/usdc";
+import { getLatestBlockTimestamp } from "../utils/time";
 
 const testPoolFactory: Function = (
+  deployer: Signer,
   account1: Signer,
   poolFactory: PoolFactory,
   premiumPricing: PremiumPricing,
   referenceLendingPools: ReferenceLendingPools
 ) => {
   describe("PoolFactory", () => {
+    let poolCycleManager: PoolCycleManager;
+    before(async () => {
+      poolCycleManager = (await ethers.getContractAt(
+        "PoolCycleManager",
+        await poolFactory.poolCycleManager()
+      )) as PoolCycleManager;
+    });
     describe("createPool", async () => {
-      const _firstPoolFirstTrancheSalt: string = "0x".concat(
-        process.env.FIRST_POOL_FIRST_TRANCHE_SALT
-      );
       const _secondPoolFirstTrancheSalt: string = "0x".concat(
-        process.env.SECOND_POOL_FIRST_TRANCHE_SALT
+        process.env.SECOND_POOL_SALT
       );
       const poolCycleParams: IPool.PoolCycleParamsStruct = {
         openCycleDuration: BigNumber.from(10 * 86400), // 10 days
@@ -48,7 +54,7 @@ const testPoolFactory: Function = (
           poolFactory
             .connect(account1)
             .createPool(
-              _firstPoolFirstTrancheSalt,
+              _secondPoolFirstTrancheSalt,
               _poolParams,
               USDC_ADDRESS,
               referenceLendingPools.address,
@@ -64,50 +70,33 @@ const testPoolFactory: Function = (
 
       it("...fail if the ceiling is", async () => {});
 
-      it("...create the first pool", async () => {
-        expect(
-          await poolFactory.createPool(
-            _firstPoolFirstTrancheSalt,
-            _poolParams,
-            USDC_ADDRESS,
-            referenceLendingPools.address,
-            premiumPricing.address,
-            "sToken11",
-            "sT11"
-          )
-        )
-          .to.emit(poolFactory, "PoolCreated")
-          .withArgs(
-            _firstPoolId,
-            _floor,
-            _ceiling,
-            USDC_ADDRESS,
-            referenceLendingPools.address,
-            premiumPricing.address
-          )
-          .to.emit(poolFactory, "PoolCycleCreated")
-          .withArgs(
-            _firstPoolId,
-            0,
-            anyValue,
-            poolCycleParams.openCycleDuration,
-            poolCycleParams.cycleDuration
-          );
-      });
-
       it("...the poolId 0 should be empty", async () => {
         expect(await poolFactory.poolIdToPoolAddress(0)).to.equal(
           "0x0000000000000000000000000000000000000000"
         );
       });
 
-      it("...should increment the pool id counter", async () => {
+      it("...should have correct pool id counter", async () => {
+        // 1st pool is already created by deploy script
         expect(await poolFactory.poolIdCounter()).equal(2);
       });
 
-      it("...create the second pool", async () => {
+      it("...should have started a new pool cycle for 1st pool created", async () => {
         expect(
-          await poolFactory.createPool(
+          await poolCycleManager.getCurrentCycleIndex(_firstPoolId)
+        ).to.equal(0);
+        expect(
+          await poolCycleManager.getCurrentCycleState(_firstPoolId)
+        ).to.equal(1); // 1 = Open
+      });
+
+      // 1st pool is already created by deploy script
+      it("...create the second pool", async () => {
+        const expectedCycleStartTimestamp: BigNumber =
+          (await getLatestBlockTimestamp()) + 1;
+
+        await expect(
+          poolFactory.createPool(
             _secondPoolFirstTrancheSalt,
             _poolParams,
             USDC_ADDRESS,
@@ -120,35 +109,25 @@ const testPoolFactory: Function = (
           .to.emit(poolFactory, "PoolCreated")
           .withArgs(
             _secondPoolId,
+            anyValue,
             _floor,
             _ceiling,
             USDC_ADDRESS,
             referenceLendingPools.address,
             premiumPricing.address
           )
-          .to.emit(poolFactory, "PoolCycleCreated")
+          // Newly created pool should be registered to PoolCycleManager
+          .to.emit(poolCycleManager, "PoolCycleCreated")
           .withArgs(
             _secondPoolId,
             0,
-            anyValue,
+            expectedCycleStartTimestamp,
             poolCycleParams.openCycleDuration,
             poolCycleParams.cycleDuration
           );
       });
 
-      it("...should start new pool cycles for created pools", async () => {
-        const poolCycleManager: PoolCycleManager = (await ethers.getContractAt(
-          "PoolCycleManager",
-          await poolFactory.poolCycleManager()
-        )) as PoolCycleManager;
-
-        expect(
-          await poolCycleManager.getCurrentCycleIndex(_firstPoolId)
-        ).to.equal(0);
-        expect(
-          await poolCycleManager.getCurrentCycleState(_firstPoolId)
-        ).to.equal(1); // 1 = Open
-
+      it("...should start new pool cycle for the second pool", async () => {
         expect(
           await poolCycleManager.getCurrentCycleIndex(_secondPoolId)
         ).to.equal(0);
@@ -161,21 +140,25 @@ const testPoolFactory: Function = (
         ).to.equal((await ethers.provider.getBlock("latest")).timestamp);
       });
 
-      // it("...the second pool address should match the second pool address in the poolIdToPoolAddress", async () => {
-      //   const secondPoolAddress = await poolFactory.callStatic.createPool(
-      //     _secondPoolFirstTrancheSalt,
-      //     _floor,
-      //     _ceiling,
-      //     USDC_ADDRESS,
-      //     referenceLendingPools.address,
-      //     premiumPricing.address,
-      //     "sToken21",
-      //     "sT21"
-      //   );
-      //   expect(secondPoolAddress).to.equal(
-      //     await poolFactory.poolIdToPoolAddress(2)
-      //   );
-      // });
+      it("...should increment the pool id counter", async () => {
+        expect(await poolFactory.poolIdCounter()).equal(3);
+      });
+
+      it("...should transfer pool's ownership to poolFactory's owner", async () => {
+        const deployerAddress: string = await deployer.getAddress();
+        expect(poolFactory)
+          .to.emit(poolFactory, "OwnershipTransferred")
+          .withArgs(poolFactory.address, deployerAddress);
+
+        const secondPoolAddress: string = await poolFactory.poolIdToPoolAddress(
+          _secondPoolId
+        );
+        const secondPool: Pool = (await ethers.getContractAt(
+          "Pool",
+          secondPoolAddress
+        )) as Pool;
+        expect(await secondPool.owner()).to.equal(deployerAddress);
+      });
     });
   });
 };
