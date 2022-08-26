@@ -42,16 +42,6 @@ library RiskFactorCalculator {
     int256 _denominator = int256(_currentLeverageRatio) -
       int256(_leverageRatioFloor - _leverageRatioBuffer);
 
-    /// TODO: implement (CARA-726)
-    /// When leverage ratio is less than floor, risk factor should be calculated using min premium instead of leverage ratio.
-    // if (_currentLeverageRatio < _leverageRatioFloor) {
-    //   console.log(
-    //     "Current leverage ratio: %s is less than floor: %s",
-    //     _currentLeverageRatio,
-    //     _leverageRatioFloor
-    //   );
-    // }
-
     return (int256(_curvature) * _numerator) / _denominator;
   }
 }
