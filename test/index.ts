@@ -3,6 +3,7 @@ import { testPoolFactory } from "./contracts/PoolFactory.test";
 import { testPoolCycleManager } from "./contracts/PoolCycleManager.test";
 import { testAccruedPremiumCalculator } from "./contracts/AccruedPremiumCalculator.test";
 import { testPremiumCalculator } from "./contracts/PremiumCalculator.test";
+import { testRiskFactorCalculator } from "./contracts/RiskFactorCalculator.test";
 
 import {
   deployer,
@@ -16,7 +17,8 @@ import {
   premiumCalculatorInstance,
   referenceLendingPoolsInstance,
   poolCycleManagerInstance,
-  accruedPremiumCalculatorInstance
+  accruedPremiumCalculatorInstance,
+  riskFactorCalculatorInstance
 } from "../utils/deploy";
 
 describe("start testing", () => {
@@ -25,6 +27,18 @@ describe("start testing", () => {
   });
 
   describe("run all the tests", () => {
+    it("run the RiskFactorCalculator test", async () => {
+      testRiskFactorCalculator(riskFactorCalculatorInstance);
+    });
+
+    it("run the AccruedPremiumCalculator test", async () => {
+      testAccruedPremiumCalculator(accruedPremiumCalculatorInstance);
+    });
+
+    it("run the RiskPremiumCalculator test", async () => {
+      testPremiumCalculator(premiumCalculatorInstance);
+    });
+
     it("run the Pool test", async () => {
       testPool(deployer, account1, account2, account3, poolInstance);
     });
@@ -41,14 +55,6 @@ describe("start testing", () => {
 
     it("run the PoolCycleManager test", async () => {
       testPoolCycleManager(deployer, account1, poolCycleManagerInstance);
-    });
-
-    it("run the AccruedPremiumCalculator test", async () => {
-      testAccruedPremiumCalculator(accruedPremiumCalculatorInstance);
-    });
-
-    it("run the RiskPremiumCalculator test", async () => {
-      testPremiumCalculator(premiumCalculatorInstance);
     });
   });
 });

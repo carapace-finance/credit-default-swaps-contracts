@@ -162,5 +162,6 @@ export {
   premiumCalculatorInstance,
   referenceLendingPoolsInstance,
   poolCycleManagerInstance,
-  accruedPremiumCalculatorInstance
+  accruedPremiumCalculatorInstance,
+  riskFactorCalculatorInstance
 };
