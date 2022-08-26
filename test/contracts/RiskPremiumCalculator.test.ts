@@ -36,6 +36,23 @@ const testRiskPremiumCalculator: Function = (
     };
 
     describe("calculatePremium", () => {
+      it("... calculates correct premium amount for a leverage ratio 0", async () => {
+        const _expirationTimestamp = await getUnixTimestampAheadByDays(180);
+
+        const premium = await riskPremiumCalculator.calculatePremium(
+          _expirationTimestamp,
+          _protectionAmt,
+          _protectionBuyerApy,
+          0,
+          _poolParams
+        );
+        console.log(`Premium: ${formatEther(premium)}`);
+
+        expect(premium)
+          .to.be.gt(parseEther("2837.8052"))
+          .and.lt(parseEther("2837.8053"));
+      });
+
       it("... calculates correct premium amount for a period of 180 days", async () => {
         const _expirationTimestamp = await getUnixTimestampAheadByDays(180);
 

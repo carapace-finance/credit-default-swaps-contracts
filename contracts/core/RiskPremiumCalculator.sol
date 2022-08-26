@@ -11,14 +11,7 @@ import "../libraries/RiskFactorCalculator.sol";
 contract RiskPremiumCalculator is IRiskPremiumCalculator {
   using PRBMathSD59x18 for int256;
 
-  /**
-   * @notice Calculates and returns the premium amount scaled to 18 decimals.
-   * @param _protectionExpirationTimestamp the expiration time of the pool in seconds
-   * @param _protectionAmount the protection amount scaled to 18 decimals
-   * @param _protectionBuyerApy the protection buyer's APY scaled to 18 decimals
-   * @param _leverageRatio the leverage ratio of the pool scaled to 18 decimals
-   * @param _poolParameters the pool parameters
-   */
+  /// @inheritdoc IRiskPremiumCalculator
   function calculatePremium(
     uint256 _protectionExpirationTimestamp,
     uint256 _protectionAmount,
@@ -41,6 +34,10 @@ contract RiskPremiumCalculator is IRiskPremiumCalculator {
       _poolParameters.curvature
     );
     console.logInt(riskFactor);
+    console.log(
+      "Protection time in seconds: %s",
+      _protectionExpirationTimestamp - block.timestamp
+    );
 
     /// protection duration in years scaled to 18 decimals: ((expiration time - current time) / SECONDS_IN_DAY) / 365.24
     int256 durationInYears = int256(

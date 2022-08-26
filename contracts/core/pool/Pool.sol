@@ -138,15 +138,18 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /*** state-changing functions ***/
 
   /**
-   * @dev The underlyingToken must be approved first.
+   * @notice Adds a new protection to the pool for a premium amount.
+   * @dev The underlying tokens in the amount of premium must be approved first.
    * @param _lendingPoolId The id of the lending pool to be covered.
-   * @param _expirationTime For how long you want to cover.
-   * @param _protectionAmount How much you want to cover.
+   * @param _protectionExpirationTimestamp the expiration timestamp of the protection
+   * @param _protectionAmount the protection amount in underlying token
+   * @param _protectionBuyerApy the protection buyer's APY for the protected loan, scaled to 18 decimals
    */
   function buyProtection(
     uint256 _lendingPoolId,
-    uint256 _expirationTime,
-    uint256 _protectionAmount
+    uint256 _protectionExpirationTimestamp,
+    uint256 _protectionAmount,
+    uint256 _protectionBuyerApy
   )
     external
     whenNotExpired(_lendingPoolId)
@@ -157,15 +160,35 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     if (_noBuyerAccountExist() == true) {
       _createBuyerAccount();
     }
+
+    /// accrue premium before calculating leverage ratio
     accruePremium();
-    //TODO: update buyProtection to add protectionBuyerApy param
-    uint256 _premiumAmount = riskPremiumCalculator.calculatePremium(
-      _expirationTime,
-      _protectionAmount,
-      0,
-      0, // leverage ratio
+
+    /// Calculate & when total protection is higher than required min protection, ensure that leverage ratio floor is not breached
+    totalProtection += _protectionAmount;
+    uint256 _leverageRatio = calculateLeverageRatio();
+    if (totalProtection > poolInfo.params.minRequiredProtection) {
+      if (_leverageRatio < poolInfo.params.leverageRatioFloor) {
+        revert PoolLeverageRatioTooLow(poolInfo.poolId, _leverageRatio);
+      }
+    }
+
+    /// Calculate the protection premium amount scaled to 18 decimals and scaled to the underlying token decimals.
+    uint256 _premiumAmountIn18Decimals = riskPremiumCalculator.calculatePremium(
+      _protectionExpirationTimestamp,
+      scaleUnderlyingAmtTo18Decimals(_protectionAmount),
+      _protectionBuyerApy,
+      _leverageRatio,
       poolInfo.params
     );
+    console.log(
+      "protection premium amount in 18 decimals: %s",
+      _premiumAmountIn18Decimals
+    );
+    uint256 _premiumAmount = scale18DecimalsAmtToUnderlyingDecimals(
+      _premiumAmountIn18Decimals
+    );
+
     uint256 _accountId = ownerAddressToBuyerAccountId[msg.sender];
     buyerAccounts[_accountId][_lendingPoolId] += _premiumAmount;
     poolInfo.underlyingToken.transferFrom(
@@ -175,30 +198,20 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     );
     lendingPoolIdToPremiumTotal[_lendingPoolId] += _premiumAmount;
     totalPremium += _premiumAmount;
-    totalProtection += _protectionAmount;
 
     /// Capture loan protection data for premium accrual calculation
-    uint256 _protectionDurationInDays = (_expirationTime - block.timestamp) /
-      uint256(Constants.SECONDS_IN_DAY);
-    uint256 _protectionPremium = scaleUnderlyingAmtTo18Decimals(_premiumAmount);
-    uint256 _leverageRatio = calculateLeverageRatio();
-
-    /// Check for leverage ratio floor, when total protection is higher than required min protection
-    if (totalProtection > poolInfo.params.minRequiredProtection) {
-      if (_leverageRatio < poolInfo.params.leverageRatioFloor) {
-        revert PoolLeverageRatioTooLow(poolInfo.poolId, _leverageRatio);
-      }
-    }
+    uint256 _protectionDurationInDays = (_protectionExpirationTimestamp -
+      block.timestamp) / uint256(Constants.SECONDS_IN_DAY);
 
     console.log(
       "protectionDurationInDays: %s, protectionPremium: %s, leverageRatio: ",
       _protectionDurationInDays,
-      _protectionPremium,
+      _premiumAmount,
       _leverageRatio
     );
 
     (int256 K, int256 lambda) = AccruedPremiumCalculator.calculateKAndLambda(
-      _protectionPremium,
+      _premiumAmountIn18Decimals,
       _protectionDurationInDays,
       _leverageRatio,
       poolInfo.params.leverageRatioFloor,
@@ -213,13 +226,13 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         protectionPremium: _premiumAmount,
         protectionDurationInDays: _protectionDurationInDays,
         startTimestamp: block.timestamp,
-        expirationTimestamp: _expirationTime,
+        expirationTimestamp: _protectionExpirationTimestamp,
         K: K,
         lambda: lambda
       })
     );
 
-    emit ProtectionBought(msg.sender, _lendingPoolId, _premiumAmount);
+    emit ProtectionBought(msg.sender, _lendingPoolId, _protectionAmount);
   }
 
   /**

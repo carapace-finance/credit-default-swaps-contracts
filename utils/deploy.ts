@@ -118,9 +118,9 @@ const deployContracts: Function = async () => {
       leverageRatioCeiling: parseEther("0.2"),
       leverageRatioBuffer: parseEther("0.05"),
       minRequiredCapital: parseUSDC("50000"),
-      minRequiredProtection: parseUSDC("100000"),
+      minRequiredProtection: parseUSDC("200000"),
       curvature: parseEther("0.05"),
-      minRiskPremiumPercent: parseEther("0.2"),
+      minRiskPremiumPercent: parseEther("0.02"),
       underlyingRiskPremiumPercent: parseEther("0.1"),
       poolCycleParams: _poolCycleParams
     };

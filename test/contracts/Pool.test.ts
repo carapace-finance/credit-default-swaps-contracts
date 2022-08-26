@@ -14,7 +14,6 @@ import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool
 import { RiskPremiumCalculator } from "../../typechain-types/contracts/core/RiskPremiumCalculator";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
 import {
-  getUnixTimestampOfSomeMonthAhead,
   getUnixTimestampAheadByDays,
   getDaysInSeconds,
   getLatestBlockTimestamp,
@@ -107,11 +106,19 @@ const testPool: Function = (
       });
       it("...set the min required protection", async () => {
         expect(poolInfo.params.minRequiredProtection).to.eq(
-          parseUSDC("100000")
+          parseUSDC("200000")
         );
       });
       it("...set the curvature", async () => {
         expect(poolInfo.params.curvature).to.eq(parseEther("0.05"));
+      });
+      it("...set the minRiskPremiumPercent", async () => {
+        expect(poolInfo.params.minRiskPremiumPercent).to.eq(parseEther("0.02"));
+      });
+      it("...set the underlyingRiskPremiumPercent", async () => {
+        expect(poolInfo.params.underlyingRiskPremiumPercent).to.eq(
+          parseEther("0.1")
+        );
       });
       it("...set the underlying token", async () => {
         expect(poolInfo.underlyingToken.toString()).to.eq(USDC_ADDRESS);
@@ -153,6 +160,8 @@ const testPool: Function = (
     });
 
     describe("buyProtection", () => {
+      const _lendingPoolId: BigNumber = BigNumber.from(0);
+      let _protectionBuyerApy: BigNumber = parseEther("0.17"); // 17%
       let _protectionAmount: BigNumber;
 
       it("...should expire the referenceLendingPools", async () => {
@@ -183,7 +192,7 @@ const testPool: Function = (
       });
 
       it("...fails if the pool contract is paused", async () => {
-        await expect(pool.buyProtection(0, 0, 0)).to.be.revertedWith(
+        await expect(pool.buyProtection(0, 0, 0, 0)).to.be.revertedWith(
           "Pausable: paused"
         );
       });
@@ -204,61 +213,52 @@ const testPool: Function = (
       it("...fail if USDC is not approved", async () => {
         _protectionAmount = BigNumber.from(10).mul(USDC_DECIMALS);
         await expect(
-          pool.buyProtection(0, 0, _protectionAmount)
+          pool.buyProtection(
+            _lendingPoolId,
+            await getUnixTimestampAheadByDays(10),
+            _protectionAmount,
+            _protectionBuyerApy
+          )
         ).to.be.revertedWith("ERC20: transfer amount exceeds allowance");
       });
 
-      it("...approve 1000 USDC to be transferred by the Pool contract", async () => {
-        expect(
-          await USDC.approve(
-            pool.address,
-            BigNumber.from(1000).mul(USDC_DECIMALS)
-          )
-        )
+      it("...approve 2500 USDC to be transferred by the Pool contract", async () => {
+        const _approvedAmt = parseUSDC("2500");
+        expect(await USDC.approve(pool.address, _approvedAmt))
           .to.emit(USDC, "Approval")
-          .withArgs(
-            deployerAddress,
-            pool.address,
-            BigNumber.from(1000).mul(USDC_DECIMALS)
-          );
+          .withArgs(deployerAddress, pool.address, _approvedAmt);
 
         const _allowanceAmount: number = await USDC.allowance(
           deployerAddress,
           pool.address
         );
-        expect(_allowanceAmount.toString()).to.eq(
-          BigNumber.from(1000).mul(USDC_DECIMALS).toString()
-        );
+        expect(_allowanceAmount).to.eq(_approvedAmt);
       });
 
       it("...create a new buyer account and buy protection", async () => {
         const _initialBuyerAccountId: BigNumber = BigNumber.from(1);
-        const _lendingPoolId: BigNumber = BigNumber.from(0);
-        let _expirationTime: BigNumber = getUnixTimestampOfSomeMonthAhead(3);
-        _protectionAmount = BigNumber.from(10000).mul(USDC_DECIMALS);
-
-        // 10% premium
-        const _premiumAmount: BigNumber = _protectionAmount.div(
-          BigNumber.from(10)
-        );
+        let _expirationTime: BigNumber = await getUnixTimestampAheadByDays(90);
+        _protectionAmount = parseUSDC("100000"); // 100,000 USDC
 
         const _initialPremiumAmountOfAccount: BigNumber = BigNumber.from(0);
         const _premiumTotalOfLendingPoolIdBefore: BigNumber =
           await pool.lendingPoolIdToPremiumTotal(_lendingPoolId);
         const _premiumTotalBefore: BigNumber = await pool.totalPremium();
 
+        const _expectedPremiumAmount = parseUSDC("2418.902585");
         expect(
           await pool.buyProtection(
             _lendingPoolId,
             _expirationTime,
-            _protectionAmount
+            _protectionAmount,
+            _protectionBuyerApy
           )
         )
           .emit(pool, "PremiumAccrued")
           .to.emit(pool, "BuyerAccountCreated")
           .withArgs(deployerAddress, _initialBuyerAccountId)
           .to.emit(pool, "CoverageBought")
-          .withArgs(deployerAddress, _lendingPoolId, _premiumAmount);
+          .withArgs(deployerAddress, _lendingPoolId, _protectionAmount);
 
         const _premiumAmountOfAccountAfter: BigNumber =
           await pool.buyerAccounts(_initialBuyerAccountId, _lendingPoolId);
@@ -266,15 +266,16 @@ const testPool: Function = (
           await pool.lendingPoolIdToPremiumTotal(_lendingPoolId);
         const _premiumTotalAfter: BigNumber = await pool.totalPremium();
 
-        expect(_initialPremiumAmountOfAccount.add(_premiumAmount)).to.eq(
-          _premiumAmountOfAccountAfter
-        );
-        expect(_premiumTotalBefore.add(_premiumAmount)).to.eq(
+        expect(
+          _premiumAmountOfAccountAfter.sub(_initialPremiumAmountOfAccount)
+        ).to.eq(_expectedPremiumAmount);
+
+        expect(_premiumTotalBefore.add(_expectedPremiumAmount)).to.eq(
           _premiumTotalAfter
         );
-        expect(_premiumTotalOfLendingPoolIdBefore.add(_premiumAmount)).to.eq(
-          _premiumTotalOfLendingPoolIdAfter
-        );
+        expect(
+          _premiumTotalOfLendingPoolIdBefore.add(_expectedPremiumAmount)
+        ).to.eq(_premiumTotalOfLendingPoolIdAfter);
         expect(await pool.totalProtection()).to.eq(_protectionAmount);
       });
 
@@ -287,14 +288,21 @@ const testPool: Function = (
       });
 
       it("...fail when total protection crosses min requirement with leverage ratio breaching floor", async () => {
-        const _expirationTime: BigNumber = getUnixTimestampAheadByDays(30);
-        const _protectionAmount = parseUSDC("100000");
+        const _expirationTime: BigNumber = await getUnixTimestampAheadByDays(
+          30
+        );
 
+        const _protectionAmount = parseUSDC("110000");
         await USDC.approve(pool.address, _protectionAmount);
 
         await expect(
-          pool.buyProtection(1, _expirationTime, _protectionAmount)
-        ).to.be.revertedWith("PoolLeverageRatioTooLow(1, 2236363636)");
+          pool.buyProtection(
+            1,
+            _expirationTime,
+            _protectionAmount,
+            _protectionBuyerApy
+          )
+        ).to.be.revertedWith("PoolLeverageRatioTooLow(1, 2904761904)");
       });
     });
 
@@ -393,7 +401,7 @@ const testPool: Function = (
           .withArgs(sellerAddress, _underlyingAmount);
       });
 
-      it("...interest accrued", async () => {
+      it("...premium accrued", async () => {
         expect(await pool.lastPremiumAccrualTimestamp()).to.eq(
           await getLatestBlockTimestamp()
         );
@@ -421,14 +429,14 @@ const testPool: Function = (
         );
       });
 
-      // We have 1000 USDC premium from the protection buyer + 10 USDC from the deposit
-      it("...should return 1010 total underlying amount received as premium + deposit", async () => {
+      // We have 2418.xx USDC premium from the protection buyer + 10 USDC from the deposit
+      it("...should return total underlying amount received as premium + deposit", async () => {
         const _totalUnderlying: BigNumber = await USDC.balanceOf(pool.address);
-        expect(_totalUnderlying).to.eq(BigNumber.from(1010).mul(USDC_DECIMALS));
+        expect(_totalUnderlying).to.eq(parseUSDC("2428.902585"));
       });
 
       it("...fail if deposit causes to breach leverage ratio ceiling", async () => {
-        expect(await pool.totalProtection()).to.eq(parseUSDC("10000"));
+        expect(await pool.totalProtection()).to.eq(parseUSDC("100000"));
 
         const depositAmt: BigNumber = parseUSDC("52000");
 
@@ -445,7 +453,7 @@ const testPool: Function = (
 
         // 2nd deposit will receive less sTokens shares than the first deposit because of the premium accrued
         expect(await pool.connect(seller).balanceOf(sellerAddress))
-          .to.be.gt(parseEther("19.999"))
+          .to.be.gt(parseEther("19.9978"))
           .and.lt(parseEther("20"));
       });
 
@@ -469,8 +477,8 @@ const testPool: Function = (
     describe("calculateLeverageRatio after 1 protection & 2 deposits", () => {
       it("...should return correct leverage ratio", async () => {
         expect(await pool.calculateLeverageRatio())
-          .to.be.gt(parseEther("0.002"))
-          .and.lt(parseEther("0.0021"));
+          .to.be.gt(parseEther("0.0002"))
+          .and.lt(parseEther("0.00021"));
       });
     });
 
@@ -598,52 +606,59 @@ const testPool: Function = (
       it("...should remove single expired protection", async () => {
         const protectionCount = (await pool.getAllProtections()).length;
         expect(protectionCount).to.eq(1);
-        expect(await pool.totalProtection()).to.eq(parseUSDC("10000"));
+        expect(await pool.totalProtection()).to.eq(parseUSDC("100000"));
+        const lendingPoolId = BigNumber.from(11);
         await pool.buyProtection(
-          BigNumber.from(1),
-          getUnixTimestampOfSomeMonthAhead(1),
-          parseUSDC("20000")
+          lendingPoolId,
+          await getUnixTimestampAheadByDays(30),
+          parseUSDC("20000"),
+          parseEther("0.17")
         );
-        expect(await pool.totalProtection()).to.eq(parseUSDC("30000"));
+        expect(await pool.totalProtection()).to.eq(parseUSDC("120000")); // 120K
         expect(await pool.getAllProtections()).to.have.lengthOf(2);
 
         // move forward time by 31 days
-        await moveForwardTime(BigNumber.from(31 * 24 * 60 * 60));
+        await moveForwardTime(getDaysInSeconds(31));
 
         // 2nd protection should be expired and removed
         await pool.accruePremium();
         expect(await pool.getAllProtections()).to.have.lengthOf(1);
-        expect(await pool.totalProtection()).to.eq(parseUSDC("10000"));
+        expect(await pool.totalProtection()).to.eq(parseUSDC("100000"));
 
         // all premium for expired protection should be accrued
-        expect(await pool.totalPremiumAccrued()).to.be.gt(parseUSDC("2000"));
+        expect(await pool.lendingPoolIdToPremiumTotal(lendingPoolId)).to.eq(
+          parseUSDC("427.926831")
+        );
       });
 
       it("...should remove multiple expired protection", async () => {
         const protectionCount = (await pool.getAllProtections()).length;
         expect(protectionCount).to.eq(1);
-        expect(await pool.totalProtection()).to.eq(parseUSDC("10000"));
+        expect(await pool.totalProtection()).to.eq(parseUSDC("100000"));
 
         // add bunch of protections
         await pool.buyProtection(
           BigNumber.from(2),
           await getUnixTimestampAheadByDays(10),
-          parseUSDC("20000")
+          parseUSDC("20000"),
+          parseEther("0.15")
         );
 
         await pool.buyProtection(
           BigNumber.from(1),
           await getUnixTimestampAheadByDays(20),
-          parseUSDC("30000")
+          parseUSDC("30000"),
+          parseEther("0.15")
         );
 
         await pool.buyProtection(
           BigNumber.from(1),
           await getUnixTimestampAheadByDays(30),
-          parseUSDC("40000")
+          parseUSDC("40000"),
+          parseEther("0.15")
         );
 
-        expect(await pool.totalProtection()).to.eq(parseUSDC("100000")); // 100K USDC
+        expect(await pool.totalProtection()).to.eq(parseUSDC("190000")); // 190K USDC
         expect(await pool.getAllProtections()).to.have.lengthOf(4);
 
         // move forward time by 21 days
@@ -652,7 +667,7 @@ const testPool: Function = (
         // 2nd & 3rd protections should be expired and removed
         await pool.accruePremium();
         expect(await pool.getAllProtections()).to.have.lengthOf(2);
-        expect(await pool.totalProtection()).to.eq(parseUSDC("50000"));
+        expect(await pool.totalProtection()).to.eq(parseUSDC("140000"));
       });
 
       // This test is meant to report gas usage for buyProtection with large numbers of protections in the pool
@@ -661,8 +676,9 @@ const testPool: Function = (
         for (let index = 0; index < 151; index++) {
           const tx = await pool.buyProtection(
             BigNumber.from(1),
-            getUnixTimestampOfSomeMonthAhead(3),
+            await getUnixTimestampAheadByDays(30),
             parseUSDC("10000"),
+            parseEther("0.15"),
             { gasLimit: 10_000_000 } // 30_000_000 is block gas limit
           );
 
@@ -695,8 +711,9 @@ const testPool: Function = (
         for (let index = 0; index < 150; index++) {
           await pool.buyProtection(
             BigNumber.from(1),
-            getUnixTimestampOfSomeMonthAhead(6),
+            await getUnixTimestampAheadByDays(60),
             parseUSDC("10000"),
+            parseEther("0.15"),
             { gasLimit: 10_000_000 } // 30_000_000 is block gas limit
           );
 
@@ -732,10 +749,15 @@ const testPool: Function = (
         );
 
         await pool.deposit(_underlyingAmount, sellerAddress);
-        await pool.buyProtection(1, _expirationTime, _protectionAmount);
+        await pool.buyProtection(
+          1,
+          _expirationTime,
+          _protectionAmount,
+          parseEther("0.15")
+        );
 
         expect(await pool.getAllProtections()).to.have.lengthOf(2);
-        expect(await pool.totalProtection()).to.eq(parseUSDC("20000"));
+        expect(await pool.totalProtection()).to.eq(parseUSDC("110000")); // 100K + 10K
 
         // state is reverted to just before 1st deposit, so we we can't count previous deposits
         expect(await pool.totalSellerDeposit()).to.eq(parseUSDC("1000"));
