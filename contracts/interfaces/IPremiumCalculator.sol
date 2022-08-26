@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import "./IPool.sol";
 
-abstract contract IRiskPremiumCalculator {
+abstract contract IPremiumCalculator {
   /**
    * @notice Calculates and returns the premium amount scaled to 18 decimals.
    * @param _protectionExpirationTimestamp the expiration time of the protection in seconds

@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "./pool/Pool.sol";
-import "../interfaces/IRiskPremiumCalculator.sol";
+import "../interfaces/IPremiumCalculator.sol";
 import "../interfaces/IReferenceLendingPools.sol";
 import "./PoolCycleManager.sol";
 
@@ -25,7 +25,7 @@ contract PoolFactory is Ownable {
     uint256 ceiling,
     IERC20 underlyingToken,
     IReferenceLendingPools referenceLendingPools,
-    IRiskPremiumCalculator riskPremiumCalculator
+    IPremiumCalculator premiumCalculator
   );
 
   /*** variables ***/
@@ -54,7 +54,7 @@ contract PoolFactory is Ownable {
    * @param _poolParameters struct containing pool related parameters.
    * @param _underlyingToken an address of an underlying token
    * @param _referenceLendingPools an address of the ReferenceLendingPools contract
-   * @param _riskPremiumCalculator an address of a RiskPremiumCalculator contract
+   * @param _premiumCalculator an address of a PremiumCalculator contract
    * @param _name a name of the sToken
    * @param _symbol a symbol of the sToken
    */
@@ -63,7 +63,7 @@ contract PoolFactory is Ownable {
     IPool.PoolParams memory _poolParameters,
     IERC20Metadata _underlyingToken,
     IReferenceLendingPools _referenceLendingPools,
-    IRiskPremiumCalculator _riskPremiumCalculator,
+    IPremiumCalculator _premiumCalculator,
     string memory _name,
     string memory _symbol
   ) public onlyOwner returns (address) {
@@ -75,7 +75,7 @@ contract PoolFactory is Ownable {
         underlyingToken: _underlyingToken,
         referenceLendingPools: _referenceLendingPools
       }),
-      _riskPremiumCalculator,
+      _premiumCalculator,
       poolCycleManager,
       _name,
       _symbol
@@ -99,7 +99,7 @@ contract PoolFactory is Ownable {
       _poolParameters.leverageRatioCeiling,
       _underlyingToken,
       _referenceLendingPools,
-      _riskPremiumCalculator
+      _premiumCalculator
     );
 
     /// transfer pool's ownership to the owner of the pool factory to enable pool's administration functions such as changing pool parameters

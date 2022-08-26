@@ -4,13 +4,13 @@ import { parseEther, formatEther } from "ethers/lib/utils";
 import { IPool } from "../../typechain-types/contracts/core/pool/Pool";
 import { parseUSDC } from "../utils/usdc";
 
-import { RiskPremiumCalculator } from "../../typechain-types/contracts/core/RiskPremiumCalculator";
+import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";
 import { getUnixTimestampAheadByDays } from "../utils/time";
 
-const testRiskPremiumCalculator: Function = (
-  riskPremiumCalculator: RiskPremiumCalculator
+const testPremiumCalculator: Function = (
+  premiumCalculator: PremiumCalculator
 ) => {
-  describe("RiskPremiumCalculator", () => {
+  describe("PremiumCalculator", () => {
     const _curvature: BigNumber = parseEther("0.05");
     const _leverageRatioFloor: BigNumber = parseEther("0.1");
     const _leverageRatioCeiling: BigNumber = parseEther("0.2");
@@ -39,7 +39,7 @@ const testRiskPremiumCalculator: Function = (
       it("... calculates correct premium amount for a leverage ratio 0", async () => {
         const _expirationTimestamp = await getUnixTimestampAheadByDays(180);
 
-        const premium = await riskPremiumCalculator.calculatePremium(
+        const premium = await premiumCalculator.calculatePremium(
           _expirationTimestamp,
           _protectionAmt,
           _protectionBuyerApy,
@@ -56,7 +56,7 @@ const testRiskPremiumCalculator: Function = (
       it("... calculates correct premium amount for a period of 180 days", async () => {
         const _expirationTimestamp = await getUnixTimestampAheadByDays(180);
 
-        const premium = await riskPremiumCalculator.calculatePremium(
+        const premium = await premiumCalculator.calculatePremium(
           _expirationTimestamp,
           _protectionAmt,
           _protectionBuyerApy,
@@ -73,7 +73,7 @@ const testRiskPremiumCalculator: Function = (
       it("... calculates correct premium amount for a period of 365 days", async () => {
         const _expirationTimestamp = await getUnixTimestampAheadByDays(365);
 
-        const premium = await riskPremiumCalculator.calculatePremium(
+        const premium = await premiumCalculator.calculatePremium(
           _expirationTimestamp,
           _protectionAmt,
           _protectionBuyerApy,
@@ -94,7 +94,7 @@ const testRiskPremiumCalculator: Function = (
         let protectionAmount = _protectionAmt;
         let protectionBuyerApy = parseEther("0.1");
         while (leverageRatio.lte(_leverageRatioCeiling)) {
-          const premium = await riskPremiumCalculator.calculatePremium(
+          const premium = await premiumCalculator.calculatePremium(
             _expirationTimestamp,
             protectionAmount,
             protectionBuyerApy,
@@ -111,4 +111,4 @@ const testRiskPremiumCalculator: Function = (
   });
 };
 
-export { testRiskPremiumCalculator };
+export { testPremiumCalculator };

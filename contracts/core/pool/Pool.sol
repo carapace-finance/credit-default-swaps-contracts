@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./SToken.sol";
-import "../../interfaces/IRiskPremiumCalculator.sol";
+import "../../interfaces/IPremiumCalculator.sol";
 import "../../interfaces/IReferenceLendingPools.sol";
 import "../../interfaces/IPoolCycleManager.sol";
 import "../../interfaces/IPool.sol";
@@ -31,7 +31,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /*** state variables ***/
 
   /// @notice Reference to the PremiumPricing contract
-  IRiskPremiumCalculator public immutable riskPremiumCalculator;
+  IPremiumCalculator public immutable premiumCalculator;
 
   /// @notice Reference to the PoolCycleManager contract
   IPoolCycleManager public immutable poolCycleManager;
@@ -111,20 +111,20 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /*** constructor ***/
   /**
    * @param _poolInfo The information about the pool.
-   * @param _riskPremiumCalculator an address of a premium pricing contract
+   * @param _premiumCalculator an address of a premium calculator contract
    * @param _poolCycleManager an address of a pool cycle manager contract
    * @param _name a name of the sToken
    * @param _symbol a symbol of the sToken
    */
   constructor(
     PoolInfo memory _poolInfo,
-    IRiskPremiumCalculator _riskPremiumCalculator,
+    IPremiumCalculator _premiumCalculator,
     IPoolCycleManager _poolCycleManager,
     string memory _name,
     string memory _symbol
   ) SToken(_name, _symbol) {
     poolInfo = _poolInfo;
-    riskPremiumCalculator = _riskPremiumCalculator;
+    premiumCalculator = _premiumCalculator;
     poolCycleManager = _poolCycleManager;
     buyerAccountIdCounter.increment();
     emit PoolInitialized(
@@ -174,7 +174,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     }
 
     /// Calculate the protection premium amount scaled to 18 decimals and scaled to the underlying token decimals.
-    uint256 _premiumAmountIn18Decimals = riskPremiumCalculator.calculatePremium(
+    uint256 _premiumAmountIn18Decimals = premiumCalculator.calculatePremium(
       _protectionExpirationTimestamp,
       scaleUnderlyingAmtTo18Decimals(_protectionAmount),
       _protectionBuyerApy,

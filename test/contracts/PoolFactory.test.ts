@@ -4,7 +4,7 @@ import { parseEther } from "ethers/lib/utils";
 import { expect } from "chai";
 import { Signer } from "ethers";
 import { USDC_ADDRESS } from "../utils/constants";
-import { PremiumPricing } from "../../typechain-types/contracts/core/PremiumPricing";
+import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";
 import { PoolFactory } from "../../typechain-types/contracts/core/PoolFactory";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { ethers } from "hardhat";
@@ -17,7 +17,7 @@ const testPoolFactory: Function = (
   deployer: Signer,
   account1: Signer,
   poolFactory: PoolFactory,
-  premiumPricing: PremiumPricing,
+  premiumCalculator: PremiumCalculator,
   referenceLendingPools: ReferenceLendingPools
 ) => {
   describe("PoolFactory", () => {
@@ -61,7 +61,7 @@ const testPoolFactory: Function = (
               _poolParams,
               USDC_ADDRESS,
               referenceLendingPools.address,
-              premiumPricing.address,
+              premiumCalculator.address,
               "sToken11",
               "sT11",
               { gasLimit: 100000 }
@@ -104,7 +104,7 @@ const testPoolFactory: Function = (
             _poolParams,
             USDC_ADDRESS,
             referenceLendingPools.address,
-            premiumPricing.address,
+            premiumCalculator.address,
             "sToken21",
             "sT21"
           )
@@ -117,7 +117,7 @@ const testPoolFactory: Function = (
             _ceiling,
             USDC_ADDRESS,
             referenceLendingPools.address,
-            premiumPricing.address
+            premiumCalculator.address
           )
           // Newly created pool should be registered to PoolCycleManager
           .to.emit(poolCycleManager, "PoolCycleCreated")

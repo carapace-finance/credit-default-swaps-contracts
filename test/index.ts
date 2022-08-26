@@ -2,7 +2,7 @@ import { testPool } from "./contracts/Pool.test";
 import { testPoolFactory } from "./contracts/PoolFactory.test";
 import { testPoolCycleManager } from "./contracts/PoolCycleManager.test";
 import { testAccruedPremiumCalculator } from "./contracts/AccruedPremiumCalculator.test";
-import { testRiskPremiumCalculator } from "./contracts/RiskPremiumCalculator.test";
+import { testPremiumCalculator } from "./contracts/PremiumCalculator.test";
 
 import {
   deployer,
@@ -13,7 +13,7 @@ import {
   deployContracts,
   poolInstance,
   poolFactoryInstance,
-  riskPremiumCalculatorInstance,
+  premiumCalculatorInstance,
   referenceLendingPoolsInstance,
   poolCycleManagerInstance,
   accruedPremiumCalculatorInstance
@@ -34,7 +34,7 @@ describe("start testing", () => {
         deployer,
         account1,
         poolFactoryInstance,
-        riskPremiumCalculatorInstance,
+        premiumCalculatorInstance,
         referenceLendingPoolsInstance
       );
     });
@@ -48,7 +48,7 @@ describe("start testing", () => {
     });
 
     it("run the RiskPremiumCalculator test", async () => {
-      testRiskPremiumCalculator(riskPremiumCalculatorInstance);
+      testPremiumCalculator(premiumCalculatorInstance);
     });
   });
 });

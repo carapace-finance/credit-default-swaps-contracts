@@ -11,7 +11,7 @@ import {
 } from "../utils/constants";
 import { Pool } from "../../typechain-types/contracts/core/pool/Pool";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
-import { RiskPremiumCalculator } from "../../typechain-types/contracts/core/RiskPremiumCalculator";
+import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
 import {
   getUnixTimestampAheadByDays,
@@ -38,7 +38,7 @@ const testPool: Function = (
     let USDC: Contract;
     let poolInfo: any;
     let poolCycleManager: PoolCycleManager;
-    let riskPremiumCalculator: RiskPremiumCalculator;
+    let premiumCalculator: PremiumCalculator;
     let referenceLendingPools: ReferenceLendingPools;
     let snapshotId: string;
 
@@ -69,10 +69,10 @@ const testPool: Function = (
         await pool.poolCycleManager()
       )) as PoolCycleManager;
 
-      riskPremiumCalculator = (await ethers.getContractAt(
-        "RiskPremiumCalculator",
-        await pool.riskPremiumCalculator()
-      )) as RiskPremiumCalculator;
+      premiumCalculator = (await ethers.getContractAt(
+        "PremiumCalculator",
+        await pool.premiumCalculator()
+      )) as PremiumCalculator;
 
       referenceLendingPools = (await ethers.getContractAt(
         "ReferenceLendingPools",
@@ -129,11 +129,9 @@ const testPool: Function = (
         );
       });
       it("...set the premium pricing contract address", async () => {
-        const _riskPremiumCalculatorAddress: string =
-          await pool.riskPremiumCalculator();
-        expect(_riskPremiumCalculatorAddress).to.eq(
-          riskPremiumCalculator.address
-        );
+        const _premiumCalculatorAddress: string =
+          await pool.premiumCalculator();
+        expect(_premiumCalculatorAddress).to.eq(premiumCalculator.address);
       });
     });
 

@@ -4,14 +4,14 @@ pragma solidity ^0.8.13;
 import "hardhat/console.sol";
 import "@prb/math/contracts/PRBMathSD59x18.sol";
 import "../libraries/Constants.sol";
-import "../interfaces/IRiskPremiumCalculator.sol";
+import "../interfaces/IPremiumCalculator.sol";
 import "../interfaces/IPool.sol";
 import "../libraries/RiskFactorCalculator.sol";
 
-contract RiskPremiumCalculator is IRiskPremiumCalculator {
+contract PremiumCalculator is IPremiumCalculator {
   using PRBMathSD59x18 for int256;
 
-  /// @inheritdoc IRiskPremiumCalculator
+  /// @inheritdoc IPremiumCalculator
   function calculatePremium(
     uint256 _protectionExpirationTimestamp,
     uint256 _protectionAmount,
