@@ -48,6 +48,33 @@ const testRiskFactorCalculator: Function = (
         expect(true).to.be.true;
       });
     });
+
+    describe("calculateRiskFactorUsingMinPremium", () => {
+      it("...calculates the risk factor correctly", async () => {
+        const riskFactor =
+          await riskFactorCalculator.calculateRiskFactorUsingMinPremium(
+            parseEther("0.021419615"),
+            parseEther("30.5")
+          );
+        expect(riskFactor)
+          .to.be.gt(parseEther("0.11260760"))
+          .and.lt(parseEther("0.11260761"));
+      });
+
+      it("...calculates the risk factor without underflow/overflow for range 0.05 to 0.25", async () => {
+        let minPremium = parseEther("0.02");
+        let durationInDays = parseEther("30.5");
+        while (minPremium.lte(parseEther("0.3"))) {
+          await riskFactorCalculator.calculateRiskFactorUsingMinPremium(
+            minPremium,
+            durationInDays
+          );
+
+          minPremium = minPremium.add(parseEther("0.005"));
+          durationInDays = durationInDays.add(parseEther("30"));
+        }
+      });
+    });
   });
 };
 

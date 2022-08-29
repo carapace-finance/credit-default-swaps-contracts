@@ -27,7 +27,7 @@ library RiskFactorCalculator {
     uint256 _leverageRatioCeiling,
     uint256 _leverageRatioBuffer,
     uint256 _curvature
-  ) public view returns (int256) {
+  ) external view returns (int256) {
     console.log(
       "Calculating risk factor... leverage ratio: %s, floor: %s, ceiling: %s",
       _currentLeverageRatio,
@@ -43,5 +43,35 @@ library RiskFactorCalculator {
       int256(_leverageRatioFloor - _leverageRatioBuffer);
 
     return (int256(_curvature) * _numerator) / _denominator;
+  }
+
+  /**
+   * @notice Calculates and returns the risk factor using minimum premium scaled to 18 decimals.
+   * @notice Formula: riskFactor = (-1 * log(1 - min premium) / duration in days) * 365
+   * @param _minPremiumRate the minimum premium rate for the loan protection scaled to 18 decimals
+   * @param _durationInDays the duration of the loan protection in days scaled to 18 decimals
+   */
+  function calculateRiskFactorUsingMinPremium(
+    uint256 _minPremiumRate,
+    uint256 _durationInDays
+  ) external view returns (int256) {
+    console.log(
+      "Calculating risk factor using min premium... min premium: %s, duration: %s",
+      _minPremiumRate,
+      _durationInDays
+    );
+    int256 logValue = (Constants.SCALE_18_DECIMALS_INT -
+      int256(_minPremiumRate)).log10();
+    console.logInt(logValue);
+
+    /// scale up log value by 18 decimals because duration in days is scaled to 18 decimals
+    /// lambda = -1 * log(1 - min premium) / duration in days
+    int256 lambda = (-1 * logValue * Constants.SCALE_18_DECIMALS_INT) /
+      int256(_durationInDays);
+    console.logInt(lambda);
+
+    int256 riskFactor = (lambda * Constants.SCALED_DAYS_IN_YEAR) / 100;
+    console.logInt(riskFactor);
+    return riskFactor;
   }
 }

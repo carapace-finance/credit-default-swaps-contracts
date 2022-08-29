@@ -18,5 +18,5 @@ abstract contract IPremiumCalculator {
     uint256 _protectionBuyerApy,
     uint256 _leverageRatio,
     IPool.PoolParams memory _poolParameters
-  ) public view virtual returns (uint256);
+  ) external view virtual returns (uint256);
 }

@@ -18,7 +18,7 @@ contract PremiumCalculator is IPremiumCalculator {
     uint256 _protectionBuyerApy,
     uint256 _leverageRatio,
     IPool.PoolParams memory _poolParameters
-  ) public view override returns (uint256) {
+  ) external view override returns (uint256) {
     console.log(
       "Calculating premium... expiration time: %s, protection amount: %s, leverage ratio: %s",
       _protectionExpirationTimestamp,
@@ -26,6 +26,12 @@ contract PremiumCalculator is IPremiumCalculator {
       _leverageRatio
     );
 
+    /**
+     * TODO: implement this
+     * If the total capital is less than the minimum capital required
+     * or the total protection amount is less than the minimum total protection amount,
+     * the premium is MIN_CARAPACE_RISK_PREMIUM + underlying_risk_premium.
+     */
     int256 riskFactor = RiskFactorCalculator.calculateRiskFactor(
       _leverageRatio,
       _poolParameters.leverageRatioFloor,
@@ -34,53 +40,120 @@ contract PremiumCalculator is IPremiumCalculator {
       _poolParameters.curvature
     );
     console.logInt(riskFactor);
-    console.log(
-      "Protection time in seconds: %s",
-      _protectionExpirationTimestamp - block.timestamp
+
+    uint256 durationInYears = calculateDurationInYears(
+      _protectionExpirationTimestamp
     );
 
-    /// protection duration in years scaled to 18 decimals: ((expiration time - current time) / SECONDS_IN_DAY) / 365.24
-    int256 durationInYears = int256(
-      (_protectionExpirationTimestamp - block.timestamp) *
-        100 *
-        Constants.SCALE_18_DECIMALS
-    ) / (Constants.SECONDS_IN_DAY * 36524);
+    int256 survivalRate = calculateSurvivalRate(durationInYears, riskFactor);
+    console.logInt(survivalRate);
 
-    /// need to scale down once because durationInYears and riskFactor both are in 18 decimals
-    /// defaultRate = 1 - (e ** (-1 * durationInYears * risk_factor))
-    int256 power = (-1 * durationInYears * riskFactor) /
-      int256(Constants.SCALE_18_DECIMALS);
-    int256 exp = power.exp();
-    int256 defaultRate = int256(1 * Constants.SCALE_18_DECIMALS) - exp;
-    console.logInt(defaultRate);
-
-    /// carapacePremiumRate = max(defaultRate, MIN_CARAPACE_RISK_PREMIUM)
+    /// carapacePremiumRate = max(survivalRate, MIN_CARAPACE_RISK_PREMIUM)
     int256 minRiskPremiumPercent = int256(
       _poolParameters.minRiskPremiumPercent
     );
-    int256 carapacePremiumRate = defaultRate > minRiskPremiumPercent
-      ? defaultRate
+    int256 carapacePremiumRate = survivalRate > minRiskPremiumPercent
+      ? survivalRate
       : minRiskPremiumPercent;
     console.logInt(carapacePremiumRate);
 
-    /// need to scale down twice because all 3 params (underlyingRiskPremiumPercent, duration_in_years, protectionBuyerApy) are in 18 decimals
-    /// underlyingPremiumRate = UNDERLYING_RISK_PREMIUM_PERCENT * _protectionBuyerApy * durationInYears
-    int256 underlyingPremiumRate = (int256(
+    uint256 underlyingPremiumRate = calculateUnderlyingPremiumRate(
+      durationInYears,
+      _protectionBuyerApy,
       _poolParameters.underlyingRiskPremiumPercent
-    ) *
-      durationInYears *
-      int256(_protectionBuyerApy)) /
-      int256(Constants.SCALE_18_DECIMALS * Constants.SCALE_18_DECIMALS);
-    console.logInt(underlyingPremiumRate);
+    );
+    console.log("Underlying premium rate: %s", underlyingPremiumRate);
 
-    int256 premiumRate = carapacePremiumRate + underlyingPremiumRate;
-    console.logInt(premiumRate);
-
-    assert(premiumRate > 0);
+    assert(carapacePremiumRate > 0);
+    uint256 premiumRate = uint256(carapacePremiumRate) + underlyingPremiumRate;
+    console.log("Premium rate: %s", premiumRate);
 
     // need to scale down once because protectionAmount & premiumRate both are in 18 decimals
     return
       (_protectionAmount * uint256(premiumRate)) /
       uint256(Constants.SCALE_18_DECIMALS);
+  }
+
+  /**
+   * @notice Calculates the survival rate scaled to 18 decimals.
+   * @notice Formula: survivalRate = 1 - (e ** (-1 * durationInYears * riskFactor))
+   * @param _durationInYears protection duration in years scaled to 18 decimals.
+   * @param _riskFactor risk factor scaled to 18 decimals.
+   */
+  function calculateSurvivalRate(uint256 _durationInYears, int256 _riskFactor)
+    public
+    pure
+    returns (int256)
+  {
+    /// need to scale down once because durationInYears and riskFactor both are in 18 decimals
+    int256 power = (-1 * int256(_durationInYears) * _riskFactor) /
+      Constants.SCALE_18_DECIMALS_INT;
+    int256 exp = power.exp();
+    int256 survivalRate = Constants.SCALE_18_DECIMALS_INT - exp; // 1 - exp
+
+    return survivalRate;
+  }
+
+  /**
+   * @notice calculate underlying premium rate scaled to 18 decimals.
+   * @notice Formula: underlyingPremiumRate = UNDERLYING_RISK_PREMIUM_PERCENT * _protectionBuyerApy * durationInYears
+   * @param _durationInYears protection duration in years scaled to 18 decimals.
+   * @param _protectionBuyerApy protection buyer APY scaled to 18 decimals.
+   * @param _underlyingRiskPremiumPercent underlying risk premium percent scaled to 18 decimals.
+   */
+  function calculateUnderlyingPremiumRate(
+    uint256 _durationInYears,
+    uint256 _protectionBuyerApy,
+    uint256 _underlyingRiskPremiumPercent
+  ) public pure returns (uint256) {
+    // need to scale down twice because all 3 params (underlyingRiskPremiumPercent, protectionBuyerApy & duration_in_years) are in 18 decimals
+    uint256 underlyingPremiumRate = (_underlyingRiskPremiumPercent *
+      _protectionBuyerApy *
+      _durationInYears) /
+      (Constants.SCALE_18_DECIMALS * Constants.SCALE_18_DECIMALS);
+
+    return underlyingPremiumRate;
+  }
+
+  /**
+   * @notice calculate min premium rate scaled to 18 decimals.
+   * @notice Formula: minPremiumRate = _minRiskPremiumPercent + underlyingPremiumRate
+   * @param _protectionExpirationTimestamp protection expiration timestamp.
+   * @param _protectionBuyerApy protection buyer APY scaled to 18 decimals.
+   * @param _underlyingRiskPremiumPercent underlying risk premium percent scaled to 18 decimals.
+   */
+  function calculateMinPremiumRate(
+    uint256 _protectionExpirationTimestamp,
+    uint256 _protectionBuyerApy,
+    uint256 _minRiskPremiumPercent,
+    uint256 _underlyingRiskPremiumPercent
+  ) public view returns (uint256) {
+    uint256 durationInYears = calculateDurationInYears(
+      _protectionExpirationTimestamp
+    );
+    uint256 underlyingPremiumRate = calculateUnderlyingPremiumRate(
+      durationInYears,
+      _protectionBuyerApy,
+      _underlyingRiskPremiumPercent
+    );
+
+    return _minRiskPremiumPercent + underlyingPremiumRate;
+  }
+
+  /**
+   * @dev Calculates protection duration in years scaled to 18 decimals.
+   * Formula used: ((expiration time - current time) / SECONDS_IN_DAY) / 365.24
+   * @param _protectionExpirationTimestamp protection expiration timestamp
+   */
+  function calculateDurationInYears(uint256 _protectionExpirationTimestamp)
+    internal
+    view
+    returns (uint256)
+  {
+    return
+      ((_protectionExpirationTimestamp - block.timestamp) *
+        100 *
+        Constants.SCALE_18_DECIMALS) /
+      (uint256(Constants.SECONDS_IN_DAY) * 36524);
   }
 }
