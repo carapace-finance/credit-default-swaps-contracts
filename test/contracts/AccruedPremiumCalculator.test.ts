@@ -39,11 +39,11 @@ const testAccruedPremiumCalculator: Function = (
 
     describe("calculateKAndLambda", () => {
       it("... calculates correct K and lambda", async () => {
-        expect(K).to.be.gt(parseEther("664458.00774"));
-        expect(K).to.be.lt(parseEther("664458.00775"));
+        expect(K).to.be.gt(parseEther("664888.36124"));
+        expect(K).to.be.lt(parseEther("664888.36125"));
 
-        expect(lambda).to.be.gt(parseEther("0.0001674"));
-        expect(lambda).to.be.lt(parseEther("0.0001675"));
+        expect(lambda).to.be.gt(parseEther("0.00016731"));
+        expect(lambda).to.be.lt(parseEther("0.00016732"));
       });
 
       it("... calculates K & lambda without underflow/overflow for range 0.1 to 0.2", async () => {
@@ -88,8 +88,8 @@ const testAccruedPremiumCalculator: Function = (
             lambda
           );
 
-        expect(accruedPremium).to.be.gt(parseEther("111.239364"));
-        expect(accruedPremium).to.be.lt(parseEther("111.239365"));
+        expect(accruedPremium).to.be.gt(parseEther("111.238274"));
+        expect(accruedPremium).to.be.lt(parseEther("111.238275"));
       });
 
       it("... calculates correct accrued premium for a period from day 8 to day 10", async () => {
@@ -102,8 +102,8 @@ const testAccruedPremiumCalculator: Function = (
             lambda
           );
 
-        expect(accruedPremium).to.be.gt(parseEther("222.162337"));
-        expect(accruedPremium).to.be.lt(parseEther("222.162338"));
+        expect(accruedPremium).to.be.gt(parseEther("222.160368"));
+        expect(accruedPremium).to.be.lt(parseEther("222.160369"));
       });
 
       it("... calculates correct accrued premium for a period from second 100 to second 200", async () => {
@@ -116,8 +116,8 @@ const testAccruedPremiumCalculator: Function = (
           );
 
         console.log("Accrued premium = ", formatEther(accruedPremium));
-        expect(accruedPremium).to.be.gt(parseEther("0.12876"));
-        expect(accruedPremium).to.be.lt(parseEther("0.12877"));
+        expect(accruedPremium).to.be.gt(parseEther("0.12875"));
+        expect(accruedPremium).to.be.lt(parseEther("0.12876"));
       });
     });
   });

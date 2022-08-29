@@ -40,8 +40,7 @@ library AccruedPremiumCalculator {
     );
     console.logInt(riskFactor);
 
-    // TOD use 365.2425 instead of 365
-    int256 lambda = riskFactor / Constants.DAYS_IN_YEAR;
+    int256 lambda = (riskFactor * 100) / Constants.SCALED_DAYS_IN_YEAR;
     console.logInt(lambda);
 
     int256 power1 = (-1) * int256(_protectionDuration) * lambda;
