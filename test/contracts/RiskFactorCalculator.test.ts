@@ -1,7 +1,8 @@
 import { BigNumber } from "@ethersproject/bignumber";
 import { expect } from "chai";
-import { parseEther } from "ethers/lib/utils";
+import { parseEther, formatEther } from "ethers/lib/utils";
 import { RiskFactorCalculator } from "../../typechain-types/contracts/libraries/RiskFactorCalculator";
+import { parseUSDC } from "../utils/usdc";
 
 const testRiskFactorCalculator: Function = (
   riskFactorCalculator: RiskFactorCalculator
@@ -11,13 +12,6 @@ const testRiskFactorCalculator: Function = (
     const _leverageRatioFloor: BigNumber = parseEther("0.1");
     const _leverageRatioCeiling: BigNumber = parseEther("0.2");
     const _leverageRatioBuffer: BigNumber = parseEther("0.05");
-    const _protectionAmt = 1000000; // 1M
-    const _annualPremiumRate = 0.04; // 4% annual rate
-    const _protection_duration_in_days = 180;
-    const _premiumPerDay = (_annualPremiumRate * _protectionAmt) / 365;
-    const _totalPremium = parseEther(
-      (_premiumPerDay * _protection_duration_in_days).toString()
-    );
     const _currentLeverageRatio = parseEther("0.14");
 
     describe("calculateRiskFactor", () => {
@@ -53,15 +47,16 @@ const testRiskFactorCalculator: Function = (
       it("...calculates the risk factor correctly", async () => {
         const riskFactor =
           await riskFactorCalculator.calculateRiskFactorUsingMinPremium(
-            parseEther("0.021419615"),
+            parseEther("0.02"),
             parseEther("30.5")
           );
+        console.log("riskFactor: " + formatEther(riskFactor));
         expect(riskFactor)
-          .to.be.gt(parseEther("0.11260760"))
-          .and.lt(parseEther("0.11260761"));
+          .to.be.gt(parseEther("0.241929"))
+          .and.lt(parseEther("0.241930"));
       });
 
-      it("...calculates the risk factor without underflow/overflow for range 0.05 to 0.25", async () => {
+      it("...calculates the risk factor without underflow/overflow for a range of min premium & durations", async () => {
         let minPremium = parseEther("0.02");
         let durationInDays = parseEther("30.5");
         while (minPremium.lte(parseEther("0.3"))) {
@@ -69,7 +64,6 @@ const testRiskFactorCalculator: Function = (
             minPremium,
             durationInDays
           );
-
           minPremium = minPremium.add(parseEther("0.005"));
           durationInDays = durationInDays.add(parseEther("30"));
         }

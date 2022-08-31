@@ -35,7 +35,7 @@ describe("start testing", () => {
       testAccruedPremiumCalculator(accruedPremiumCalculatorInstance);
     });
 
-    it("run the RiskPremiumCalculator test", async () => {
+    it("run the PremiumCalculator test", async () => {
       testPremiumCalculator(premiumCalculatorInstance);
     });
 

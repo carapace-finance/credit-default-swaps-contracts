@@ -17,8 +17,10 @@ contract PremiumCalculator is IPremiumCalculator {
     uint256 _protectionAmount,
     uint256 _protectionBuyerApy,
     uint256 _leverageRatio,
-    IPool.PoolParams memory _poolParameters
-  ) external view override returns (uint256) {
+    uint256 _totalCapital,
+    uint256 _totalProtection,
+    IPool.PoolParams calldata _poolParameters
+  ) external view override returns (uint256 premiumAmount, bool isMinPremium) {
     console.log(
       "Calculating premium... expiration time: %s, protection amount: %s, leverage ratio: %s",
       _protectionExpirationTimestamp,
@@ -26,27 +28,36 @@ contract PremiumCalculator is IPremiumCalculator {
       _leverageRatio
     );
 
-    /**
-     * TODO: implement this
-     * If the total capital is less than the minimum capital required
-     * or the total protection amount is less than the minimum total protection amount,
-     * the premium is MIN_CARAPACE_RISK_PREMIUM + underlying_risk_premium.
-     */
-    int256 riskFactor = RiskFactorCalculator.calculateRiskFactor(
-      _leverageRatio,
-      _poolParameters.leverageRatioFloor,
-      _poolParameters.leverageRatioCeiling,
-      _poolParameters.leverageRatioBuffer,
-      _poolParameters.curvature
-    );
-    console.logInt(riskFactor);
-
+    int256 survivalRate;
     uint256 durationInYears = calculateDurationInYears(
       _protectionExpirationTimestamp
     );
 
-    int256 survivalRate = calculateSurvivalRate(durationInYears, riskFactor);
-    console.logInt(survivalRate);
+    if (
+      RiskFactorCalculator.canCalculateRiskFactor(
+        _totalCapital,
+        _totalProtection,
+        _leverageRatio,
+        _poolParameters.leverageRatioFloor,
+        _poolParameters.leverageRatioCeiling,
+        _poolParameters.minRequiredCapital,
+        _poolParameters.minRequiredProtection
+      )
+    ) {
+      int256 riskFactor = RiskFactorCalculator.calculateRiskFactor(
+        _leverageRatio,
+        _poolParameters.leverageRatioFloor,
+        _poolParameters.leverageRatioCeiling,
+        _poolParameters.leverageRatioBuffer,
+        _poolParameters.curvature
+      );
+
+      survivalRate = calculateSurvivalRate(durationInYears, riskFactor);
+      console.logInt(survivalRate);
+    } else {
+      /// Min capital or protection  not met or leverage ratio out of range. Premium is the minimum premium
+      isMinPremium = true;
+    }
 
     /// carapacePremiumRate = max(survivalRate, MIN_CARAPACE_RISK_PREMIUM)
     int256 minRiskPremiumPercent = int256(
@@ -69,9 +80,9 @@ contract PremiumCalculator is IPremiumCalculator {
     console.log("Premium rate: %s", premiumRate);
 
     // need to scale down once because protectionAmount & premiumRate both are in 18 decimals
-    return
-      (_protectionAmount * uint256(premiumRate)) /
-      uint256(Constants.SCALE_18_DECIMALS);
+    premiumAmount =
+      (_protectionAmount * premiumRate) /
+      Constants.SCALE_18_DECIMALS;
   }
 
   /**

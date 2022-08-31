@@ -58,8 +58,6 @@ abstract contract IPool {
     uint256 protectionAmount;
     /// @notice The amount of premium paid in underlying token
     uint256 protectionPremium;
-    /// @notice The total duration of the loan protection in days
-    uint256 protectionDurationInDays;
     /// @notice The timestamp at which the loan protection is bought
     uint256 startTimestamp;
     /// @notice The timestamp at which the loan protection is expired

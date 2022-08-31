@@ -69,10 +69,6 @@ const testPoolFactory: Function = (
         ).to.be.revertedWith("Ownable: caller is not the owner");
       });
 
-      it("...fail if the floor is", async () => {});
-
-      it("...fail if the ceiling is", async () => {});
-
       it("...the poolId 0 should be empty", async () => {
         expect(await poolFactory.poolIdToPoolAddress(0)).to.equal(
           "0x0000000000000000000000000000000000000000"
