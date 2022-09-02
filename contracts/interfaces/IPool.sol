@@ -29,6 +29,10 @@ abstract contract IPool {
     uint256 minRequiredProtection;
     /// @notice curvature used in risk premium calculation scaled to 18 decimals
     uint256 curvature;
+    /// @notice the value which represents minimum amount of premium paid by a protection buyer scaled to 18 decimals
+    uint256 minRiskPremiumPercent;
+    /// @notice the value which represents the percentage of protection buyers' yield we take into account scaled to 18 decimals
+    uint256 underlyingRiskPremiumPercent;
     /// @notice pool cycle related parameters
     PoolCycleParams poolCycleParams;
   }
