@@ -18,17 +18,18 @@ const testPremiumCalculator: Function = (
     const _protectionAmt = parseEther("100000"); // 100k
     const _currentLeverageRatio = parseEther("0.15"); // 15%
     const _protectionBuyerApy = parseEther("0.17"); // 17%
-
     const poolCycleParams: IPool.PoolCycleParamsStruct = {
       openCycleDuration: BigNumber.from(10 * 86400), // 10 days
       cycleDuration: BigNumber.from(30 * 86400) // 30 days
     };
+    const _minRequiredCapital = parseUSDC("10000");
+    const _minRequiredProtection = parseUSDC("20000");
     const _poolParams: IPool.PoolParamsStruct = {
       leverageRatioFloor: _leverageRatioFloor,
       leverageRatioCeiling: _leverageRatioCeiling,
       leverageRatioBuffer: _leverageRatioBuffer,
-      minRequiredCapital: parseUSDC("10000"),
-      minRequiredProtection: parseUSDC("20000"),
+      minRequiredCapital: _minRequiredCapital,
+      minRequiredProtection: _minRequiredProtection,
       curvature: _curvature,
       minRiskPremiumPercent: parseEther("0.02"), // 2%
       underlyingRiskPremiumPercent: parseEther("0.1"), // 10%
@@ -36,36 +37,23 @@ const testPremiumCalculator: Function = (
     };
 
     describe("calculatePremium", () => {
-      it("... calculates correct premium amount for a leverage ratio 0", async () => {
-        const _expirationTimestamp = await getUnixTimestampAheadByDays(180);
-
-        const premium = await premiumCalculator.calculatePremium(
-          _expirationTimestamp,
-          _protectionAmt,
-          _protectionBuyerApy,
-          0,
-          _poolParams
-        );
-        console.log(`Premium: ${formatEther(premium)}`);
-
-        expect(premium)
-          .to.be.gt(parseEther("2837.8052"))
-          .and.lt(parseEther("2837.8053"));
-      });
+      const _totalCapital = parseUSDC("15000");
+      const _totalProtection = parseUSDC("100000");
 
       it("... calculates correct premium amount for a period of 180 days", async () => {
         const _expirationTimestamp = await getUnixTimestampAheadByDays(180);
+        const premiumAndMinPremiumFlag =
+          await premiumCalculator.calculatePremium(
+            _expirationTimestamp,
+            _protectionAmt,
+            _protectionBuyerApy,
+            _currentLeverageRatio,
+            _totalCapital,
+            _totalProtection,
+            _poolParams
+          );
 
-        const premium = await premiumCalculator.calculatePremium(
-          _expirationTimestamp,
-          _protectionAmt,
-          _protectionBuyerApy,
-          _currentLeverageRatio,
-          _poolParams
-        );
-        console.log(`Premium: ${formatEther(premium)}`);
-
-        expect(premium)
+        expect(premiumAndMinPremiumFlag[0])
           .to.be.gt(parseEther("3271.8265"))
           .and.lt(parseEther("3271.8266"));
       });
@@ -73,16 +61,18 @@ const testPremiumCalculator: Function = (
       it("... calculates correct premium amount for a period of 365 days", async () => {
         const _expirationTimestamp = await getUnixTimestampAheadByDays(365);
 
-        const premium = await premiumCalculator.calculatePremium(
-          _expirationTimestamp,
-          _protectionAmt,
-          _protectionBuyerApy,
-          _currentLeverageRatio,
-          _poolParams
-        );
-        console.log(`Premium: ${formatEther(premium)}`);
+        const premiumAndMinPremiumFlag =
+          await premiumCalculator.calculatePremium(
+            _expirationTimestamp,
+            _protectionAmt,
+            _protectionBuyerApy,
+            _currentLeverageRatio,
+            _totalCapital,
+            _totalProtection,
+            _poolParams
+          );
 
-        expect(premium)
+        expect(premiumAndMinPremiumFlag[0])
           .to.be.gt(parseEther("6572.8151"))
           .and.lt(parseEther("6572.8152"));
       });
@@ -94,18 +84,105 @@ const testPremiumCalculator: Function = (
         let protectionAmount = _protectionAmt;
         let protectionBuyerApy = parseEther("0.1");
         while (leverageRatio.lte(_leverageRatioCeiling)) {
-          const premium = await premiumCalculator.calculatePremium(
+          await premiumCalculator.calculatePremium(
             _expirationTimestamp,
             protectionAmount,
             protectionBuyerApy,
             leverageRatio,
+            _totalCapital,
+            _totalProtection,
             _poolParams
           );
           leverageRatio = leverageRatio.add(parseEther("0.005"));
           protectionAmount = protectionAmount.add(_protectionAmt);
           protectionBuyerApy = protectionBuyerApy.add(parseEther("0.01"));
-          console.log(`Premium: ${formatEther(premium)}`);
         }
+      });
+    });
+
+    describe("calculatePremium with min carapace premium rate", () => {
+      it("... calculates correct premium amount when leverage ratio is less than floor", async () => {
+        const _totalCapital = parseUSDC("500000");
+        const _totalProtection = parseUSDC("100000000");
+        const _expirationTimestamp = await getUnixTimestampAheadByDays(180);
+
+        const premiumAndMinPremiumFlag =
+          await premiumCalculator.calculatePremium(
+            _expirationTimestamp,
+            _protectionAmt,
+            _protectionBuyerApy,
+            _leverageRatioFloor.sub(parseEther("0.05")), // leverage ratio(0.05) is less than floor
+            _totalCapital,
+            _totalProtection,
+            _poolParams
+          );
+
+        expect(premiumAndMinPremiumFlag[0])
+          .to.be.gt(parseEther("2837.8052"))
+          .and.lt(parseEther("2837.8053"));
+      });
+
+      it("... calculates correct premium amount when leverage ratio is higher than ceiling", async () => {
+        const _totalCapital = parseUSDC("15000");
+        const _totalProtection = parseUSDC("60000");
+        const _expirationTimestamp = await getUnixTimestampAheadByDays(180);
+
+        const premiumAndMinPremiumFlag =
+          await premiumCalculator.calculatePremium(
+            _expirationTimestamp,
+            _protectionAmt,
+            _protectionBuyerApy,
+            _leverageRatioCeiling.add(parseEther("0.05")), // leverage ratio(0.25) is higher than ceiling
+            _totalCapital,
+            _totalProtection,
+            _poolParams
+          );
+
+        expect(premiumAndMinPremiumFlag[0])
+          .to.be.gt(parseEther("2837.8052"))
+          .and.lt(parseEther("2837.8053"));
+      });
+
+      it("... calculates correct premium amount when total capital is lower than min required capital", async () => {
+        const _totalCapital = _minRequiredCapital.sub(parseUSDC("1"));
+        const _totalProtection = _minRequiredProtection.add(parseUSDC("1000"));
+        const _expirationTimestamp = await getUnixTimestampAheadByDays(180);
+
+        const premiumAndMinPremiumFlag =
+          await premiumCalculator.calculatePremium(
+            _expirationTimestamp,
+            _protectionAmt,
+            _protectionBuyerApy,
+            0,
+            _totalCapital,
+            _totalProtection,
+            _poolParams
+          );
+
+        expect(premiumAndMinPremiumFlag[0])
+          .to.be.gt(parseEther("2837.8052"))
+          .and.lt(parseEther("2837.8053"));
+      });
+
+      it("... calculates correct premium amount when total protection is lower than min required protection", async () => {
+        const _totalCapital = _minRequiredCapital.add(parseUSDC("1"));
+        const _totalProtection = _minRequiredProtection.sub(parseUSDC("1000"));
+        const _expirationTimestamp = await getUnixTimestampAheadByDays(180);
+
+        const premiumAndMinPremiumFlag =
+          await premiumCalculator.calculatePremium(
+            _expirationTimestamp,
+            _protectionAmt,
+            _protectionBuyerApy,
+            0,
+            _totalCapital,
+            _totalProtection,
+            _poolParams
+          );
+
+        expect(premiumAndMinPremiumFlag[0])
+          .to.be.gt(parseEther("2837.8052"))
+          .and.lt(parseEther("2837.8053"));
       });
     });
   });

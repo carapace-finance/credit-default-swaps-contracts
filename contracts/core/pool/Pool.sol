@@ -173,14 +173,17 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       }
     }
 
-    /// Calculate the protection premium amount scaled to 18 decimals and scaled to the underlying token decimals.
-    uint256 _premiumAmountIn18Decimals = premiumCalculator.calculatePremium(
-      _protectionExpirationTimestamp,
-      scaleUnderlyingAmtTo18Decimals(_protectionAmount),
-      _protectionBuyerApy,
-      _leverageRatio,
-      poolInfo.params
-    );
+    /// Calculate the protection premium amount scaled to 18 decimals and scale it to the underlying token decimals.
+    (uint256 _premiumAmountIn18Decimals, bool _isMinPremium) = premiumCalculator
+      .calculatePremium(
+        _protectionExpirationTimestamp,
+        scaleUnderlyingAmtTo18Decimals(_protectionAmount),
+        _protectionBuyerApy,
+        _leverageRatio,
+        getTotalCapital(),
+        totalProtection,
+        poolInfo.params
+      );
     console.log(
       "protection premium amount in 18 decimals: %s",
       _premiumAmountIn18Decimals
@@ -199,32 +202,34 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     lendingPoolIdToPremiumTotal[_lendingPoolId] += _premiumAmount;
     totalPremium += _premiumAmount;
 
-    /// Capture loan protection data for premium accrual calculation
-    uint256 _protectionDurationInDays = (_protectionExpirationTimestamp -
-      block.timestamp) / uint256(Constants.SECONDS_IN_DAY);
+    /// Calculate protection in days and scale it to 18 decimals.
+    uint256 _protectionDurationInDaysScaled = ((_protectionExpirationTimestamp -
+      block.timestamp) * Constants.SCALE_18_DECIMALS) /
+      uint256(Constants.SECONDS_IN_DAY);
 
     console.log(
       "protectionDurationInDays: %s, protectionPremium: %s, leverageRatio: ",
-      _protectionDurationInDays,
+      _protectionDurationInDaysScaled,
       _premiumAmount,
       _leverageRatio
     );
 
+    /// Capture loan protection data for premium accrual calculation
     (int256 K, int256 lambda) = AccruedPremiumCalculator.calculateKAndLambda(
       _premiumAmountIn18Decimals,
-      _protectionDurationInDays,
+      _protectionDurationInDaysScaled,
       _leverageRatio,
       poolInfo.params.leverageRatioFloor,
       poolInfo.params.leverageRatioCeiling,
       poolInfo.params.leverageRatioBuffer,
-      poolInfo.params.curvature
+      poolInfo.params.curvature,
+      _isMinPremium ? poolInfo.params.minRiskPremiumPercent : 0
     );
 
     loanProtectionInfos.push(
       LoanProtectionInfo({
         protectionAmount: _protectionAmount,
         protectionPremium: _premiumAmount,
-        protectionDurationInDays: _protectionDurationInDays,
         startTimestamp: block.timestamp,
         expirationTimestamp: _protectionExpirationTimestamp,
         K: K,

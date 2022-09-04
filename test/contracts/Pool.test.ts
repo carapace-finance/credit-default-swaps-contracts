@@ -300,7 +300,7 @@ const testPool: Function = (
             _protectionAmount,
             _protectionBuyerApy
           )
-        ).to.be.revertedWith("PoolLeverageRatioTooLow(1, 2904761904)");
+        ).to.be.revertedWith("PoolLeverageRatioTooLow(1, 2990476190)");
       });
     });
 

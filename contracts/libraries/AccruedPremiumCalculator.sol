@@ -14,45 +14,61 @@ library AccruedPremiumCalculator {
    * @notice Formula for lambda: Risk Factor / 365
    * @notice Formula for K: _protectionPremium / (1 - e^(-1 * _protection_duration_in_days * lambda))
    * @param _protectionPremium the premium paid for the loan protection scaled to 18 decimals
-   * @param _protectionDuration the duration of the loan protection in days
+   * @param _protectionDurationInDays the duration of the loan protection in days scaled to 18 decimals
    * @param _currentLeverageRatio the current leverage ratio of the pool scaled to 18 decimals
    * @param _leverageRatioFloor the minimum leverage ratio allowed in the pool scaled to 18 decimals
    * @param _leverageRatioCeiling the maximum leverage ratio allowed in the pool scaled to 18 decimals
    * @param _leverageRatioBuffer the buffer used in risk factor calculation scaled to 18 decimals
    * @param _curvature the curvature used in risk premium calculation scaled to 18 decimals
-   * @return K and lambda scaled to 18 decimals
+   * @param _minRiskPremiumPercent the minimum premium percent scaled to 18 decimals.
+   *                    When min premium is specified, risk factor should be calculated on the basis of minimum premium
+   * @return K scaled to 18 decimals
+   * @return lambda scaled to 18 decimals
    */
   function calculateKAndLambda(
     uint256 _protectionPremium,
-    uint256 _protectionDuration,
+    uint256 _protectionDurationInDays,
     uint256 _currentLeverageRatio,
     uint256 _leverageRatioFloor,
     uint256 _leverageRatioCeiling,
     uint256 _leverageRatioBuffer,
-    uint256 _curvature
-  ) public view returns (int256, int256) {
-    int256 riskFactor = RiskFactorCalculator.calculateRiskFactor(
-      _currentLeverageRatio,
-      _leverageRatioFloor,
-      _leverageRatioCeiling,
-      _leverageRatioBuffer,
-      _curvature
-    );
-    console.logInt(riskFactor);
+    uint256 _curvature,
+    uint256 _minRiskPremiumPercent
+  ) public view returns (int256 K, int256 lambda) {
+    /// When minRiskPremiumPercent is specified, risk factor should be calculated on the basis of minimum premium rate
+    int256 riskFactor;
+    if (_minRiskPremiumPercent > 0) {
+      riskFactor = RiskFactorCalculator.calculateRiskFactorUsingMinPremium(
+        _minRiskPremiumPercent,
+        _protectionDurationInDays
+      );
+    } else {
+      riskFactor = RiskFactorCalculator.calculateRiskFactor(
+        _currentLeverageRatio,
+        _leverageRatioFloor,
+        _leverageRatioCeiling,
+        _leverageRatioBuffer,
+        _curvature
+      );
+    }
 
-    int256 lambda = riskFactor / Constants.DAYS_IN_YEAR;
+    /// lambda: Risk Factor / 365.24
+    lambda = (riskFactor * 100) / Constants.SCALED_DAYS_IN_YEAR;
     console.logInt(lambda);
 
-    int256 power1 = (-1) * int256(_protectionDuration) * lambda;
+    /// exp1 = (-1 * _protectionDurationInDays * lambda)
+    /// Need to scale down once because _protectionDurationInDays and lambda both are in 18 decimals
+    int256 power1 = (-1 * int256(_protectionDurationInDays) * lambda) /
+      Constants.SCALE_18_DECIMALS_INT;
     console.logInt(power1);
 
+    /// exp1 = e^(-1 * _protectionDurationInDays * lambda)
     int256 exp1 = power1.exp();
     console.logInt(exp1);
 
+    /// K = _protectionPremium / (1 - e^(-1 * _protectionDurationInDays * lambda))
     console.log("Calculating K");
-    int256 K = int256(_protectionPremium).div(
-      int256(1 * Constants.SCALE_18_DECIMALS) - exp1
-    );
+    K = int256(_protectionPremium).div(Constants.SCALE_18_DECIMALS_INT - exp1);
     console.logInt(K);
 
     return (K, lambda);
