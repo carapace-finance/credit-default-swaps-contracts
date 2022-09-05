@@ -14,11 +14,11 @@ abstract contract IPoolCycleManager {
   struct PoolCycle {
     /// @notice The current cycle index of the pool.
     uint256 currentCycleIndex;
-    /// @notice The start time of the current cycle.
+    /// @notice The start timestamp of the current cycle in seconds since unix epoch.
     uint256 currentCycleStartTime;
-    /// @notice Time duration for which cycle is OPEN, meaning deposit & withdraw is allowed.
+    /// @notice Time duration in seconds for which cycle is OPEN, meaning deposits & withdrawals are allowed.
     uint256 openCycleDuration;
-    /// @notice Total time duration of a cycle.
+    /// @notice Total time duration of a cycle  in seconds.
     uint256 cycleDuration;
     /// @notice Current state of the cycle.
     CycleState currentCycleState;
@@ -79,4 +79,13 @@ abstract contract IPoolCycleManager {
     view
     virtual
     returns (uint256);
+
+  /**
+   * @notice Provides the current cycle info for the pool with specified id.
+   */
+  function getCurrentPoolCycle(uint256 _poolId)
+    public
+    view
+    virtual
+    returns (PoolCycle memory);
 }

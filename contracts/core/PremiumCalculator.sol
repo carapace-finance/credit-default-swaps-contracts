@@ -85,6 +85,7 @@ contract PremiumCalculator is IPremiumCalculator {
       Constants.SCALE_18_DECIMALS;
   }
 
+  // TODO: rename this to calculateCarapacePremiumRate
   /**
    * @notice Calculates the survival rate scaled to 18 decimals.
    * @notice Formula: survivalRate = 1 - (e ** (-1 * durationInYears * riskFactor))

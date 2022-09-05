@@ -70,6 +70,16 @@ abstract contract IPool {
     int256 lambda;
   }
 
+  /// @notice A struct to store the details of a withdrawal cycle.
+  struct WithdrawalCycleDetail {
+    /// @notice total amount of sTokens requested to be withdrawn for this cycle
+    uint256 totalSTokenRequested;
+    /// @notice Percent of requested sTokens that can be withdrawn for this cycle without breaching the leverage ratio floor
+    uint256 withdrawalPercent;
+    /// @notice When the withdrawal is allowed without restriction during the open period
+    uint256 withdrawalPhase2StartTimestamp;
+  }
+
   /*** errors ***/
 
   error ExpirationTimeTooShort(uint256 expirationTime);
@@ -88,6 +98,10 @@ abstract contract IPool {
     uint256 requestedAmount
   );
   error InsufficientSTokenBalance(address msgSender, uint256 sTokenBalance);
+  error WithdrawalNotAllowed(
+    uint256 totalCapital,
+    uint256 lowestTotalCapitalAllowed
+  );
 
   /*** events ***/
 
