@@ -514,26 +514,28 @@ const testPool: Function = (
 
       it("...1st request is successful", async () => {
         const _tokenAmt = parseEther("11");
-        const _minPoolCycleIndex = 1;
+        const _withdrawalCycleIndex = 1;
         await expect(pool.connect(seller).requestWithdrawal(_tokenAmt))
           .to.emit(pool, "WithdrawalRequested")
-          .withArgs(sellerAddress, _tokenAmt, _minPoolCycleIndex);
+          .withArgs(sellerAddress, _tokenAmt, _withdrawalCycleIndex);
 
-        const request = await pool.withdrawalRequests(sellerAddress);
+        const request = await pool
+          .connect(seller)
+          .getWithdrawalRequest(_withdrawalCycleIndex);
         expect(request.sTokenAmount).to.eq(_tokenAmt);
-        expect(request.minPoolCycleIndex).to.eq(_minPoolCycleIndex);
       });
 
       it("...2nd request by same user should update existing request", async () => {
         const _tokenAmt = parseEther("5");
-        const _minPoolCycleIndex = 1;
+        const _withdrawalCycleIndex = 1;
         await expect(pool.connect(seller).requestWithdrawal(_tokenAmt))
           .to.emit(pool, "WithdrawalRequested")
-          .withArgs(sellerAddress, _tokenAmt, _minPoolCycleIndex);
+          .withArgs(sellerAddress, _tokenAmt, _withdrawalCycleIndex);
 
-        const request = await pool.withdrawalRequests(sellerAddress);
+        const request = await pool
+          .connect(seller)
+          .getWithdrawalRequest(_withdrawalCycleIndex);
         expect(request.sTokenAmount).to.eq(_tokenAmt);
-        expect(request.minPoolCycleIndex).to.eq(1);
       });
 
       it("...fail when amount in updating request is higher than token balance", async () => {
@@ -551,15 +553,16 @@ const testPool: Function = (
         await USDC.connect(owner).approve(pool.address, _underlyingAmount);
         await pool.connect(owner).deposit(_underlyingAmount, ownerAddress);
 
-        const _minPoolCycleIndex = 1;
+        const _withdrawalCycleIndex = 1;
         const _tokenBalance = await pool.balanceOf(ownerAddress);
         await expect(pool.connect(owner).requestWithdrawal(_tokenBalance))
           .to.emit(pool, "WithdrawalRequested")
-          .withArgs(ownerAddress, _tokenBalance, _minPoolCycleIndex);
+          .withArgs(ownerAddress, _tokenBalance, _withdrawalCycleIndex);
 
-        const request = await pool.withdrawalRequests(ownerAddress);
+        const request = await pool
+          .connect(owner)
+          .getWithdrawalRequest(_withdrawalCycleIndex);
         expect(request.sTokenAmount).to.eq(_tokenBalance);
-        expect(request.minPoolCycleIndex).to.eq(_minPoolCycleIndex);
       });
     });
 
