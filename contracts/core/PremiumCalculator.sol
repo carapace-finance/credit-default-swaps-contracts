@@ -28,7 +28,7 @@ contract PremiumCalculator is IPremiumCalculator {
       _leverageRatio
     );
 
-    int256 survivalRate;
+    int256 carapacePremiumRate;
     uint256 durationInYears = calculateDurationInYears(
       _protectionExpirationTimestamp
     );
@@ -52,21 +52,25 @@ contract PremiumCalculator is IPremiumCalculator {
         _poolParameters.curvature
       );
 
-      survivalRate = calculateSurvivalRate(durationInYears, riskFactor);
-      console.logInt(survivalRate);
+      carapacePremiumRate = calculateCarapacePremiumRate(
+        durationInYears,
+        riskFactor
+      );
+      console.logInt(carapacePremiumRate);
     } else {
       /// Min capital or protection  not met or leverage ratio out of range. Premium is the minimum premium
       isMinPremium = true;
     }
 
-    /// carapacePremiumRate = max(survivalRate, MIN_CARAPACE_RISK_PREMIUM)
-    int256 minRiskPremiumPercent = int256(
-      _poolParameters.minRiskPremiumPercent
+    /// carapacePremiumRateToUse = max(carapacePremiumRate, MIN_CARAPACE_RISK_PREMIUM)
+    int256 minCarapaceRiskPremiumPercent = int256(
+      _poolParameters.minCarapaceRiskPremiumPercent
     );
-    int256 carapacePremiumRate = survivalRate > minRiskPremiumPercent
-      ? survivalRate
-      : minRiskPremiumPercent;
-    console.logInt(carapacePremiumRate);
+    int256 carapacePremiumRateToUse = carapacePremiumRate >
+      minCarapaceRiskPremiumPercent
+      ? carapacePremiumRate
+      : minCarapaceRiskPremiumPercent;
+    console.logInt(carapacePremiumRateToUse);
 
     uint256 underlyingPremiumRate = calculateUnderlyingPremiumRate(
       durationInYears,
@@ -75,8 +79,9 @@ contract PremiumCalculator is IPremiumCalculator {
     );
     console.log("Underlying premium rate: %s", underlyingPremiumRate);
 
-    assert(carapacePremiumRate > 0);
-    uint256 premiumRate = uint256(carapacePremiumRate) + underlyingPremiumRate;
+    assert(carapacePremiumRateToUse > 0);
+    uint256 premiumRate = uint256(carapacePremiumRateToUse) +
+      underlyingPremiumRate;
     console.log("Premium rate: %s", premiumRate);
 
     // need to scale down once because protectionAmount & premiumRate both are in 18 decimals
@@ -85,30 +90,26 @@ contract PremiumCalculator is IPremiumCalculator {
       Constants.SCALE_18_DECIMALS;
   }
 
-  // TODO: rename this to calculateCarapacePremiumRate
   /**
-   * @notice Calculates the survival rate scaled to 18 decimals.
-   * @notice Formula: survivalRate = 1 - (e ** (-1 * durationInYears * riskFactor))
+   * @dev Calculates the carapace premium rate scaled to 18 decimals.
+   * @dev Formula: carapacePremiumRate = 1 - (e ** (-1 * durationInYears * riskFactor))
    * @param _durationInYears protection duration in years scaled to 18 decimals.
    * @param _riskFactor risk factor scaled to 18 decimals.
    */
-  function calculateSurvivalRate(uint256 _durationInYears, int256 _riskFactor)
-    public
-    pure
-    returns (int256)
-  {
+  function calculateCarapacePremiumRate(
+    uint256 _durationInYears,
+    int256 _riskFactor
+  ) internal pure returns (int256) {
     /// need to scale down once because durationInYears and riskFactor both are in 18 decimals
     int256 power = (-1 * int256(_durationInYears) * _riskFactor) /
       Constants.SCALE_18_DECIMALS_INT;
     int256 exp = power.exp();
-    int256 survivalRate = Constants.SCALE_18_DECIMALS_INT - exp; // 1 - exp
-
-    return survivalRate;
+    return Constants.SCALE_18_DECIMALS_INT - exp; // 1 - exp
   }
 
   /**
-   * @notice calculate underlying premium rate scaled to 18 decimals.
-   * @notice Formula: underlyingPremiumRate = UNDERLYING_RISK_PREMIUM_PERCENT * _protectionBuyerApy * durationInYears
+   * @dev calculate underlying premium rate scaled to 18 decimals.
+   * @dev Formula: underlyingPremiumRate = UNDERLYING_RISK_PREMIUM_PERCENT * _protectionBuyerApy * durationInYears
    * @param _durationInYears protection duration in years scaled to 18 decimals.
    * @param _protectionBuyerApy protection buyer APY scaled to 18 decimals.
    * @param _underlyingRiskPremiumPercent underlying risk premium percent scaled to 18 decimals.
@@ -117,7 +118,7 @@ contract PremiumCalculator is IPremiumCalculator {
     uint256 _durationInYears,
     uint256 _protectionBuyerApy,
     uint256 _underlyingRiskPremiumPercent
-  ) public pure returns (uint256) {
+  ) internal pure returns (uint256) {
     // need to scale down twice because all 3 params (underlyingRiskPremiumPercent, protectionBuyerApy & duration_in_years) are in 18 decimals
     uint256 underlyingPremiumRate = (_underlyingRiskPremiumPercent *
       _protectionBuyerApy *
@@ -128,18 +129,19 @@ contract PremiumCalculator is IPremiumCalculator {
   }
 
   /**
-   * @notice calculate min premium rate scaled to 18 decimals.
-   * @notice Formula: minPremiumRate = _minRiskPremiumPercent + underlyingPremiumRate
+   * @dev calculate min premium rate scaled to 18 decimals.
+   * @dev Formula: minPremiumRate = _minRiskPremiumPercent + underlyingPremiumRate
    * @param _protectionExpirationTimestamp protection expiration timestamp.
    * @param _protectionBuyerApy protection buyer APY scaled to 18 decimals.
+   * @param _minCarapaceRiskPremiumPercent min carapace risk premium percent scaled to 18 decimals.
    * @param _underlyingRiskPremiumPercent underlying risk premium percent scaled to 18 decimals.
    */
   function calculateMinPremiumRate(
     uint256 _protectionExpirationTimestamp,
     uint256 _protectionBuyerApy,
-    uint256 _minRiskPremiumPercent,
+    uint256 _minCarapaceRiskPremiumPercent,
     uint256 _underlyingRiskPremiumPercent
-  ) public view returns (uint256) {
+  ) internal view returns (uint256) {
     uint256 durationInYears = calculateDurationInYears(
       _protectionExpirationTimestamp
     );
@@ -149,7 +151,7 @@ contract PremiumCalculator is IPremiumCalculator {
       _underlyingRiskPremiumPercent
     );
 
-    return _minRiskPremiumPercent + underlyingPremiumRate;
+    return _minCarapaceRiskPremiumPercent + underlyingPremiumRate;
   }
 
   /**

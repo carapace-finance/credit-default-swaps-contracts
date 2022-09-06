@@ -20,7 +20,7 @@ library AccruedPremiumCalculator {
    * @param _leverageRatioCeiling the maximum leverage ratio allowed in the pool scaled to 18 decimals
    * @param _leverageRatioBuffer the buffer used in risk factor calculation scaled to 18 decimals
    * @param _curvature the curvature used in risk premium calculation scaled to 18 decimals
-   * @param _minRiskPremiumPercent the minimum premium percent scaled to 18 decimals.
+   * @param _minCarapaceRiskPremiumPercent the minimum premium percent scaled to 18 decimals.
    *                    When min premium is specified, risk factor should be calculated on the basis of minimum premium
    * @return K scaled to 18 decimals
    * @return lambda scaled to 18 decimals
@@ -33,13 +33,13 @@ library AccruedPremiumCalculator {
     uint256 _leverageRatioCeiling,
     uint256 _leverageRatioBuffer,
     uint256 _curvature,
-    uint256 _minRiskPremiumPercent
+    uint256 _minCarapaceRiskPremiumPercent
   ) public view returns (int256 K, int256 lambda) {
     /// When minRiskPremiumPercent is specified, risk factor should be calculated on the basis of minimum premium rate
     int256 riskFactor;
-    if (_minRiskPremiumPercent > 0) {
+    if (_minCarapaceRiskPremiumPercent > 0) {
       riskFactor = RiskFactorCalculator.calculateRiskFactorUsingMinPremium(
-        _minRiskPremiumPercent,
+        _minCarapaceRiskPremiumPercent,
         _protectionDurationInDays
       );
     } else {

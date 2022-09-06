@@ -31,7 +31,7 @@ const testPremiumCalculator: Function = (
       minRequiredCapital: _minRequiredCapital,
       minRequiredProtection: _minRequiredProtection,
       curvature: _curvature,
-      minRiskPremiumPercent: parseEther("0.02"), // 2%
+      minCarapaceRiskPremiumPercent: parseEther("0.02"), // 2%
       underlyingRiskPremiumPercent: parseEther("0.1"), // 10%
       poolCycleParams: poolCycleParams
     };

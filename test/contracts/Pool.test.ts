@@ -112,8 +112,10 @@ const testPool: Function = (
       it("...set the curvature", async () => {
         expect(poolInfo.params.curvature).to.eq(parseEther("0.05"));
       });
-      it("...set the minRiskPremiumPercent", async () => {
-        expect(poolInfo.params.minRiskPremiumPercent).to.eq(parseEther("0.02"));
+      it("...set the minCarapaceRiskPremiumPercent", async () => {
+        expect(poolInfo.params.minCarapaceRiskPremiumPercent).to.eq(
+          parseEther("0.02")
+        );
       });
       it("...set the underlyingRiskPremiumPercent", async () => {
         expect(poolInfo.params.underlyingRiskPremiumPercent).to.eq(

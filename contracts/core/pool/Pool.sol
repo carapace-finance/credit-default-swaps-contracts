@@ -221,7 +221,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       poolInfo.params.leverageRatioCeiling,
       poolInfo.params.leverageRatioBuffer,
       poolInfo.params.curvature,
-      _isMinPremium ? poolInfo.params.minRiskPremiumPercent : 0
+      _isMinPremium ? poolInfo.params.minCarapaceRiskPremiumPercent : 0
     );
 
     loanProtectionInfos.push(
