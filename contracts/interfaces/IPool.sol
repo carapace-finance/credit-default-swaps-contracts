@@ -152,10 +152,4 @@ abstract contract IPool {
    * @notice For example: 0.15 is returned as 0.15 x 10**18 = 15 * 10**16
    */
   function calculateLeverageRatio() public view virtual returns (uint256);
-
-  /**
-   * @notice Returns the current total underlying amount in the pool
-   * @notice This is the total of capital deposited by sellers + accrued premiums from buyers - default payouts.
-   */
-  function getTotalCapital() public view virtual returns (uint256);
 }

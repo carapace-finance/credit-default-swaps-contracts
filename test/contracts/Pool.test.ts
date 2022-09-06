@@ -42,6 +42,13 @@ const testPool: Function = (
     let referenceLendingPools: ReferenceLendingPools;
     let snapshotId: string;
 
+    const calculateTotalSellerDeposit = async () => {
+      // seller deposit should total sToken underlying - premium accrued
+      return (await pool.totalSTokenUnderlying()).sub(
+        await pool.totalPremiumAccrued()
+      );
+    };
+
     before("setup", async () => {
       deployerAddress = await deployer.getAddress();
       sellerAddress = await seller.getAddress();
@@ -416,17 +423,7 @@ const testPool: Function = (
       });
 
       it("...should return 10 USDC as total seller deposit", async () => {
-        // sTokens balance of seller should be same as underlying deposit amount
-        expect(await pool.totalSellerDeposit()).to.eq(_underlyingAmount);
-      });
-
-      it("...total capital should be equal to total collateral plus total premium accrued", async () => {
-        // sTokens balance of seller should be same as underlying deposit amount
-        const totalPremiumAccrued = await pool.totalPremiumAccrued();
-        const totalSellerDeposit = await pool.totalSellerDeposit();
-        expect(await pool.getTotalCapital()).to.eq(
-          totalPremiumAccrued.add(totalSellerDeposit)
-        );
+        expect(await calculateTotalSellerDeposit()).to.eq(_underlyingAmount);
       });
 
       // We have 2418.xx USDC premium from the protection buyer + 10 USDC from the deposit
@@ -458,8 +455,9 @@ const testPool: Function = (
       });
 
       it("...should return 20 USDC as total seller deposit", async () => {
-        // sTokens balance of seller should be same as underlying deposit amount
-        expect(await pool.totalSellerDeposit()).to.eq(_underlyingAmount.mul(2));
+        expect(await calculateTotalSellerDeposit()).to.eq(
+          _underlyingAmount.mul(2)
+        );
       });
 
       it("...should convert sToken shares to correct underlying amount", async () => {
@@ -760,7 +758,7 @@ const testPool: Function = (
         expect(await pool.totalProtection()).to.eq(parseUSDC("110000")); // 100K + 10K
 
         // state is reverted to just before 1st deposit, so we we can't count previous deposits
-        expect(await pool.totalSellerDeposit()).to.eq(parseUSDC("1000"));
+        expect(await calculateTotalSellerDeposit()).to.eq(parseUSDC("1000"));
       });
     });
 

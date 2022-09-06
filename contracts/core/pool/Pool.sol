@@ -22,7 +22,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /*** state variables ***/
 
-  /// @notice some information about this pool
+  /// @notice information about this pool
   PoolInfo public poolInfo;
 
   /// @notice Reference to the PremiumPricing contract
@@ -31,14 +31,23 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /// @notice Reference to the PoolCycleManager contract
   IPoolCycleManager public immutable poolCycleManager;
 
-  /// @notice The total underlying amount of deposits from protection sellers accumulated in the pool
-  uint256 public totalSellerDeposit;
-
   /// @notice The total underlying amount of premium from protection buyers accumulated in the pool
   uint256 public totalPremium;
 
   /// @notice The total underlying amount of protection bought from this pool
   uint256 public totalProtection;
+
+  /// @notice The timestamp of last premium accrual
+  uint256 public lastPremiumAccrualTimestamp;
+
+  /// @notice The total premium accrued in underlying token up to the last premium accrual timestamp
+  uint256 public totalPremiumAccrued;
+
+  /**
+   * @notice the total underlying amount in the pool backing the value of STokens.
+   * @notice This is the total capital deposited by sellers + accrued premiums from buyers - default payouts.
+   */
+  uint256 public totalSTokenUnderlying;
 
   /// @notice Buyer account id counter
   Counters.Counter public buyerAccountIdCounter;
@@ -58,12 +67,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /// @notice The array to track the loan protection info for all protection bought.
   LoanProtectionInfo[] public loanProtectionInfos;
-
-  /// @notice The timestamp of last premium accrual
-  uint256 public lastPremiumAccrualTimestamp;
-
-  /// @notice The total premium accrued in underlying token up to the last premium accrual timestamp
-  uint256 public totalPremiumAccrued;
 
   /// @notice The mapping to track pool cycle index at which actual withdrawal will happen to withdrawal details
   mapping(uint256 => WithdrawalCycleDetail) public withdrawalCycleDetails;
@@ -178,7 +181,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         scaleUnderlyingAmtTo18Decimals(_protectionAmount),
         _protectionBuyerApy,
         _leverageRatio,
-        getTotalCapital(),
+        totalSTokenUnderlying,
         totalProtection,
         poolInfo.params
       );
@@ -256,7 +259,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     accruePremium();
 
     uint256 sTokenShares = convertToSToken(_underlyingAmount);
-    totalSellerDeposit += _underlyingAmount;
+    totalSTokenUnderlying += _underlyingAmount;
     _safeMint(_receiver, sTokenShares);
     poolInfo.underlyingToken.transferFrom(
       msg.sender,
@@ -264,8 +267,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _underlyingAmount
     );
 
-    /// Verify leverage ratio only when total capital is higher than minimum capital requirement
-    if (totalSellerDeposit > poolInfo.params.minRequiredCapital) {
+    /// Verify leverage ratio only when total capital/sTokenUnderlying is higher than minimum capital requirement
+    if (totalSTokenUnderlying > poolInfo.params.minRequiredCapital) {
       /// calculate pool's current leverage ratio considering the new deposit
       uint256 leverageRatio = calculateLeverageRatio();
 
@@ -376,9 +379,9 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       /// Withdrawal phase I: Proportional withdrawal based on total sTokens requested for withdrawal
       uint256 maxAllowed = (sTokenRequested * withdrawalPercent) /
         Constants.SCALE_18_DECIMALS;
-      allowedSTokenWithdrawalAmount = _sTokenWithdrawalAmount > maxAllowed
-        ? maxAllowed
-        : _sTokenWithdrawalAmount;
+      allowedSTokenWithdrawalAmount = _sTokenWithdrawalAmount < maxAllowed
+        ? _sTokenWithdrawalAmount
+        : maxAllowed;
     } else {
       /// Withdrawal phase II: First come first serve withdrawal
       allowedSTokenWithdrawalAmount = _sTokenWithdrawalAmount;
@@ -412,7 +415,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
     /// TODO: we should have state variable for totalCapital
     /// Step 10: transfer underlying token to receiver
-    totalSellerDeposit -= underlyingAmountToTransfer;
+    totalSTokenUnderlying -= underlyingAmountToTransfer;
     poolInfo.underlyingToken.transfer(_receiver, underlyingAmountToTransfer);
 
     /// Step 11: Verify that the leverage ratio does not breach the floor.
@@ -482,10 +485,11 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         secondsUntilNow,
         accruedPremium
       );
-
-      totalPremiumAccrued += scale18DecimalsAmtToUnderlyingDecimals(
-        accruedPremium
-      );
+      uint256 accruedPremiumInUnderlying = scale18DecimalsAmtToUnderlyingDecimals(
+          accruedPremium
+        );
+      totalPremiumAccrued += accruedPremiumInUnderlying;
+      totalSTokenUnderlying += accruedPremiumInUnderlying;
     }
 
     /// Remove expired protections from the list
@@ -532,7 +536,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /// @inheritdoc IPool
   function calculateLeverageRatio() public view override returns (uint256) {
-    return _calculateLeverageRatio(getTotalCapital());
+    return _calculateLeverageRatio(totalSTokenUnderlying);
   }
 
   /**
@@ -569,12 +573,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     return scale18DecimalsAmtToUnderlyingDecimals(_underlyingAmount);
   }
 
-  /// @inheritdoc IPool
-  function getTotalCapital() public view override returns (uint256) {
-    /// Total capital is: sellers' deposits + accrued premiums from buyers - default payouts.
-    return totalSellerDeposit + totalPremiumAccrued;
-  }
-
   /// @notice Returns all the protections bought from the pool.
   function getAllProtections()
     external
@@ -594,7 +592,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
    */
   function _getExchangeRate() internal view returns (uint256) {
     uint256 _totalScaledCapital = scaleUnderlyingAmtTo18Decimals(
-      getTotalCapital()
+      totalSTokenUnderlying
     );
     uint256 _totalSTokenSupply = totalSupply();
     uint256 _exchangeRate = (_totalScaledCapital *
@@ -677,7 +675,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     /// Calculate the lowest total capital amount that pool must have to NOT breach the leverage ratio floor.
     uint256 lowestTotalCapitalAllowed = poolInfo.params.leverageRatioFloor *
       totalProtection;
-    uint256 totalCapital = getTotalCapital();
+    uint256 totalCapital = totalSTokenUnderlying;
     if (totalCapital > lowestTotalCapitalAllowed) {
       uint256 totalSTokenAllowed = convertToSToken(
         totalCapital - lowestTotalCapitalAllowed
