@@ -9,7 +9,7 @@ import {
   USDC_DECIMALS,
   USDC_ABI
 } from "../utils/constants";
-import { Pool } from "../../typechain-types/contracts/core/pool/Pool";
+import { Pool, IPool } from "../../typechain-types/contracts/core/pool/Pool";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
@@ -36,7 +36,7 @@ const testPool: Function = (
     let buyerAddress: string;
     let ownerAddress: string;
     let USDC: Contract;
-    let poolInfo: any;
+    let poolInfo: IPool.PoolInfoStructOutput;
     let poolCycleManager: PoolCycleManager;
     let premiumCalculator: PremiumCalculator;
     let referenceLendingPools: ReferenceLendingPools;
@@ -481,6 +481,21 @@ const testPool: Function = (
     });
 
     describe("...requestWithdrawal", async () => {
+      const _withdrawalCycleIndex = 1; // current pool cycle index + 1
+      const _requestedTokenAmt1 = parseEther("11");
+      const _requestedTokenAmt2 = parseEther("5");
+
+      const verifyTotalRequestedWithdrawal = async (
+        _expectedTotalWithdrawal: BigNumber
+      ) => {
+        const withdrawalCycleDetail = await pool.withdrawalCycleDetails(
+          _withdrawalCycleIndex
+        );
+        expect(withdrawalCycleDetail.totalSTokenRequested).to.eq(
+          _expectedTotalWithdrawal
+        );
+      };
+
       it("...fail when pool is paused", async () => {
         await pool.connect(deployer).pause();
         expect(await pool.paused()).to.be.true;
@@ -513,29 +528,54 @@ const testPool: Function = (
       });
 
       it("...1st request is successful", async () => {
-        const _tokenAmt = parseEther("11");
-        const _withdrawalCycleIndex = 1;
-        await expect(pool.connect(seller).requestWithdrawal(_tokenAmt))
+        await expect(
+          pool.connect(seller).requestWithdrawal(_requestedTokenAmt1)
+        )
           .to.emit(pool, "WithdrawalRequested")
-          .withArgs(sellerAddress, _tokenAmt, _withdrawalCycleIndex);
+          .withArgs(sellerAddress, _requestedTokenAmt1, _withdrawalCycleIndex);
 
         const request = await pool
           .connect(seller)
           .getWithdrawalRequest(_withdrawalCycleIndex);
-        expect(request.sTokenAmount).to.eq(_tokenAmt);
+        expect(request.sTokenAmount).to.eq(_requestedTokenAmt1);
+
+        // withdrawal cycle's total sToken requested amount should be same as the requested amount
+        await verifyTotalRequestedWithdrawal(_requestedTokenAmt1);
+
+        const withdrawalCycleDetail = await pool.withdrawalCycleDetails(
+          _withdrawalCycleIndex
+        );
+
+        // Withdrawal cycle begins at the open period of next pool cycle
+        // So withdrawal phase 2 will start after the half time is elapsed of next cycle's open duration.
+        const currentPoolCycleStartTime = (
+          await poolCycleManager.getCurrentPoolCycle(poolInfo.poolId)
+        ).currentCycleStartTime;
+        const expectedTimestamp = currentPoolCycleStartTime.add(
+          poolInfo.params.poolCycleParams.cycleDuration.add(
+            poolInfo.params.poolCycleParams.openCycleDuration.div(2)
+          )
+        );
+
+        expect(withdrawalCycleDetail.withdrawalPhase2StartTimestamp).to.eq(
+          expectedTimestamp
+        );
       });
 
       it("...2nd request by same user should update existing request", async () => {
-        const _tokenAmt = parseEther("5");
-        const _withdrawalCycleIndex = 1;
-        await expect(pool.connect(seller).requestWithdrawal(_tokenAmt))
+        await expect(
+          pool.connect(seller).requestWithdrawal(_requestedTokenAmt2)
+        )
           .to.emit(pool, "WithdrawalRequested")
-          .withArgs(sellerAddress, _tokenAmt, _withdrawalCycleIndex);
+          .withArgs(sellerAddress, _requestedTokenAmt2, _withdrawalCycleIndex);
 
         const request = await pool
           .connect(seller)
           .getWithdrawalRequest(_withdrawalCycleIndex);
-        expect(request.sTokenAmount).to.eq(_tokenAmt);
+        expect(request.sTokenAmount).to.eq(_requestedTokenAmt2);
+
+        // withdrawal cycle's total sToken requested amount should be same as the new requested amount
+        await verifyTotalRequestedWithdrawal(_requestedTokenAmt2);
       });
 
       it("...fail when amount in updating request is higher than token balance", async () => {
@@ -553,7 +593,6 @@ const testPool: Function = (
         await USDC.connect(owner).approve(pool.address, _underlyingAmount);
         await pool.connect(owner).deposit(_underlyingAmount, ownerAddress);
 
-        const _withdrawalCycleIndex = 1;
         const _tokenBalance = await pool.balanceOf(ownerAddress);
         await expect(pool.connect(owner).requestWithdrawal(_tokenBalance))
           .to.emit(pool, "WithdrawalRequested")
@@ -563,6 +602,9 @@ const testPool: Function = (
           .connect(owner)
           .getWithdrawalRequest(_withdrawalCycleIndex);
         expect(request.sTokenAmount).to.eq(_tokenBalance);
+        await verifyTotalRequestedWithdrawal(
+          _requestedTokenAmt2.add(_tokenBalance)
+        );
       });
     });
 

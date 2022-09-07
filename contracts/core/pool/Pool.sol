@@ -279,7 +279,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /**
    * @notice Creates a withdrawal request for the given sToken amount to allow actual withdrawal at the next pool cycle.
-   * @notice Each user can have single request at a time and hence this function will overwrite any existing request.
+   * @notice Each user can have single request per withdrawal cycle and
+   *         hence this function will overwrite any existing request.
    * @notice The actual withdrawal could be made when next pool cycle is opened for withdrawal with other constraints.
    * @param _sTokenAmount The amount of sToken to withdraw.
    */
@@ -295,16 +296,24 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     /// Actual withdrawal is allowed in open period of next cycle
     uint256 withdrawalCycleIndex = currentPoolCycle.currentCycleIndex + 1;
 
-    /// Update total requested withdrawal amount for the cycle
     WithdrawalCycleDetail storage withdrawalCycle = withdrawalCycleDetails[
       withdrawalCycleIndex
     ];
-    withdrawalCycle.totalSTokenRequested += _sTokenAmount;
 
     WithdrawalRequest storage request = withdrawalCycle.withdrawalRequests[
       msg.sender
     ];
+    uint256 oldRequestAmount = request.sTokenAmount;
     request.sTokenAmount = _sTokenAmount;
+
+    /// Update total requested withdrawal amount for the cycle considering existing requested amount
+    if (oldRequestAmount > _sTokenAmount) {
+      withdrawalCycle.totalSTokenRequested -= (oldRequestAmount -
+        _sTokenAmount);
+    } else {
+      withdrawalCycle.totalSTokenRequested += (_sTokenAmount -
+        oldRequestAmount);
+    }
 
     /**
      * Determine & capture the start timestamp of phase 2 of withdrawal cycle.
@@ -468,7 +477,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     }
 
     /// Remove expired protections from the list
-    for (uint256 i = 0; i < removalIndex; i++) {
+    for (uint256 i; i < removalIndex; i++) {
       uint256 expiredProtectionIndex = expiredProtections[i];
 
       /// move the last element to the expired protection index
