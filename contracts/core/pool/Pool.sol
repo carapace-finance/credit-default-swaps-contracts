@@ -675,26 +675,32 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     internal
   {
     /// Calculate the lowest total capital amount that pool must have to NOT breach the leverage ratio floor.
-    uint256 lowestTotalCapitalAllowed = poolInfo.params.leverageRatioFloor *
-      totalProtection;
+    uint256 lowestTotalCapitalAllowed = (poolInfo.params.leverageRatioFloor *
+      totalProtection) / Constants.SCALE_18_DECIMALS;
     uint256 totalCapital = totalSTokenUnderlying;
     if (totalCapital > lowestTotalCapitalAllowed) {
-      uint256 totalSTokenAllowed = convertToSToken(
+      uint256 totalSTokenAvailableToWithdraw = convertToSToken(
         totalCapital - lowestTotalCapitalAllowed
       );
 
       /// The percentage of the total sToken underlying that can be withdrawn without breaching the leverage ratio floor.
       uint256 totalSTokenRequested = detail.totalSTokenRequested;
       uint256 withdrawalPercent;
-      if (totalSTokenRequested > totalSTokenAllowed) {
+      if (totalSTokenRequested > totalSTokenAvailableToWithdraw) {
         withdrawalPercent =
-          (totalSTokenAllowed * Constants.SCALE_18_DECIMALS) /
+          (totalSTokenAvailableToWithdraw * Constants.SCALE_18_DECIMALS) /
           totalSTokenRequested;
       } else {
         withdrawalPercent = 1 * Constants.SCALE_18_DECIMALS;
       }
 
       detail.withdrawalPercent = withdrawalPercent;
+      console.log(
+        "total sToken available to withdraw: %s, total sToken requested: %s, withdrawal percent: %s",
+        totalSTokenAvailableToWithdraw,
+        totalSTokenRequested,
+        withdrawalPercent
+      );
     } else {
       revert WithdrawalNotAllowed(totalCapital, lowestTotalCapitalAllowed);
     }
@@ -716,6 +722,11 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   ) internal returns (uint256 allowedSTokenWithdrawalAmount) {
     uint256 sTokenRequested = _request.sTokenAmount;
 
+    /// Verify that withdrawal amount is not more than the requested amount.
+    if (_sTokenWithdrawalAmount > sTokenRequested) {
+      revert WithdrawalHigherThanRequested(msg.sender, sTokenRequested);
+    }
+
     if (block.timestamp < _withdrawalCycle.withdrawalPhase2StartTimestamp) {
       /// Withdrawal phase I: Proportional withdrawal based on withdrawal percent.
       uint256 withdrawalPercent = _withdrawalCycle.withdrawalPercent;
@@ -727,9 +738,15 @@ contract Pool is IPool, SToken, ReentrancyGuard {
           (sTokenRequested * withdrawalPercent) /
           Constants.SCALE_18_DECIMALS;
         _request.phase1STokenAmountCalculated = true;
+        _request.remainingPhase1STokenAmount = maxPhase1WithdrawalAmount;
       } else {
         maxPhase1WithdrawalAmount = _request.remainingPhase1STokenAmount;
       }
+      console.log(
+        "max phase 1 withdrawal amount: %s, sToken withdrawal amount: %s",
+        maxPhase1WithdrawalAmount,
+        _sTokenWithdrawalAmount
+      );
 
       /// Allowed withdrawal amount is the minimum of the withdrawal amount and the maximum amount that can be withdrawn in phase 1.
       allowedSTokenWithdrawalAmount = _sTokenWithdrawalAmount <
@@ -742,11 +759,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       allowedSTokenWithdrawalAmount = _sTokenWithdrawalAmount;
     }
 
-    /// Verify that withdrawal is for the correct amount and has sufficient balance
-    if (allowedSTokenWithdrawalAmount > sTokenRequested) {
-      revert WithdrawalHigherThanRequested(msg.sender, sTokenRequested);
-    }
-
+    /// Verify that seller has sufficient sToken balance to withdraw.
     uint256 sTokenBalance = balanceOf(msg.sender);
     if (sTokenBalance < allowedSTokenWithdrawalAmount) {
       revert InsufficientSTokenBalance(msg.sender, sTokenBalance);

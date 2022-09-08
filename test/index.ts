@@ -39,10 +39,6 @@ describe("start testing", () => {
       testPremiumCalculator(premiumCalculatorInstance);
     });
 
-    it("run the Pool test", async () => {
-      testPool(deployer, account1, account2, account3, poolInstance);
-    });
-
     it("run the PoolFactory test", async () => {
       testPoolFactory(
         deployer,
@@ -53,6 +49,11 @@ describe("start testing", () => {
       );
     });
 
+    it("run the Pool test", async () => {
+      testPool(deployer, account1, account2, account3, account4, poolInstance);
+    });
+
+    // Run this spec last because it moves time forward a lot and that impacts the pool tests
     it("run the PoolCycleManager test", async () => {
       testPoolCycleManager(deployer, account1, poolCycleManagerInstance);
     });
