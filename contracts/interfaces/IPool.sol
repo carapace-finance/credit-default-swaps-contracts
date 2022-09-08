@@ -94,12 +94,17 @@ abstract contract IPool {
   error NoWithdrawalRequested(address msgSender, uint256 poolCycleIndex);
   error WithdrawalHigherThanRequested(
     address msgSender,
-    uint256 requestedAmount
+    uint256 requestedSTokenAmount
   );
   error InsufficientSTokenBalance(address msgSender, uint256 sTokenBalance);
   error WithdrawalNotAllowed(
-    uint256 totalCapital,
-    uint256 lowestTotalCapitalAllowed
+    uint256 totalSTokenUnderlying,
+    uint256 lowestSTokenUnderlyingAllowed
+  );
+  error WithdrawalHigherThanAllowed(
+    address msgSender,
+    uint256 sTokenWithdrawalAmount,
+    uint256 sTokenAllowedWithdrawalAmount
   );
 
   /*** events ***/

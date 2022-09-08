@@ -29,7 +29,7 @@ const testPool: Function = (
   owner: Signer,
   buyer: Signer,
   seller: Signer,
-  seller2: Signer,
+  account4: Signer,
   pool: Pool
 ) => {
   describe("Pool", () => {
@@ -37,7 +37,7 @@ const testPool: Function = (
     const _newCeiling: BigNumber = BigNumber.from(500);
     let deployerAddress: string;
     let sellerAddress: string;
-    let seller2Address: string;
+    let account4Address: string;
     let buyerAddress: string;
     let ownerAddress: string;
     let USDC: Contract;
@@ -53,19 +53,51 @@ const testPool: Function = (
         await pool.totalPremiumAccrued()
       );
     };
+    const depositAndRequestWithdrawal = async (
+      _account: Signer,
+      _accountAddress: string,
+      _depositAmount: BigNumber,
+      _withdrawalAmount: BigNumber
+    ) => {
+      await USDC.connect(_account).approve(pool.address, _depositAmount);
+      await pool.connect(_account).deposit(_depositAmount, _accountAddress);
+      await pool.connect(_account).requestWithdrawal(_withdrawalAmount);
+    };
+
+    const verifyWithdrawal = async (
+      account: Signer,
+      withdrawalAmt: BigNumber
+    ) => {
+      const accountAddress = await account.getAddress();
+      const sTokenBalanceBefore = await pool.balanceOf(accountAddress);
+      const usdcBalanceBefore = await USDC.balanceOf(accountAddress);
+
+      // withdraw sTokens
+      await expect(
+        pool.connect(account).withdraw(withdrawalAmt, accountAddress)
+      )
+        .to.emit(pool, "WithdrawalMade")
+        .withArgs(accountAddress, withdrawalAmt, accountAddress);
+
+      const sTokenBalanceAfter = await pool.balanceOf(accountAddress);
+      expect(sTokenBalanceBefore.sub(sTokenBalanceAfter)).to.eq(withdrawalAmt);
+
+      const usdcBalanceAfter = await USDC.balanceOf(accountAddress);
+      expect(usdcBalanceAfter).to.be.gt(usdcBalanceBefore);
+    };
 
     before("setup", async () => {
       deployerAddress = await deployer.getAddress();
       sellerAddress = await seller.getAddress();
       buyerAddress = await buyer.getAddress();
       ownerAddress = await owner.getAddress();
-      seller2Address = await seller2.getAddress();
+      account4Address = await account4.getAddress();
 
       poolInfo = await pool.poolInfo();
 
       USDC = await new Contract(USDC_ADDRESS, USDC_ABI, deployer);
 
-      // Impersonate CIRCLE account and transfer some USDC to deployer to test with
+      // Impersonate CIRCLE account and transfer some USDC to test accounts
       const circleAccount = await ethers.getImpersonatedSigner(
         CIRCLE_ACCOUNT_ADDRESS
       );
@@ -81,6 +113,11 @@ const testPool: Function = (
         sellerAddress,
         BigNumber.from(20000).mul(USDC_DECIMALS)
       );
+      USDC.connect(circleAccount).transfer(
+        account4Address,
+        BigNumber.from(20000).mul(USDC_DECIMALS)
+      );
+
       poolCycleManager = (await ethers.getContractAt(
         "PoolCycleManager",
         await pool.poolCycleManager()
@@ -380,7 +417,7 @@ const testPool: Function = (
           expect(await pool.paused()).to.be.true;
 
           await expect(
-            pool.deposit(_underlyingAmount, sellerAddress)
+            pool.deposit(_underlyingAmount, deployerAddress)
           ).to.be.revertedWith("Pausable: paused");
         });
 
@@ -391,7 +428,7 @@ const testPool: Function = (
 
         it("...fail if USDC is not approved", async () => {
           await expect(
-            pool.deposit(_underlyingAmount, sellerAddress)
+            pool.deposit(_underlyingAmount, deployerAddress)
           ).to.be.revertedWith("ERC20: transfer amount exceeds allowance");
         });
 
@@ -442,9 +479,7 @@ const testPool: Function = (
 
         it("...receiver receives 10 sTokens", async () => {
           // sTokens balance of seller should be same as underlying deposit amount
-          expect(await pool.connect(seller).balanceOf(sellerAddress)).to.eq(
-            parseEther("10")
-          );
+          expect(await pool.balanceOf(sellerAddress)).to.eq(parseEther("10"));
         });
 
         it("...should return 10 USDC as total seller deposit", async () => {
@@ -476,8 +511,8 @@ const testPool: Function = (
             .withArgs(sellerAddress, _underlyingAmount);
 
           // 2nd deposit will receive less sTokens shares than the first deposit because of the premium accrued
-          expect(await pool.connect(seller).balanceOf(sellerAddress))
-            .to.be.gt(parseEther("19.9978"))
+          expect(await pool.balanceOf(sellerAddress))
+            .to.be.gt(parseEther("19.99"))
             .and.lt(parseEther("20"));
         });
 
@@ -489,7 +524,7 @@ const testPool: Function = (
 
         it("...should convert sToken shares to correct underlying amount", async () => {
           const convertedUnderlying = await pool.convertToUnderlying(
-            await pool.connect(seller).balanceOf(sellerAddress)
+            await pool.balanceOf(sellerAddress)
           );
 
           // Seller should receive little bit more USDC amt than deposited because of accrued premium
@@ -654,7 +689,7 @@ const testPool: Function = (
           expect(await pool.paused()).to.be.true;
 
           await expect(
-            pool.withdraw(parseEther("1"), sellerAddress)
+            pool.withdraw(parseEther("1"), deployerAddress)
           ).to.be.revertedWith("Pausable: paused");
         });
 
@@ -669,7 +704,7 @@ const testPool: Function = (
           );
 
           await expect(
-            pool.withdraw(parseEther("1"), sellerAddress)
+            pool.withdraw(parseEther("1"), deployerAddress)
           ).to.be.revertedWith(
             `NoWithdrawalRequested("${deployerAddress}", ${currentPoolCycle.currentCycleIndex})`
           );
@@ -882,20 +917,35 @@ const testPool: Function = (
       });
 
       describe("...before 1st pool cycle is locked", async () => {
-        it("...can create withdrawal requests", async () => {
+        it("...can create withdrawal requests for next cycle", async () => {
           // create withdrawal requests before moving 1st cycle to locked state
 
-          // Seller1: deposit 1000 USDC & request withdrawal of 1000 sTokens
-          const _depositAmount1 = parseUSDC("1000");
-          await USDC.connect(seller).approve(pool.address, _depositAmount1);
-          await pool.connect(seller).deposit(_depositAmount1, sellerAddress);
-          await pool.connect(seller).requestWithdrawal(parseEther("1000"));
+          // Seller1: deposit 2000 USDC & request withdrawal of 1000 sTokens
+          const _depositAmount1 = parseUSDC("2000");
+          await depositAndRequestWithdrawal(
+            seller,
+            sellerAddress,
+            _depositAmount1,
+            parseEther("1000")
+          );
 
           // Seller2: deposit 10000 USDC & request withdrawal of 1000 sTokens
-          const _depositAmount2 = parseUSDC("11000");
-          await USDC.connect(owner).approve(pool.address, _depositAmount2);
-          await pool.connect(owner).deposit(_depositAmount2, ownerAddress);
-          await pool.connect(owner).requestWithdrawal(parseEther("1000"));
+          const _depositAmount2 = parseUSDC("10000");
+          await depositAndRequestWithdrawal(
+            owner,
+            ownerAddress,
+            _depositAmount2,
+            parseEther("1000")
+          );
+
+          // Seller3: deposit 2000 USDC & request withdrawal of 1000 sTokens
+          const _depositAmount3 = parseUSDC("3000");
+          await depositAndRequestWithdrawal(
+            account4,
+            account4Address,
+            _depositAmount3,
+            parseEther("1000")
+          );
         });
       });
 
@@ -915,21 +965,22 @@ const testPool: Function = (
 
         it("...deposit should fail", async () => {
           await expect(
-            pool.deposit(parseUSDC("1"), sellerAddress)
+            pool.deposit(parseUSDC("1"), deployerAddress)
           ).to.be.revertedWith(`PoolIsNotOpen(${poolInfo.poolId})`);
         });
 
         it("...withdraw should fail", async () => {
           await expect(
-            pool.withdraw(parseUSDC("1"), sellerAddress)
+            pool.withdraw(parseUSDC("1"), deployerAddress)
           ).to.be.revertedWith(`PoolIsNotOpen(${poolInfo.poolId})`);
         });
       });
     });
 
     describe("...2nd pool cycle", async () => {
-      describe("...withdraw", async () => {
-        const currentPoolCycleIndex = 1;
+      const currentPoolCycleIndex = 1;
+
+      describe("...withdraw with withdrawal percent 1 (more total sToken underlying available than requested)", async () => {
         before(async () => {
           // Move pool cycle(10 days open period, 30 days total duration) to open state (next pool cycle)
           await moveForwardTime(getDaysInSeconds(20));
@@ -948,7 +999,7 @@ const testPool: Function = (
 
         it("...fails when withdrawal is not requested in previous cycle", async () => {
           await expect(
-            pool.withdraw(parseEther("1"), sellerAddress)
+            pool.withdraw(parseEther("1"), deployerAddress)
           ).to.be.revertedWith(
             `NoWithdrawalRequested("${deployerAddress}", ${currentPoolCycleIndex})`
           );
@@ -972,14 +1023,10 @@ const testPool: Function = (
           const totalSTokenRequested = (
             await pool.withdrawalCycleDetails(currentPoolCycleIndex)
           ).totalSTokenRequested;
-          expect(totalSTokenRequested).to.eq(parseEther("2000"));
+          expect(totalSTokenRequested).to.eq(parseEther("3000"));
 
           const totalSTokenUnderlying = await pool.totalSTokenUnderlying();
-          console.log(
-            "totalSTokenUnderlying",
-            totalSTokenUnderlying.toString()
-          );
-          expect(totalSTokenUnderlying).to.be.gt(parseUSDC("11000")); // 2 deposits = 10000 + 1000
+          expect(totalSTokenUnderlying).to.be.gt(parseUSDC("15000")); // 3 deposits = 2000 + 10000 + 3000
           expect(await pool.totalProtection()).to.eq(parseUSDC("110000"));
 
           // 11,000 = (0.1 * total protection) is not available for withdrawal
@@ -995,31 +1042,7 @@ const testPool: Function = (
         it("...is successful for 1st seller", async () => {
           // Seller has requested 1000 sTokens in previous cycle
           const withdrawalAmt = parseEther("1000");
-
-          const totalSTokenUnderlyingBefore =
-            await pool.totalSTokenUnderlying();
-          const sTokenBalanceBefore = await pool.balanceOf(sellerAddress);
-          const sellerBalanceBefore = await USDC.balanceOf(sellerAddress);
-
-          // withdraw 1000 sTokens
-          await expect(
-            pool.connect(seller).withdraw(withdrawalAmt, sellerAddress)
-          )
-            .to.emit(pool, "WithdrawalMade")
-            .withArgs(sellerAddress, withdrawalAmt, sellerAddress);
-
-          const sellerBalanceAfter = await USDC.balanceOf(sellerAddress);
-          expect(sellerBalanceAfter).to.be.gt(sellerBalanceBefore);
-
-          const sTokenBalanceAfter = await pool.balanceOf(sellerAddress);
-          expect(sTokenBalanceBefore.sub(sTokenBalanceAfter)).to.eq(
-            withdrawalAmt
-          );
-
-          const totalSTokenUnderlyingAfter = await pool.totalSTokenUnderlying();
-          expect(totalSTokenUnderlyingAfter).to.be.lt(
-            totalSTokenUnderlyingBefore
-          );
+          await verifyWithdrawal(seller, withdrawalAmt);
 
           // withdrawal percent is 1 (100%)
           expect(
@@ -1045,24 +1068,9 @@ const testPool: Function = (
         });
 
         it("...is successful for 2nd seller", async () => {
-          const sTokenBalanceBefore = await pool.balanceOf(ownerAddress);
-          const sellerBalanceBefore = await USDC.balanceOf(ownerAddress);
-
           // 2nd seller (Owner account) has requested 1000 sTokens in previous cycle
           const withdrawalAmt = parseEther("1000");
-          await expect(
-            pool.connect(owner).withdraw(withdrawalAmt, ownerAddress)
-          )
-            .to.emit(pool, "WithdrawalMade")
-            .withArgs(ownerAddress, withdrawalAmt, ownerAddress);
-
-          const sellerBalanceAfter = await USDC.balanceOf(ownerAddress);
-          expect(sellerBalanceAfter).to.be.gt(sellerBalanceBefore);
-
-          const sTokenBalanceAfter = await pool.balanceOf(ownerAddress);
-          expect(sTokenBalanceBefore.sub(sTokenBalanceAfter)).to.eq(
-            withdrawalAmt
-          );
+          verifyWithdrawal(owner, withdrawalAmt);
 
           // withdrawal percent is still 1 (100%)
           expect(
@@ -1080,6 +1088,329 @@ const testPool: Function = (
             pool.connect(owner).withdraw(parseEther("1"), ownerAddress)
           ).to.be.revertedWith(
             `NoWithdrawalRequested("${ownerAddress}", ${currentPoolCycleIndex})`
+          );
+        });
+
+        it("...is successful for 3rd seller with 2 transactions", async () => {
+          const sTokenBalanceBefore = await pool.balanceOf(account4Address);
+
+          // 3rd seller (Account4) has requested total 1000 sTokens in previous cycle,
+          // so partial withdrawal should be possible
+          await verifyWithdrawal(account4, parseEther("600"));
+          await verifyWithdrawal(account4, parseEther("300"));
+        });
+
+        it("...fails for third withdrawal by 3rd seller", async () => {
+          // 3rd Seller(account4) has withdrawn 900 out of 100 requested tokens,
+          // so withdrawal request should exist with 100 sTokens remaining
+          expect(
+            (await pool.connect(account4).getWithdrawalRequest(1)).sTokenAmount
+          ).to.eq(parseEther("100"));
+
+          // withdrawing more(101) sTokens than remaining requested should fail
+          await expect(
+            pool.connect(account4).withdraw(parseEther("101"), account4Address)
+          ).to.be.revertedWith(
+            `WithdrawalHigherThanRequested("${account4Address}", ${parseEther(
+              "100"
+            )})`
+          );
+        });
+      });
+
+      describe("...2nd pool cycle is in withdrawal phase 2", async () => {
+        before(async () => {
+          // Move 2nd pool cycle(10 days open period, 30 days total duration) to locked state
+          await moveForwardTime(getDaysInSeconds(6));
+        });
+
+        it("...should be in withdrawal phase II", async () => {
+          const withdrawalDetail = await pool.withdrawalCycleDetails(
+            currentPoolCycleIndex
+          );
+          expect(await getLatestBlockTimestamp()).to.be.gt(
+            withdrawalDetail.withdrawalPhase2StartTimestamp
+          );
+        });
+
+        it("...is successful for 3rd seller for remaining sTokens", async () => {
+          // 3rd seller (Account4) has requested total 1000 sTokens in previous cycle,
+          // and withdrawn 900 sTokens in withdrawal phase 1.
+          // so remaining 100 sTokens withdrawal should be possible
+          await verifyWithdrawal(account4, parseEther("100"));
+        });
+
+        it("...fails for 3rd seller", async () => {
+          // 3rd Seller(account4) has withdrawn all requested sTokens,
+          // so withdrawal request should not exist
+          expect(
+            (await pool.connect(account4).getWithdrawalRequest(1)).sTokenAmount
+          ).to.eq(0);
+
+          // withdraw should fail
+          await expect(
+            pool.connect(account4).withdraw(parseEther("0.1"), account4Address)
+          ).to.be.revertedWith(
+            `NoWithdrawalRequested("${account4Address}", ${currentPoolCycleIndex})`
+          );
+        });
+      });
+
+      describe("...before 2nd pool cycle is locked", async () => {
+        it("...can create withdrawal requests for next cycle", async () => {
+          // create withdrawal requests before moving 2nd cycle to locked state
+
+          // Seller1: deposited 2000 USDC in 1st cycle. Now request withdrawal of 1000 sTokens
+          await pool.connect(seller).requestWithdrawal(parseEther("1000"));
+
+          // Seller2: deposited 10000 USDC in 1st cycle, now request withdrawal of 5000 sTokens
+          await pool.connect(owner).requestWithdrawal(parseEther("5000"));
+
+          // Seller3: deposited 2000 USDC in 1st cycle, now request withdrawal of 1000 sTokens
+          await pool.connect(account4).requestWithdrawal(parseEther("1000"));
+        });
+      });
+
+      describe("...2nd pool cycle is locked", async () => {
+        before(async () => {
+          // Move 2nd pool cycle(10 days open period, 30 days total duration) to locked state
+          await moveForwardTime(getDaysInSeconds(5));
+        });
+
+        it("...pool cycle should be in locked state", async () => {
+          await poolCycleManager.calculateAndSetPoolCycleState(poolInfo.poolId);
+          expect(
+            (await poolCycleManager.getCurrentPoolCycle(poolInfo.poolId))
+              .currentCycleState
+          ).to.eq(2); // 2 = Locked
+        });
+
+        it("...deposit should fail", async () => {
+          await expect(
+            pool.deposit(parseUSDC("1"), deployerAddress)
+          ).to.be.revertedWith(`PoolIsNotOpen(${poolInfo.poolId})`);
+        });
+
+        it("...withdraw should fail", async () => {
+          await expect(
+            pool.withdraw(parseUSDC("1"), deployerAddress)
+          ).to.be.revertedWith(`PoolIsNotOpen(${poolInfo.poolId})`);
+        });
+      });
+    });
+
+    describe("...3rd pool cycle", async () => {
+      const currentPoolCycleIndex = 2;
+      const withdrawalPercentScaled = parseEther("0.592540112872853133000");
+
+      describe("...withdraw with withdrawal percent < 1 (less total sToken underlying available than requested)", async () => {
+        before(async () => {
+          // Move pool cycle(10 days open period, 30 days total duration) to open state (next pool cycle)
+          await moveForwardTime(getDaysInSeconds(20));
+        });
+
+        it("...pool cycle should be in open state", async () => {
+          await poolCycleManager.calculateAndSetPoolCycleState(poolInfo.poolId);
+          const currentPoolCycle = await poolCycleManager.getCurrentPoolCycle(
+            poolInfo.poolId
+          );
+          expect(currentPoolCycle.currentCycleIndex).to.equal(
+            currentPoolCycleIndex
+          );
+          expect(currentPoolCycle.currentCycleState).to.eq(1); // 1 = Open
+        });
+
+        it("...has less total sToken underlying available than total requested withdrawal", async () => {
+          // Verify that total available sToken underlying available for withdrawal
+          // is less than total requested withdrawal amount
+          const totalSTokenRequested = (
+            await pool.withdrawalCycleDetails(currentPoolCycleIndex)
+          ).totalSTokenRequested;
+          expect(totalSTokenRequested).to.eq(parseEther("7000"));
+
+          const totalSTokenUnderlying = await pool.totalSTokenUnderlying();
+          // 3 deposits = 2000 + 10000 + 2000 - 3000(withdrawals in 2nd cycle) = 12000
+          expect(totalSTokenUnderlying).to.be.gt(parseUSDC("12000"));
+
+          // 10K protection from "buyProtection after deposit" test case is expired
+          expect(await pool.totalProtection()).to.eq(parseUSDC("100000"));
+
+          // 10,000 = (0.1 * total protection) is not available for withdrawal
+          const totalAvailableToWithdraw = totalSTokenUnderlying.sub(
+            parseUSDC("10000")
+          );
+          // need to scale down by 6(USDC decimals) and scale upto 18(sToken decimals)
+          expect(totalAvailableToWithdraw.mul(10 ** 12)).to.be.lt(
+            totalSTokenRequested
+          );
+        });
+
+        it("...fails for 1st seller when withdrawal amt is higher than allowed", async () => {
+          const withdrawalAmt = parseEther("1000");
+          const allowedAmount = parseEther("592.540112872853133"); // 0.5925(withdrawalPercent) * 1000(requestedAmount)
+
+          await expect(
+            pool.connect(seller).withdraw(withdrawalAmt, sellerAddress)
+          ).to.be.revertedWith;
+        });
+
+        it("...is successful for 1st seller when withdrawal amount is allowed", async () => {
+          // Seller has requested 1000 sTokens in 2nd cycle, but max allowed is 592.xx sTokens
+          const withdrawalAmt = parseEther("592.540112872853133");
+          await verifyWithdrawal(seller, withdrawalAmt);
+
+          const withdrawalRequest = await pool
+            .connect(seller)
+            .getWithdrawalRequest(currentPoolCycleIndex);
+
+          // phase1STokenAmountCalculated flag should be set to true for seller's request
+          expect(withdrawalRequest.phase1STokenAmountCalculated).to.eq(true);
+          expect(withdrawalRequest.remainingPhase1STokenAmount).to.eq(0);
+
+          // withdrawal percent is 0.5925...
+          expect(
+            (await pool.withdrawalCycleDetails(currentPoolCycleIndex))
+              .withdrawalPercent
+          ).to.be.eq(withdrawalPercentScaled);
+        });
+
+        it("...fails for 1st seller on 2nd withdrawal", async () => {
+          const withdrawalAmt = parseEther("1");
+
+          await expect(
+            pool.connect(seller).withdraw(withdrawalAmt, sellerAddress)
+          ).to.be.revertedWith(
+            `WithdrawalHigherThanAllowed("${sellerAddress}", ${withdrawalAmt.toString()}, 0)`
+          );
+        });
+
+        it("...is successful for 2nd seller when withdrawal amount is less than allowed", async () => {
+          // 2nd Seller has requested 5000 sTokens in 2nd cycle, but max allowed is 2962.xx (0.5925 * 5000)
+          await verifyWithdrawal(owner, parseEther("1000"));
+
+          const withdrawalRequest = await pool
+            .connect(owner)
+            .getWithdrawalRequest(currentPoolCycleIndex);
+
+          // phase1STokenAmountCalculated flag should be set to true for seller's request
+          expect(withdrawalRequest.phase1STokenAmountCalculated).to.eq(true);
+          expect(withdrawalRequest.remainingPhase1STokenAmount)
+            .to.be.gt(parseEther("1962"))
+            .and.lt(parseEther("1963"));
+
+          // 2nd withdrawal should be successful
+          await verifyWithdrawal(owner, parseEther("500"));
+
+          expect(
+            (
+              await pool
+                .connect(owner)
+                .getWithdrawalRequest(currentPoolCycleIndex)
+            ).remainingPhase1STokenAmount
+          )
+            .to.be.gt(parseEther("1462"))
+            .and.lt(parseEther("1463"));
+
+          // withdrawal percent is 0.5925...
+          expect(
+            (await pool.withdrawalCycleDetails(currentPoolCycleIndex))
+              .withdrawalPercent
+          ).to.be.eq(withdrawalPercentScaled);
+        });
+      });
+
+      describe("...3rd pool cycle is in withdrawal phase 2", async () => {
+        before(async () => {
+          // Move 3rd pool cycle(10 days open period, 30 days total duration) to locked state
+          await moveForwardTime(getDaysInSeconds(6));
+        });
+
+        it("...should be in withdrawal phase II", async () => {
+          const withdrawalDetail = await pool.withdrawalCycleDetails(
+            currentPoolCycleIndex
+          );
+          expect(await getLatestBlockTimestamp()).to.be.gt(
+            withdrawalDetail.withdrawalPhase2StartTimestamp
+          );
+        });
+
+        it("...is successful for 1st seller for remaining requested sTokens", async () => {
+          // 1st Seller(seller) has withdrawn allowed sTokens in previous phase,
+          // so withdrawal request should have remaining sTokens (1000 - 592.54xxx = 407.45xxx)
+          const remainingRequestedSTokens = (
+            await pool
+              .connect(seller)
+              .getWithdrawalRequest(currentPoolCycleIndex)
+          ).sTokenAmount;
+          expect(remainingRequestedSTokens)
+            .to.be.gt(parseEther("407.45"))
+            .and.lt(parseEther("407.46"));
+
+          // withdraw should be fine for remaining sTokens
+          await verifyWithdrawal(seller, remainingRequestedSTokens);
+        });
+
+        it("...fails for 1st seller for 2nd withdrawal", async () => {
+          // 1st Seller(owner account) has withdrawn all requested sTokens,
+          // so withdrawal request should not exist
+          expect(
+            (await pool.connect(seller).getWithdrawalRequest(1)).sTokenAmount
+          ).to.eq(0);
+
+          await expect(
+            pool.connect(seller).withdraw(parseEther("0.1"), sellerAddress)
+          ).to.be.revertedWith(
+            `NoWithdrawalRequested("${sellerAddress}", ${currentPoolCycleIndex})`
+          );
+        });
+
+        it("...is successful for 3rd seller", async () => {
+          // 3rd seller (Account4) has requested total 1000 sTokens in 2nd cycle,
+          // and not withdrawn any sTokens in withdrawal phase 1.
+          // so all sTokens withdrawal should be possible in withdrawal phase 2
+          const withdrawalAmt = parseEther("1000");
+          await verifyWithdrawal(account4, withdrawalAmt);
+        });
+
+        it("...leverage ratio floor is NOT breached", async () => {
+          expect(await pool.calculateLeverageRatio()).to.be.gt(
+            poolInfo.params.leverageRatioFloor
+          );
+        });
+
+        it("...fails for 2nd seller because of leverage ratio breaching the floor", async () => {
+          // 2nd Seller(owner) has withdrawn 1500 out of 5000 requested sTokens in phase 1,
+          // so withdrawal request should exist for remaining 3500 sTokens
+          expect(
+            (
+              await pool
+                .connect(owner)
+                .getWithdrawalRequest(currentPoolCycleIndex)
+            ).sTokenAmount
+          ).to.eq(parseEther("3500"));
+
+          // withdraw should fail
+          await expect(
+            pool.connect(owner).withdraw(parseEther("1000"), account4Address)
+          ).to.be.revertedWith("PoolLeverageRatioTooLow(1, 97272135180000000)");
+        });
+
+        it("...fails for 3rd seller", async () => {
+          // 3rd Seller(account4) has withdrawn all requested sTokens,
+          // so withdrawal request should not exist
+          expect(
+            (
+              await pool
+                .connect(account4)
+                .getWithdrawalRequest(currentPoolCycleIndex)
+            ).sTokenAmount
+          ).to.eq(0);
+
+          // withdraw should fail
+          await expect(
+            pool.connect(account4).withdraw(parseEther("0.1"), account4Address)
+          ).to.be.revertedWith(
+            `NoWithdrawalRequested("${account4Address}", ${currentPoolCycleIndex})`
           );
         });
       });

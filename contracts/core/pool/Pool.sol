@@ -713,13 +713,13 @@ contract Pool is IPool, SToken, ReentrancyGuard {
    * @param _withdrawalCycle the current withdrawal cycle.
    * @param _request the withdrawal request.
    * @param _sTokenWithdrawalAmount the amount that seller wants to withdraw in current withdrawal transaction.
-   * @return allowedSTokenWithdrawalAmount the allowed withdrawal amount.
+   * @return sTokenAllowedWithdrawalAmount the allowed sToken withdrawal amount.
    */
   function _calculateAndVerifyAllowedWithdrawalAmount(
     WithdrawalCycleDetail storage _withdrawalCycle,
     WithdrawalRequest storage _request,
     uint256 _sTokenWithdrawalAmount
-  ) internal returns (uint256 allowedSTokenWithdrawalAmount) {
+  ) internal returns (uint256 sTokenAllowedWithdrawalAmount) {
     uint256 sTokenRequested = _request.sTokenAmount;
 
     /// Verify that withdrawal amount is not more than the requested amount.
@@ -749,20 +749,23 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       );
 
       /// Allowed withdrawal amount is the minimum of the withdrawal amount and the maximum amount that can be withdrawn in phase 1.
-      allowedSTokenWithdrawalAmount = _sTokenWithdrawalAmount <
+      sTokenAllowedWithdrawalAmount = _sTokenWithdrawalAmount <
         maxPhase1WithdrawalAmount
         ? _sTokenWithdrawalAmount
         : maxPhase1WithdrawalAmount;
-      _request.remainingPhase1STokenAmount -= allowedSTokenWithdrawalAmount;
+      _request.remainingPhase1STokenAmount -= sTokenAllowedWithdrawalAmount;
     } else {
       /// Withdrawal phase II: First come first serve withdrawal
-      allowedSTokenWithdrawalAmount = _sTokenWithdrawalAmount;
+      sTokenAllowedWithdrawalAmount = _sTokenWithdrawalAmount;
     }
 
-    /// Verify that seller has sufficient sToken balance to withdraw.
-    uint256 sTokenBalance = balanceOf(msg.sender);
-    if (sTokenBalance < allowedSTokenWithdrawalAmount) {
-      revert InsufficientSTokenBalance(msg.sender, sTokenBalance);
+    /// Verify that seller is not withdrawing more than allowed.
+    if (_sTokenWithdrawalAmount > sTokenAllowedWithdrawalAmount) {
+      revert WithdrawalHigherThanAllowed(
+        msg.sender,
+        _sTokenWithdrawalAmount,
+        sTokenAllowedWithdrawalAmount
+      );
     }
   }
 }
