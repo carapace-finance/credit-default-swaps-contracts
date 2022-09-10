@@ -1264,8 +1264,8 @@ const testPool: Function = (
             .getWithdrawalRequest(currentPoolCycleIndex);
 
           // phase1STokenAmountCalculated flag should be set to true for seller's request
-          expect(withdrawalRequest.phase1STokenAmountCalculated).to.eq(true);
-          expect(withdrawalRequest.remainingPhase1STokenAmount).to.eq(0);
+          expect(withdrawalRequest.phaseOneSTokenAmountCalculated).to.eq(true);
+          expect(withdrawalRequest.remainingPhaseOneSTokenAmount).to.eq(0);
 
           // withdrawal percent is 0.5925...
           expect(
@@ -1293,8 +1293,8 @@ const testPool: Function = (
             .getWithdrawalRequest(currentPoolCycleIndex);
 
           // phase1STokenAmountCalculated flag should be set to true for seller's request
-          expect(withdrawalRequest.phase1STokenAmountCalculated).to.eq(true);
-          expect(withdrawalRequest.remainingPhase1STokenAmount)
+          expect(withdrawalRequest.phaseOneSTokenAmountCalculated).to.eq(true);
+          expect(withdrawalRequest.remainingPhaseOneSTokenAmount)
             .to.be.gt(parseEther("1962"))
             .and.lt(parseEther("1963"));
 
@@ -1306,7 +1306,7 @@ const testPool: Function = (
               await pool
                 .connect(owner)
                 .getWithdrawalRequest(currentPoolCycleIndex)
-            ).remainingPhase1STokenAmount
+            ).remainingPhaseOneSTokenAmount
           )
             .to.be.gt(parseEther("1462"))
             .and.lt(parseEther("1463"));

@@ -50,9 +50,9 @@ abstract contract IPool {
     /// @notice The requested amount of sTokens to withdraw in a cycle.
     uint256 sTokenAmount;
     /// @notice The remaining amount of sTokens to withdraw in phase 1 of withdrawal cycle.
-    uint256 remainingPhase1STokenAmount;
+    uint256 remainingPhaseOneSTokenAmount;
     /// @notice The flag to indicate whether allowed withdrawal amount for phase 1 is calculated or not
-    bool phase1STokenAmountCalculated;
+    bool phaseOneSTokenAmountCalculated;
   }
 
   struct LoanProtectionInfo {

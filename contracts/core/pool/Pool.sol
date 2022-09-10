@@ -666,7 +666,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /**
    * @dev Calculates & captures the withdrawal percent based on totalSToken available for withdrawal.
-   * @dev Withdrawal percent represents fair share of the total available capital that can be withdrawn by the seller.
+   * @dev WWithdrawal percent represents the percentage of the requested amount each seller can withdraw based on the available capital to withdraw.
    * @dev The withdrawal percent is calculated as: Capital Available to Withdraw / Total Withdrawal Requested
    * @dev The withdrawal percent is capped at 1.
    * @param detail The current withdrawal cycle detail.
@@ -733,14 +733,14 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       uint256 maxPhase1WithdrawalAmount;
 
       /// Calculate the maximum amount that can be withdrawn in phase 1, if it is not already calculated.
-      if (!_request.phase1STokenAmountCalculated) {
+      if (!_request.phaseOneSTokenAmountCalculated) {
         maxPhase1WithdrawalAmount =
           (sTokenRequested * withdrawalPercent) /
           Constants.SCALE_18_DECIMALS;
-        _request.phase1STokenAmountCalculated = true;
-        _request.remainingPhase1STokenAmount = maxPhase1WithdrawalAmount;
+        _request.phaseOneSTokenAmountCalculated = true;
+        _request.remainingPhaseOneSTokenAmount = maxPhase1WithdrawalAmount;
       } else {
-        maxPhase1WithdrawalAmount = _request.remainingPhase1STokenAmount;
+        maxPhase1WithdrawalAmount = _request.remainingPhaseOneSTokenAmount;
       }
       console.log(
         "max phase 1 withdrawal amount: %s, sToken withdrawal amount: %s",
@@ -753,7 +753,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         maxPhase1WithdrawalAmount
         ? _sTokenWithdrawalAmount
         : maxPhase1WithdrawalAmount;
-      _request.remainingPhase1STokenAmount -= sTokenAllowedWithdrawalAmount;
+      _request.remainingPhaseOneSTokenAmount -= sTokenAllowedWithdrawalAmount;
     } else {
       /// Withdrawal phase II: First come first serve withdrawal
       sTokenAllowedWithdrawalAmount = _sTokenWithdrawalAmount;
