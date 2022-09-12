@@ -120,7 +120,7 @@ const deployContracts: Function = async () => {
       minRequiredCapital: parseUSDC("50000"),
       minRequiredProtection: parseUSDC("200000"),
       curvature: parseEther("0.05"),
-      minRiskPremiumPercent: parseEther("0.02"),
+      minCarapaceRiskPremiumPercent: parseEther("0.02"),
       underlyingRiskPremiumPercent: parseEther("0.1"),
       poolCycleParams: _poolCycleParams
     };

@@ -47,7 +47,7 @@ const testPoolFactory: Function = (
         minRequiredCapital: parseUSDC("10000"),
         minRequiredProtection: parseUSDC("20000"),
         curvature: BigNumber.from(5),
-        minRiskPremiumPercent: parseEther("0.2"),
+        minCarapaceRiskPremiumPercent: parseEther("0.02"),
         underlyingRiskPremiumPercent: parseEther("0.1"),
         poolCycleParams: poolCycleParams
       };

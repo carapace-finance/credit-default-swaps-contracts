@@ -51,22 +51,22 @@ library RiskFactorCalculator {
   /**
    * @notice Calculates and returns the risk factor using minimum premium.
    * @notice Formula: riskFactor = (-1 * log(1 - min premium) / duration in days) * 365
-   * @param _minPremiumRate the minimum premium rate for the loan protection scaled to 18 decimals.
+   * @param _minCarapaceRiskPremiumPercent the minimum premium rate for the loan protection scaled to 18 decimals.
    *                        For example: 0.02 should be passed as 0.02 x 10**18 = 2 * 10**16
    * @param _durationInDays the duration of the loan protection in days scaled to 18 decimals
    * @return riskFactor the risk factor scaled to 18 decimals
    */
   function calculateRiskFactorUsingMinPremium(
-    uint256 _minPremiumRate,
+    uint256 _minCarapaceRiskPremiumPercent,
     uint256 _durationInDays
   ) external view returns (int256 riskFactor) {
     console.log(
-      "Calculating risk factor using min premium... min premium: %s, duration in days: %s",
-      _minPremiumRate,
+      "Calculating risk factor using minCarapaceRiskPremiumPercent... minCarapaceRiskPremiumPercent: %s, durationInDays: %s",
+      _minCarapaceRiskPremiumPercent,
       _durationInDays
     );
     int256 logValue = (Constants.SCALE_18_DECIMALS_INT -
-      int256(_minPremiumRate)).ln();
+      int256(_minCarapaceRiskPremiumPercent)).ln();
     console.logInt(logValue);
 
     /**

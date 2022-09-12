@@ -20,15 +20,10 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /// @notice OpenZeppelin library for managing counters.
   using Counters for Counters.Counter;
 
-  /*** variables ***/
-
-  /// @notice the total amount of underlying token in this pool
-  uint256 public totalUnderlying;
-
-  /// @notice some information about this pool
-  PoolInfo public poolInfo;
-
   /*** state variables ***/
+
+  /// @notice information about this pool
+  PoolInfo public poolInfo;
 
   /// @notice Reference to the PremiumPricing contract
   IPremiumCalculator public immutable premiumCalculator;
@@ -36,14 +31,23 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /// @notice Reference to the PoolCycleManager contract
   IPoolCycleManager public immutable poolCycleManager;
 
-  /// @notice The total underlying amount of deposits from protection sellers accumulated in the pool
-  uint256 public totalSellerDeposit;
-
   /// @notice The total underlying amount of premium from protection buyers accumulated in the pool
   uint256 public totalPremium;
 
   /// @notice The total underlying amount of protection bought from this pool
   uint256 public totalProtection;
+
+  /// @notice The timestamp of last premium accrual
+  uint256 public lastPremiumAccrualTimestamp;
+
+  /// @notice The total premium accrued in underlying token up to the last premium accrual timestamp
+  uint256 public totalPremiumAccrued;
+
+  /**
+   * @notice the total underlying amount in the pool backing the value of STokens.
+   * @notice This is the total capital deposited by sellers + accrued premiums from buyers - default payouts.
+   */
+  uint256 public totalSTokenUnderlying;
 
   /// @notice Buyer account id counter
   Counters.Counter public buyerAccountIdCounter;
@@ -58,17 +62,11 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /// @notice The total amount of premium for each lending pool
   mapping(uint256 => uint256) public lendingPoolIdToPremiumTotal;
 
-  /// @notice The mapping to track the withdrawal requests per protection seller.
-  mapping(address => WithdrawalRequest) public withdrawalRequests;
-
   /// @notice The array to track the loan protection info for all protection bought.
   LoanProtectionInfo[] public loanProtectionInfos;
 
-  /// @notice The timestamp of last premium accrual
-  uint256 public lastPremiumAccrualTimestamp;
-
-  /// @notice The total premium accrued in underlying token up to the last premium accrual timestamp
-  uint256 public totalPremiumAccrued;
+  /// @notice The mapping to track pool cycle index at which actual withdrawal will happen to withdrawal details
+  mapping(uint256 => WithdrawalCycleDetail) public withdrawalCycleDetails;
 
   /*** modifiers ***/
 
@@ -180,7 +178,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         scaleUnderlyingAmtTo18Decimals(_protectionAmount),
         _protectionBuyerApy,
         _leverageRatio,
-        getTotalCapital(),
+        totalSTokenUnderlying,
         totalProtection,
         poolInfo.params
       );
@@ -223,7 +221,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       poolInfo.params.leverageRatioCeiling,
       poolInfo.params.leverageRatioBuffer,
       poolInfo.params.curvature,
-      _isMinPremium ? poolInfo.params.minRiskPremiumPercent : 0
+      _isMinPremium ? poolInfo.params.minCarapaceRiskPremiumPercent : 0
     );
 
     loanProtectionInfos.push(
@@ -258,7 +256,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     accruePremium();
 
     uint256 sTokenShares = convertToSToken(_underlyingAmount);
-    totalSellerDeposit += _underlyingAmount;
+    totalSTokenUnderlying += _underlyingAmount;
     _safeMint(_receiver, sTokenShares);
     poolInfo.underlyingToken.transferFrom(
       msg.sender,
@@ -266,8 +264,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _underlyingAmount
     );
 
-    /// Verify leverage ratio only when total capital is higher than minimum capital requirement
-    if (totalSellerDeposit > poolInfo.params.minRequiredCapital) {
+    /// Verify leverage ratio only when total capital/sTokenUnderlying is higher than minimum capital requirement
+    if (totalSTokenUnderlying > poolInfo.params.minRequiredCapital) {
       /// calculate pool's current leverage ratio considering the new deposit
       uint256 leverageRatio = calculateLeverageRatio();
 
@@ -281,9 +279,10 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /**
    * @notice Creates a withdrawal request for the given sToken amount to allow actual withdrawal at the next pool cycle.
-   * @notice Each user can have single request at a time and hence this function will overwrite any existing request.
+   * @notice Each user can have single request per withdrawal cycle and
+   *         hence this function will overwrite any existing request.
    * @notice The actual withdrawal could be made when next pool cycle is opened for withdrawal with other constraints.
-   * @param _sTokenAmount The amount of token (sToken shares) to withdraw.
+   * @param _sTokenAmount The amount of sToken to withdraw.
    */
   function requestWithdrawal(uint256 _sTokenAmount) external whenNotPaused {
     uint256 sTokenBalance = balanceOf(msg.sender);
@@ -291,87 +290,126 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       revert InsufficientSTokenBalance(msg.sender, sTokenBalance);
     }
 
-    uint256 minPoolCycleIndex = poolCycleManager.getCurrentCycleIndex(
-      poolInfo.poolId
-    ) + 1;
-    WithdrawalRequest storage request = withdrawalRequests[msg.sender];
-    request.sTokenAmount = _sTokenAmount;
-    request.minPoolCycleIndex = minPoolCycleIndex;
+    IPoolCycleManager.PoolCycle memory currentPoolCycle = poolCycleManager
+      .getCurrentPoolCycle(poolInfo.poolId);
 
-    emit WithdrawalRequested(msg.sender, _sTokenAmount, minPoolCycleIndex);
+    /// Actual withdrawal is allowed in open period of next cycle
+    uint256 withdrawalCycleIndex = currentPoolCycle.currentCycleIndex + 1;
+
+    WithdrawalCycleDetail storage withdrawalCycle = withdrawalCycleDetails[
+      withdrawalCycleIndex
+    ];
+
+    WithdrawalRequest storage request = withdrawalCycle.withdrawalRequests[
+      msg.sender
+    ];
+    uint256 oldRequestAmount = request.sTokenAmount;
+    request.sTokenAmount = _sTokenAmount;
+
+    /// Update total requested withdrawal amount for the cycle considering existing requested amount
+    if (oldRequestAmount > _sTokenAmount) {
+      withdrawalCycle.totalSTokenRequested -= (oldRequestAmount -
+        _sTokenAmount);
+    } else {
+      withdrawalCycle.totalSTokenRequested += (_sTokenAmount -
+        oldRequestAmount);
+    }
+
+    /**
+     * Determine & capture the start timestamp of phase 2 of withdrawal cycle.
+     * Withdrawal cycle begins at the open period of next pool cycle.
+     * So withdrawal phase 2 will start after the half time is elapsed of next cycle's open duration.
+     */
+    if (withdrawalCycle.withdrawalPhase2StartTimestamp == 0) {
+      withdrawalCycle.withdrawalPhase2StartTimestamp =
+        currentPoolCycle.currentCycleStartTime +
+        currentPoolCycle.cycleDuration +
+        (currentPoolCycle.openCycleDuration / 2);
+    }
+
+    emit WithdrawalRequested(msg.sender, _sTokenAmount, withdrawalCycleIndex);
   }
 
   /**
-   * @notice Attempts to withdraw the sToken amount specified in the user's withdrawal request.
+   * @notice Attempts to withdraw the sToken amount specified by the user with upper bound based on withdrawal phase.
    * @notice A withdrawal request must be created during previous pool cycle.
    * @notice A withdrawal can only be made when the pool is in `Open` state.
    * @notice Proportional Underlying amount based on current exchange rate will be transferred to the receiver address.
-   * @param _sTokenAmount The amount of sToken to withdraw.
+   * @notice Withdrawals are allowed in 2 phases:
+   *         1. Phase I: Users can withdraw their sTokens proportional to their share of total sTokens requested for withdrawal based on leverage ratio floor.
+   *         2. Phase II: Users can withdraw up to remainder of their requested sTokens on the first come first serve basis.
+   *         Withdrawal cycle begins at the open period of current pool cycle.
+   *         So withdrawal phase 2 will start after the half time is elapsed of current cycle's open duration.
+   * @param _sTokenWithdrawalAmount The amount of sToken to withdraw.
    * @param _receiver The address to receive the underlying token.
    */
-  function withdraw(uint256 _sTokenAmount, address _receiver)
+  function withdraw(uint256 _sTokenWithdrawalAmount, address _receiver)
     external
     whenPoolIsOpen
     whenNotPaused
     nonReentrant
   {
-    /// Step 1: Verify withdrawal request exists
-    WithdrawalRequest storage request = withdrawalRequests[msg.sender];
-    if (request.sTokenAmount == 0) {
-      revert NoWithdrawalRequested(msg.sender);
-    }
-
-    /// Step 2: Verify withdrawal request is for current cycle
+    /// Step 1: Retrieve withdrawal details for current pool cycle index
     uint256 currentCycleIndex = poolCycleManager.getCurrentCycleIndex(
       poolInfo.poolId
     );
-    if (currentCycleIndex < request.minPoolCycleIndex) {
-      revert WithdrawalNotAvailableYet(
-        msg.sender,
-        request.minPoolCycleIndex,
-        currentCycleIndex
-      );
+    WithdrawalCycleDetail storage withdrawalCycle = withdrawalCycleDetails[
+      currentCycleIndex
+    ];
+
+    /// Step 2: Verify withdrawal request exists in this withdrawal cycle for the user
+    WithdrawalRequest storage request = withdrawalCycle.withdrawalRequests[
+      msg.sender
+    ];
+    uint256 sTokenRequested = request.sTokenAmount;
+    if (sTokenRequested == 0) {
+      revert NoWithdrawalRequested(msg.sender, currentCycleIndex);
     }
 
-    /// Step 3: Verify that withdrawal is for the correct amount and has sufficient balance
-    if (_sTokenAmount > request.sTokenAmount) {
-      revert WithdrawalHigherThanRequested(msg.sender, request.sTokenAmount);
-    }
-
-    uint256 sTokenBalance = balanceOf(msg.sender);
-    if (sTokenBalance < _sTokenAmount) {
-      revert InsufficientSTokenBalance(msg.sender, sTokenBalance);
-    }
-
-    /// Step 4: accrue premium before calculating underlying amount to be transferred
+    /// Step 3: accrue premium before calculating withdrawal cycle details
     accruePremium();
 
-    /// Step 5: calculate underlying amount to transfer
-    uint256 underlyingAmountToTransfer = convertToUnderlying(_sTokenAmount);
-
-    /// Step 6: burn sTokens shares.
-    /// This step must be done after calculating underlying amount to be transferred
-    _burn(msg.sender, _sTokenAmount);
-
-    /// Step 7: update/delete withdrawal request
-    request.sTokenAmount -= _sTokenAmount;
-
-    if (request.sTokenAmount == 0) {
-      delete withdrawalRequests[msg.sender];
+    /// Step 4: If it is the first withdrawal for this cycle, calculate & capture withdrawal cycle percent
+    uint256 withdrawalPercent = withdrawalCycle.withdrawalPercent;
+    if (withdrawalPercent == 0) {
+      _calculateWithdrawalPercent(withdrawalCycle);
     }
 
-    /// Step 8: transfer underlying token to receiver
-    totalSellerDeposit -= underlyingAmountToTransfer;
-    poolInfo.underlyingToken.transfer(_receiver, underlyingAmountToTransfer);
+    /// Step 5: Calculate and verify the allowed sToken amount that can be withdrawn based on current withdrawal phase
+    uint256 allowedSTokenWithdrawalAmount = _calculateAndVerifyAllowedWithdrawalAmount(
+        withdrawalCycle,
+        request,
+        _sTokenWithdrawalAmount
+      );
 
-    /// Step 9: Verify that the leverage ratio does not breach the floor.
-    /// This step must be done after transferring underlying token to receiver.
+    /// Step 6: calculate underlying amount to transfer based on allowed sToken withdrawal amount
+    uint256 underlyingAmountToTransfer = convertToUnderlying(
+      allowedSTokenWithdrawalAmount
+    );
+
+    /// Step 7: Verify that the leverage ratio does not breach the floor because of withdrawal
+    /// totalSTokenUnderlying must be updated before calculating leverage ratio
+    totalSTokenUnderlying -= underlyingAmountToTransfer;
     uint256 leverageRatio = calculateLeverageRatio();
     if (leverageRatio < poolInfo.params.leverageRatioFloor) {
       revert PoolLeverageRatioTooLow(poolInfo.poolId, leverageRatio);
     }
 
-    emit WithdrawalMade(msg.sender, _sTokenAmount, _receiver);
+    /// Step 8: burn sTokens shares.
+    /// This step must be done after calculating underlying amount to be transferred
+    _burn(msg.sender, allowedSTokenWithdrawalAmount);
+
+    /// Step 9: update/delete withdrawal request
+    request.sTokenAmount -= allowedSTokenWithdrawalAmount;
+
+    if (request.sTokenAmount == 0) {
+      delete withdrawalCycle.withdrawalRequests[msg.sender];
+    }
+
+    /// Step 10: transfer underlying token to receiver
+    poolInfo.underlyingToken.transfer(_receiver, underlyingAmountToTransfer);
+
+    emit WithdrawalMade(msg.sender, _sTokenWithdrawalAmount, _receiver);
   }
 
   /**
@@ -431,14 +469,15 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         secondsUntilNow,
         accruedPremium
       );
-
-      totalPremiumAccrued += scale18DecimalsAmtToUnderlyingDecimals(
-        accruedPremium
-      );
+      uint256 accruedPremiumInUnderlying = scale18DecimalsAmtToUnderlyingDecimals(
+          accruedPremium
+        );
+      totalPremiumAccrued += accruedPremiumInUnderlying;
+      totalSTokenUnderlying += accruedPremiumInUnderlying;
     }
 
     /// Remove expired protections from the list
-    for (uint256 i = 0; i < removalIndex; i++) {
+    for (uint256 i; i < removalIndex; i++) {
       uint256 expiredProtectionIndex = expiredProtections[i];
 
       /// move the last element to the expired protection index
@@ -481,11 +520,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /// @inheritdoc IPool
   function calculateLeverageRatio() public view override returns (uint256) {
-    if (totalProtection == 0) {
-      return 0;
-    }
-
-    return (getTotalCapital() * Constants.SCALE_18_DECIMALS) / totalProtection;
+    return _calculateLeverageRatio(totalSTokenUnderlying);
   }
 
   /**
@@ -522,19 +557,30 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     return scale18DecimalsAmtToUnderlyingDecimals(_underlyingAmount);
   }
 
-  /// @inheritdoc IPool
-  function getTotalCapital() public view override returns (uint256) {
-    /// Total capital is: sellers' deposits + accrued premiums from buyers - default payouts.
-    return totalSellerDeposit + totalPremiumAccrued;
-  }
-
-  /// @notice Returns all the protections bought from the pool.
+  /**
+   * @notice Returns all the protections bought from the pool.
+   */
   function getAllProtections()
     external
     view
     returns (LoanProtectionInfo[] memory)
   {
     return loanProtectionInfos;
+  }
+
+  /**
+   * @notice Returns the msg.sender's withdrawal request for the specified withdrawal cycle index.
+   * @param _withdrawalCycleIndex The index of the withdrawal cycle.
+   */
+  function getWithdrawalRequest(uint256 _withdrawalCycleIndex)
+    external
+    view
+    returns (WithdrawalRequest memory)
+  {
+    return
+      withdrawalCycleDetails[_withdrawalCycleIndex].withdrawalRequests[
+        msg.sender
+      ];
   }
 
   /*** internal functions */
@@ -547,7 +593,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
    */
   function _getExchangeRate() internal view returns (uint256) {
     uint256 _totalScaledCapital = scaleUnderlyingAmtTo18Decimals(
-      getTotalCapital()
+      totalSTokenUnderlying
     );
     uint256 _totalSTokenSupply = totalSupply();
     uint256 _exchangeRate = (_totalScaledCapital *
@@ -604,5 +650,122 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     return
       (amt * 10**(poolInfo.underlyingToken.decimals())) /
       Constants.SCALE_18_DECIMALS;
+  }
+
+  function _calculateLeverageRatio(uint256 totalCapital)
+    internal
+    view
+    returns (uint256)
+  {
+    if (totalProtection == 0) {
+      return 0;
+    }
+
+    return (totalCapital * Constants.SCALE_18_DECIMALS) / totalProtection;
+  }
+
+  /**
+   * @dev Calculates & captures the withdrawal percent based on totalSToken available for withdrawal.
+   * @dev WWithdrawal percent represents the percentage of the requested amount each seller can withdraw based on the available capital to withdraw.
+   * @dev The withdrawal percent is calculated as: Capital Available to Withdraw / Total Withdrawal Requested
+   * @dev The withdrawal percent is capped at 1.
+   * @param detail The current withdrawal cycle detail.
+   */
+  function _calculateWithdrawalPercent(WithdrawalCycleDetail storage detail)
+    internal
+  {
+    /// Calculate the lowest total capital amount that pool must have to NOT breach the leverage ratio floor.
+    uint256 lowestTotalCapitalAllowed = (poolInfo.params.leverageRatioFloor *
+      totalProtection) / Constants.SCALE_18_DECIMALS;
+    uint256 totalCapital = totalSTokenUnderlying;
+    if (totalCapital > lowestTotalCapitalAllowed) {
+      uint256 totalSTokenAvailableToWithdraw = convertToSToken(
+        totalCapital - lowestTotalCapitalAllowed
+      );
+
+      /// The percentage of the total sToken underlying that can be withdrawn without breaching the leverage ratio floor.
+      uint256 totalSTokenRequested = detail.totalSTokenRequested;
+      uint256 withdrawalPercent;
+      if (totalSTokenRequested > totalSTokenAvailableToWithdraw) {
+        withdrawalPercent =
+          (totalSTokenAvailableToWithdraw * Constants.SCALE_18_DECIMALS) /
+          totalSTokenRequested;
+      } else {
+        withdrawalPercent = 1 * Constants.SCALE_18_DECIMALS;
+      }
+
+      detail.withdrawalPercent = withdrawalPercent;
+      console.log(
+        "total sToken available to withdraw: %s, total sToken requested: %s, withdrawal percent: %s",
+        totalSTokenAvailableToWithdraw,
+        totalSTokenRequested,
+        withdrawalPercent
+      );
+    } else {
+      revert WithdrawalNotAllowed(totalCapital, lowestTotalCapitalAllowed);
+    }
+  }
+
+  /**
+   * @dev Calculates and verifies the allowed withdrawal amount based on the withdrawal percent for phase 1 and
+   *      the remaining requested withdrawal amount for phase 2.
+   * @dev This method also sets the remaining phase 1 withdrawal amount.
+   * @param _withdrawalCycle the current withdrawal cycle.
+   * @param _request the withdrawal request.
+   * @param _sTokenWithdrawalAmount the amount that seller wants to withdraw in current withdrawal transaction.
+   * @return sTokenAllowedWithdrawalAmount the allowed sToken withdrawal amount.
+   */
+  function _calculateAndVerifyAllowedWithdrawalAmount(
+    WithdrawalCycleDetail storage _withdrawalCycle,
+    WithdrawalRequest storage _request,
+    uint256 _sTokenWithdrawalAmount
+  ) internal returns (uint256 sTokenAllowedWithdrawalAmount) {
+    uint256 sTokenRequested = _request.sTokenAmount;
+
+    /// Verify that withdrawal amount is not more than the requested amount.
+    if (_sTokenWithdrawalAmount > sTokenRequested) {
+      revert WithdrawalHigherThanRequested(msg.sender, sTokenRequested);
+    }
+
+    if (block.timestamp < _withdrawalCycle.withdrawalPhase2StartTimestamp) {
+      /// Withdrawal phase I: Proportional withdrawal based on withdrawal percent.
+      uint256 withdrawalPercent = _withdrawalCycle.withdrawalPercent;
+      uint256 maxPhase1WithdrawalAmount;
+
+      /// Calculate the maximum amount that can be withdrawn in phase 1, if it is not already calculated.
+      if (!_request.phaseOneSTokenAmountCalculated) {
+        maxPhase1WithdrawalAmount =
+          (sTokenRequested * withdrawalPercent) /
+          Constants.SCALE_18_DECIMALS;
+        _request.phaseOneSTokenAmountCalculated = true;
+        _request.remainingPhaseOneSTokenAmount = maxPhase1WithdrawalAmount;
+      } else {
+        maxPhase1WithdrawalAmount = _request.remainingPhaseOneSTokenAmount;
+      }
+      console.log(
+        "max phase 1 withdrawal amount: %s, sToken withdrawal amount: %s",
+        maxPhase1WithdrawalAmount,
+        _sTokenWithdrawalAmount
+      );
+
+      /// Allowed withdrawal amount is the minimum of the withdrawal amount and the maximum amount that can be withdrawn in phase 1.
+      sTokenAllowedWithdrawalAmount = _sTokenWithdrawalAmount <
+        maxPhase1WithdrawalAmount
+        ? _sTokenWithdrawalAmount
+        : maxPhase1WithdrawalAmount;
+      _request.remainingPhaseOneSTokenAmount -= sTokenAllowedWithdrawalAmount;
+    } else {
+      /// Withdrawal phase II: First come first serve withdrawal
+      sTokenAllowedWithdrawalAmount = _sTokenWithdrawalAmount;
+    }
+
+    /// Verify that seller is not withdrawing more than allowed.
+    if (_sTokenWithdrawalAmount > sTokenAllowedWithdrawalAmount) {
+      revert WithdrawalHigherThanAllowed(
+        msg.sender,
+        _sTokenWithdrawalAmount,
+        sTokenAllowedWithdrawalAmount
+      );
+    }
   }
 }

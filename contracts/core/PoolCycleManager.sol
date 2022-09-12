@@ -122,6 +122,16 @@ contract PoolCycleManager is IPoolCycleManager {
     return poolCycles[_poolId].currentCycleIndex;
   }
 
+  /// @inheritdoc IPoolCycleManager
+  function getCurrentPoolCycle(uint256 _poolId)
+    public
+    view
+    override
+    returns (PoolCycle memory)
+  {
+    return poolCycles[_poolId];
+  }
+
   /*** internal/private functions ***/
 
   /// @dev Starts a new pool cycle using specified cycle index

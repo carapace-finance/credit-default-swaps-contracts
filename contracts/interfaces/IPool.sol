@@ -29,9 +29,9 @@ abstract contract IPool {
     uint256 minRequiredProtection;
     /// @notice curvature used in risk premium calculation scaled to 18 decimals
     uint256 curvature;
-    /// @notice the value which represents minimum amount of premium paid by a protection buyer scaled to 18 decimals
-    uint256 minRiskPremiumPercent;
-    /// @notice the value which represents the percentage of protection buyers' yield we take into account scaled to 18 decimals
+    /// @notice the minimum premium rate in percent paid by a protection buyer scaled to 18 decimals
+    uint256 minCarapaceRiskPremiumPercent;
+    /// @notice the percent of protection buyers' yield used in premium calculation scaled to 18 decimals
     uint256 underlyingRiskPremiumPercent;
     /// @notice pool cycle related parameters
     PoolCycleParams poolCycleParams;
@@ -47,10 +47,12 @@ abstract contract IPool {
 
   /// @notice A struct to store the details of a withdrawal request.
   struct WithdrawalRequest {
-    /// @notice The amount of sTokens to withdraw.
+    /// @notice The requested amount of sTokens to withdraw in a cycle.
     uint256 sTokenAmount;
-    /// @notice Minimum index at or after which the actual withdrawal can be made
-    uint256 minPoolCycleIndex;
+    /// @notice The remaining amount of sTokens to withdraw in phase 1 of withdrawal cycle.
+    uint256 remainingPhaseOneSTokenAmount;
+    /// @notice The flag to indicate whether allowed withdrawal amount for phase 1 is calculated or not
+    bool phaseOneSTokenAmountCalculated;
   }
 
   struct LoanProtectionInfo {
@@ -70,6 +72,18 @@ abstract contract IPool {
     int256 lambda;
   }
 
+  /// @notice A struct to store the details of a withdrawal cycle.
+  struct WithdrawalCycleDetail {
+    /// @notice total amount of sTokens requested to be withdrawn for this cycle
+    uint256 totalSTokenRequested;
+    /// @notice Percent of requested sTokens that can be withdrawn for this cycle without breaching the leverage ratio floor
+    uint256 withdrawalPercent;
+    /// @notice The withdrawal phase 2 start timestamp after which withdrawal is allowed without restriction during the open period
+    uint256 withdrawalPhase2StartTimestamp;
+    /// @notice The mapping to track the withdrawal requests per protection seller for this withdrawal cycle.
+    mapping(address => WithdrawalRequest) withdrawalRequests;
+  }
+
   /*** errors ***/
 
   error ExpirationTimeTooShort(uint256 expirationTime);
@@ -77,17 +91,21 @@ abstract contract IPool {
   error PoolIsNotOpen(uint256 poolId);
   error PoolLeverageRatioTooHigh(uint256 poolId, uint256 leverageRatio);
   error PoolLeverageRatioTooLow(uint256 poolId, uint256 leverageRatio);
-  error NoWithdrawalRequested(address msgSender);
-  error WithdrawalNotAvailableYet(
-    address msgSender,
-    uint256 minPoolCycleIndex,
-    uint256 currentPoolCycleIndex
-  );
+  error NoWithdrawalRequested(address msgSender, uint256 poolCycleIndex);
   error WithdrawalHigherThanRequested(
     address msgSender,
-    uint256 requestedAmount
+    uint256 requestedSTokenAmount
   );
   error InsufficientSTokenBalance(address msgSender, uint256 sTokenBalance);
+  error WithdrawalNotAllowed(
+    uint256 totalSTokenUnderlying,
+    uint256 lowestSTokenUnderlyingAllowed
+  );
+  error WithdrawalHigherThanAllowed(
+    address msgSender,
+    uint256 sTokenWithdrawalAmount,
+    uint256 sTokenAllowedWithdrawalAmount
+  );
 
   /*** events ***/
 
@@ -138,10 +156,4 @@ abstract contract IPool {
    * @notice For example: 0.15 is returned as 0.15 x 10**18 = 15 * 10**16
    */
   function calculateLeverageRatio() public view virtual returns (uint256);
-
-  /**
-   * @notice Returns the current total underlying amount in the pool
-   * @notice This is the total of capital deposited by sellers + accrued premiums from buyers - default payouts.
-   */
-  function getTotalCapital() public view virtual returns (uint256);
 }
