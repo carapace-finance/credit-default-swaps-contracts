@@ -181,7 +181,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     (uint256 _premiumAmountIn18Decimals, bool _isMinPremium) = premiumCalculator
       .calculatePremium(
         _protectionExpirationTimestamp,
-        scaleUnderlyingAmtTo18Decimals(_protectionAmount),
+        _scaleUnderlyingAmtTo18Decimals(_protectionAmount),
         _protectionBuyerApy,
         _leverageRatio,
         totalSTokenUnderlying,
@@ -192,7 +192,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       "protection premium amount in 18 decimals: %s",
       _premiumAmountIn18Decimals
     );
-    uint256 _premiumAmount = scale18DecimalsAmtToUnderlyingDecimals(
+    uint256 _premiumAmount = _scale18DecimalsAmtToUnderlyingDecimals(
       _premiumAmountIn18Decimals
     );
 
@@ -425,6 +425,24 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     emit WithdrawalMade(msg.sender, _sTokenWithdrawalAmount, _receiver);
   }
 
+  /// @notice allows the owner to pause the contract
+  function pause() external onlyOwner {
+    _pause();
+  }
+
+  /// @notice allows the owner to unpause the contract
+  function unpause() external onlyOwner {
+    _unpause();
+  }
+
+  function updateFloor(uint256 newFloor) external onlyOwner {
+    poolInfo.params.leverageRatioFloor = newFloor;
+  }
+
+  function updateCeiling(uint256 newCeiling) external onlyOwner {
+    poolInfo.params.leverageRatioCeiling = newCeiling;
+  }
+
   /**
    * @notice Calculates the premium accrued for all existing protections and updates the total premium accrued.
    * @notice This method calculates premium accrued from the last timestamp to the current timestamp.
@@ -483,7 +501,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         secondsUntilNow,
         accruedPremium
       );
-      uint256 accruedPremiumInUnderlying = scale18DecimalsAmtToUnderlyingDecimals(
+      uint256 accruedPremiumInUnderlying = _scale18DecimalsAmtToUnderlyingDecimals(
           accruedPremium
         );
       totalPremiumAccrued += accruedPremiumInUnderlying;
@@ -507,29 +525,22 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     emit PremiumAccrued(lastPremiumAccrualTimestamp, totalPremiumAccrued);
   }
 
-  /// @notice allows the owner to pause the contract
-  function pause() external onlyOwner {
-    _pause();
-  }
-
-  /// @notice allows the owner to unpause the contract
-  function unpause() external onlyOwner {
-    _unpause();
-  }
-
-  function updateFloor(uint256 newFloor) external onlyOwner {
-    poolInfo.params.leverageRatioFloor = newFloor;
-  }
-
-  function updateCeiling(uint256 newCeiling) external onlyOwner {
-    poolInfo.params.leverageRatioCeiling = newCeiling;
-  }
-
   /** view functions */
 
   /// @inheritdoc IPool
-  function getPoolInfo() public view override returns (PoolInfo memory) {
+  function getPoolInfo() external view override returns (PoolInfo memory) {
     return poolInfo;
+  }
+
+  /**
+   * @notice Returns all the protections bought from the pool.
+   */
+  function getAllProtections()
+    external
+    view
+    returns (LoanProtectionInfo[] memory)
+  {
+    return loanProtectionInfos;
   }
 
   /// @inheritdoc IPool
@@ -547,7 +558,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     view
     returns (uint256)
   {
-    uint256 _scaledUnderlyingAmt = scaleUnderlyingAmtTo18Decimals(
+    uint256 _scaledUnderlyingAmt = _scaleUnderlyingAmtTo18Decimals(
       _underlyingAmount
     );
     if (totalSupply() == 0) return _scaledUnderlyingAmt;
@@ -569,18 +580,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   {
     uint256 _underlyingAmount = (_sTokenShares * _getExchangeRate()) /
       Constants.SCALE_18_DECIMALS;
-    return scale18DecimalsAmtToUnderlyingDecimals(_underlyingAmount);
-  }
-
-  /**
-   * @notice Returns all the protections bought from the pool.
-   */
-  function getAllProtections()
-    external
-    view
-    returns (LoanProtectionInfo[] memory)
-  {
-    return loanProtectionInfos;
+    return _scale18DecimalsAmtToUnderlyingDecimals(_underlyingAmount);
   }
 
   /**
@@ -607,7 +607,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
    * @return the exchange rate scaled to 18 decimals
    */
   function _getExchangeRate() internal view returns (uint256) {
-    uint256 _totalScaledCapital = scaleUnderlyingAmtTo18Decimals(
+    uint256 _totalScaledCapital = _scaleUnderlyingAmtTo18Decimals(
       totalSTokenUnderlying
     );
     uint256 _totalSTokenSupply = totalSupply();
@@ -644,7 +644,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /**
    * @dev Scales the given underlying token amount to the amount with 18 decimals.
    */
-  function scaleUnderlyingAmtTo18Decimals(uint256 underlyingAmt)
+  function _scaleUnderlyingAmtTo18Decimals(uint256 underlyingAmt)
     private
     view
     returns (uint256)
@@ -657,7 +657,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /**
    * @dev Scales the given amount from 18 decimals to decimals used by underlying token.
    */
-  function scale18DecimalsAmtToUnderlyingDecimals(uint256 amt)
+  function _scale18DecimalsAmtToUnderlyingDecimals(uint256 amt)
     private
     view
     returns (uint256)

@@ -150,7 +150,7 @@ abstract contract IPool {
   /**
    * @notice Returns various parameters and other pool related info.
    */
-  function getPoolInfo() public view virtual returns (PoolInfo memory);
+  function getPoolInfo() external view virtual returns (PoolInfo memory);
 
   /**
    * @notice Calculates and returns leverage ratio scaled to 18 decimals.
