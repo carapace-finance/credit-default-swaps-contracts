@@ -66,6 +66,7 @@ abstract contract IPool {
     uint256 expirationTimestamp;
     /// @notice Constant K is calculated & captured at the time of loan protection purchase
     /// @notice It is used in accrued premium calculation
+    // solhint-disable-next-line var-name-mixedcase
     int256 K;
     /// @notice Lambda is calculated & captured at the time of loan protection purchase
     /// @notice It is used in accrued premium calculation

@@ -34,7 +34,15 @@ library AccruedPremiumCalculator {
     uint256 _leverageRatioBuffer,
     uint256 _curvature,
     uint256 _minCarapaceRiskPremiumPercent
-  ) public view returns (int256 K, int256 lambda) {
+  )
+    public
+    view
+    returns (
+      // solhint-disable-next-line var-name-mixedcase
+      int256 K,
+      int256 lambda
+    )
+  {
     /// When minRiskPremiumPercent is specified, risk factor should be calculated on the basis of minimum premium rate
     int256 riskFactor;
     if (_minCarapaceRiskPremiumPercent > 0) {

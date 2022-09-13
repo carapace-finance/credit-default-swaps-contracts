@@ -15,7 +15,10 @@ import "../../libraries/Constants.sol";
 
 import "hardhat/console.sol";
 
-/// @notice Each pool is a market where protection sellers and buyers can swap credit default risks of designated underlying loans.
+/**
+ * @notice Each pool is a market where protection sellers
+ *         and buyers can swap credit default risks of designated underlying loans.
+ */
 contract Pool is IPool, SToken, ReentrancyGuard {
   /*** libraries ***/
   /// @notice OpenZeppelin library for managing counters.
@@ -164,7 +167,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     /// accrue premium before calculating leverage ratio
     accruePremium();
 
-    /// Calculate & when total protection is higher than required min protection, ensure that leverage ratio floor is not breached
+    /// Calculate & when total protection is higher than required min protection,
+    /// ensure that leverage ratio floor is not breached
     totalProtection += _protectionAmount;
     uint256 _leverageRatio = calculateLeverageRatio();
     if (totalProtection > poolInfo.params.minRequiredProtection) {
@@ -203,6 +207,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     totalPremium += _premiumAmount;
 
     /// Calculate protection in days and scale it to 18 decimals.
+
     uint256 _protectionDurationInDaysScaled = ((_protectionExpirationTimestamp -
       block.timestamp) * Constants.SCALE_18_DECIMALS) /
       uint256(Constants.SECONDS_IN_DAY);
@@ -215,6 +220,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     );
 
     /// Capture loan protection data for premium accrual calculation
+    // solhint-disable-next-line
     (int256 K, int256 lambda) = AccruedPremiumCalculator.calculateKAndLambda(
       _premiumAmountIn18Decimals,
       _protectionDurationInDaysScaled,
@@ -338,8 +344,10 @@ contract Pool is IPool, SToken, ReentrancyGuard {
    * @notice A withdrawal can only be made when the pool is in `Open` state.
    * @notice Proportional Underlying amount based on current exchange rate will be transferred to the receiver address.
    * @notice Withdrawals are allowed in 2 phases:
-   *         1. Phase I: Users can withdraw their sTokens proportional to their share of total sTokens requested for withdrawal based on leverage ratio floor.
-   *         2. Phase II: Users can withdraw up to remainder of their requested sTokens on the first come first serve basis.
+   *         1. Phase I: Users can withdraw their sTokens proportional to their share of total sTokens
+   *            requested for withdrawal based on leverage ratio floor.
+   *         2. Phase II: Users can withdraw up to remainder of their requested sTokens on
+   *            the first come first serve basis.
    *         Withdrawal cycle begins at the open period of current pool cycle.
    *         So withdrawal phase 2 will start after the half time is elapsed of current cycle's open duration.
    * @param _sTokenWithdrawalAmount The amount of sToken to withdraw.
@@ -440,7 +448,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       /**
        * <-Protection Bought(second: 0) --- last accrual --- now --- Expiration->
        * The time line starts when protection is bought and ends when protection is expired.
-       * secondsUntilLastPremiumAccrual is the second elapsed since the last accrual timestamp after the protection is bought.
+       * secondsUntilLastPremiumAccrual is the second elapsed since the last accrual timestamp
+       * after the protection is bought.
        * toSeconds is the second elapsed until now after protection is bought.
        */
       uint256 startTimestamp = loanProtectionInfo.startTimestamp;
@@ -548,7 +557,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   }
 
   /**
-   * @dev A protection seller can calculate their balance of an underlying asset with their SToken balance and the exchange rate: SToken balance * the exchange rate
+   * @dev A protection seller can calculate their balance of an underlying asset with their SToken balance and
+   *      the exchange rate: SToken balance * the exchange rate
    * @param _sTokenShares The amount of SToken shares to be converted.
    * @return underlying amount scaled to underlying decimals.
    */
@@ -671,7 +681,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /**
    * @dev Calculates & captures the withdrawal percent based on totalSToken available for withdrawal.
-   * @dev WWithdrawal percent represents the percentage of the requested amount each seller can withdraw based on the available capital to withdraw.
+   * @dev Withdrawal percent represents the percentage of the requested amount
+   *      each seller can withdraw based on the available capital to withdraw.
    * @dev The withdrawal percent is calculated as: Capital Available to Withdraw / Total Withdrawal Requested
    * @dev The withdrawal percent is capped at 1.
    * @param detail The current withdrawal cycle detail.
@@ -688,7 +699,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         totalCapital - lowestTotalCapitalAllowed
       );
 
-      /// The percentage of the total sToken underlying that can be withdrawn without breaching the leverage ratio floor.
+      /// The percentage of the total sToken underlying that can be withdrawn
+      /// without breaching the leverage ratio floor.
       uint256 totalSTokenRequested = detail.totalSTokenRequested;
       uint256 withdrawalPercent;
       if (totalSTokenRequested > totalSTokenAvailableToWithdraw) {
@@ -753,7 +765,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         _sTokenWithdrawalAmount
       );
 
-      /// Allowed withdrawal amount is the minimum of the withdrawal amount and the maximum amount that can be withdrawn in phase 1.
+      /// Allowed withdrawal amount is the minimum of the withdrawal amount and
+      /// the maximum amount that can be withdrawn in phase 1.
       sTokenAllowedWithdrawalAmount = _sTokenWithdrawalAmount <
         maxPhase1WithdrawalAmount
         ? _sTokenWithdrawalAmount
