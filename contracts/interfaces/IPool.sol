@@ -66,6 +66,7 @@ abstract contract IPool {
     uint256 expirationTimestamp;
     /// @notice Constant K is calculated & captured at the time of loan protection purchase
     /// @notice It is used in accrued premium calculation
+    // solhint-disable-next-line var-name-mixedcase
     int256 K;
     /// @notice Lambda is calculated & captured at the time of loan protection purchase
     /// @notice It is used in accrued premium calculation
@@ -149,7 +150,7 @@ abstract contract IPool {
   /**
    * @notice Returns various parameters and other pool related info.
    */
-  function getPoolInfo() public view virtual returns (PoolInfo memory);
+  function getPoolInfo() external view virtual returns (PoolInfo memory);
 
   /**
    * @notice Calculates and returns leverage ratio scaled to 18 decimals.
