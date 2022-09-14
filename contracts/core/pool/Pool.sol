@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./SToken.sol";
 import "../../interfaces/IPremiumCalculator.sol";
@@ -19,6 +20,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /*** libraries ***/
   /// @notice OpenZeppelin library for managing counters.
   using Counters for Counters.Counter;
+  using SafeERC20 for IERC20Metadata;
 
   /*** state variables ***/
 
@@ -192,7 +194,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
     uint256 _accountId = ownerAddressToBuyerAccountId[msg.sender];
     buyerAccounts[_accountId][_lendingPoolId] += _premiumAmount;
-    poolInfo.underlyingToken.transferFrom(
+    poolInfo.underlyingToken.safeTransferFrom(
       msg.sender,
       address(this),
       _premiumAmount
@@ -258,7 +260,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     uint256 sTokenShares = convertToSToken(_underlyingAmount);
     totalSTokenUnderlying += _underlyingAmount;
     _safeMint(_receiver, sTokenShares);
-    poolInfo.underlyingToken.transferFrom(
+    poolInfo.underlyingToken.safeTransferFrom(
       msg.sender,
       address(this),
       _underlyingAmount
@@ -407,7 +409,10 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     }
 
     /// Step 10: transfer underlying token to receiver
-    poolInfo.underlyingToken.transfer(_receiver, underlyingAmountToTransfer);
+    poolInfo.underlyingToken.safeTransfer(
+      _receiver,
+      underlyingAmountToTransfer
+    );
 
     emit WithdrawalMade(msg.sender, _sTokenWithdrawalAmount, _receiver);
   }
