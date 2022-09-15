@@ -86,7 +86,11 @@ abstract contract IPool {
   }
 
   /*** errors ***/
-
+  error LendingPoolExpired(address lendingPoolAddress);
+  error LendingPoolDefaulted(address lendingPoolAddress);
+  error ProtectionPurchaseNotAllowed(
+    IReferenceLendingPools.ProtectionPurchaseParams params
+  );
   error ExpirationTimeTooShort(uint256 expirationTime);
   error BuyerAccountExists(address msgSender);
   error PoolIsNotOpen(uint256 poolId);
@@ -123,9 +127,12 @@ abstract contract IPool {
   /// @notice Emitted when a new buyer account is created.
   event BuyerAccountCreated(address owner, uint256 accountId);
 
-  /*** event definition ***/
   /// @notice Emitted when a new protection is bought.
-  event ProtectionBought(address buyer, uint256 lendingPoolId, uint256 premium);
+  event ProtectionBought(
+    address buyer,
+    address lendingPoolAddress,
+    uint256 premium
+  );
 
   /// @notice Emitted when premium is accrued
   event PremiumAccrued(
@@ -146,6 +153,22 @@ abstract contract IPool {
     uint256 tokenAmount,
     address receiver
   );
+
+  // TODO: finalize this
+  // /**
+  //  * @notice Adds a new protection to the pool for a premium amount.
+  //  * @dev The underlying tokens in the amount of premium must be approved first.
+  //  * @param _lendingPoolAddress The address of the lending pool where the buyer has lent.
+  //  * @param _protectionExpirationTimestamp the expiration timestamp of the protection
+  //  * @param _protectionAmount the protection amount in underlying tokens.
+  //  * This amount must be less than or equal to buyer's loan in underlying tokens.
+  //  * @param _nftLpTokenId Id of ERC721 LP token received by the buyer to represent the deposit in the lending pool.
+  //  * Buyer has to specify `nftTokenId` when underlying protocol provides ERC721 LP token, i.e. Goldfinch
+  //  */
+  function buyProtection(
+    IReferenceLendingPools.ProtectionPurchaseParams
+      calldata _protectionPurchaseParams
+  ) external virtual;
 
   /**
    * @notice Returns various parameters and other pool related info.
