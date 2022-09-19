@@ -117,4 +117,13 @@ abstract contract ITranchedPool {
   ) external virtual;
 
   function numSlices() external view virtual returns (uint256);
+
+  /**
+   * Comments copied from: https://github.com/goldfinch-eng/mono/blob/88f0e3f94f6dd23ebae429fe09e2511650df893a/packages/protocol/contracts/protocol/core/GoldfinchFactory.sol#L67
+   * The percent of senior interest allocated to junior investors, expressed as
+   * integer percents. eg. 20% is simply 20
+   *
+   * This is added to access public variable "juniorFeePercent" from Goldfinch's TranchedPool contract.
+   */
+  function juniorFeePercent() external view virtual returns (uint256);
 }

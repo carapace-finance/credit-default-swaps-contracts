@@ -31,14 +31,14 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
   constructor(
     address[] memory _lendingPools,
     LendingProtocol[] memory _lendingPoolProtocols,
-    LendingPoolTokenType[] memory _lendingPoolProtocolTokenTypes
+    uint256[] memory _protectionPurchaseLimitsInDays
   ) {
     if (
-      _lendingPools.length != _lendingPoolProtocols.length &&
-      _lendingPools.length != _lendingPoolProtocolTokenTypes.length
+      _lendingPools.length != _lendingPoolProtocols.length ||
+      _lendingPools.length != _protectionPurchaseLimitsInDays.length
     ) {
       revert ReferenceLendingPoolsConstructionError(
-        "_lendingPools, _lendingPoolProtocols & _lendingPoolProtocolTokenTypes array length must match"
+        "_lendingPools, _lendingPoolProtocols & _protectionPurchaseLimitsInDays array length must match"
       );
     }
 
@@ -46,7 +46,7 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
       _addReferenceLendingPool(
         _lendingPools[i],
         _lendingPoolProtocols[i],
-        _lendingPoolProtocolTokenTypes[i]
+        _protectionPurchaseLimitsInDays[i]
       );
     }
   }
@@ -57,17 +57,19 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
    * @notice Adds a new reference lending pool to the basket.
    * @param _lendingPoolAddress address of the lending pool
    * @param _lendingPoolProtocol the protocol of underlying lending pool
-   * @param _lendingPoolProtocolTokenType the token type of underlying lending pool, i.e. ERC20 or ERC721
+   * @param _protectionPurchaseLimitInDays the protection purchase limit in days.
+   * i.e. 90 days means the protection can be purchased within {_protectionPurchaseLimitInDays} days of
+   * lending pool being added to this contract.
    */
   function addReferenceLendingPool(
     address _lendingPoolAddress,
     LendingProtocol _lendingPoolProtocol,
-    LendingPoolTokenType _lendingPoolProtocolTokenType
+    uint256 _protectionPurchaseLimitInDays
   ) external onlyOwner {
     _addReferenceLendingPool(
       _lendingPoolAddress,
       _lendingPoolProtocol,
-      _lendingPoolProtocolTokenType
+      _protectionPurchaseLimitInDays
     );
   }
 
@@ -75,7 +77,7 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
 
   /// @inheritdoc IReferenceLendingPools
   function getLendingPoolStatus(address _lendingPoolAddress)
-    external
+    public
     view
     override
     returns (LendingPoolStatus poolStatus)
@@ -84,20 +86,18 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
       return LendingPoolStatus.None;
     }
 
-    if (
-      ILendingProtocolAdapter(
-        lendingProtocolAdapters[
-          referenceLendingPools[_lendingPoolAddress].protocol
-        ]
-      ).isLendingPoolDefaulted(_lendingPoolAddress)
-    ) {
+    ILendingProtocolAdapter _adapter = _getLendingProtocolAdapter(
+      _lendingPoolAddress
+    );
+
+    if (_adapter.isLendingPoolDefaulted(_lendingPoolAddress)) {
       return LendingPoolStatus.Defaulted;
     }
 
-    if (
-      block.timestamp >=
-      referenceLendingPools[_lendingPoolAddress].termEndTimestamp
-    ) {
+    (uint256 _termEndTimestamp, ) = _adapter.getLendingPoolDetails(
+      _lendingPoolAddress
+    );
+    if (block.timestamp >= _termEndTimestamp) {
       return LendingPoolStatus.Expired;
     }
 
@@ -108,13 +108,14 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
   function canBuyProtection(
     address _buyer,
     ProtectionPurchaseParams memory _purchaseParams
-  ) external view override returns (bool) {
+  ) public view override returns (bool) {
     /// When the protection expiration is NOT within 1 quarter of the date an underlying lending pool added,
     /// the buyer cannot purchase protection.
     ReferenceLendingPoolInfo storage lendingPoolInfo = referenceLendingPools[
       _purchaseParams.lendingPoolAddress
     ];
-    if (block.timestamp > lendingPoolInfo.addedTimestamp + 90 days) {
+
+    if (block.timestamp > lendingPoolInfo.protectionPurchaseLimitTimestamp) {
       return false;
     }
 
@@ -124,41 +125,40 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
         .isProtectionAmountValid(_buyer, _purchaseParams);
   }
 
-  function calculateProtectionBuyerApy(address _lendingPoolAddress)
-    external
+  /// @inheritdoc IReferenceLendingPools
+  function calculateProtectionBuyerInterestRate(address _lendingPoolAddress)
+    public
     view
     override
     returns (uint256)
   {
     return
       _getLendingProtocolAdapter(_lendingPoolAddress)
-        .calculateProtectionBuyerApy(_lendingPoolAddress);
+        .calculateProtectionBuyerInterestRate(_lendingPoolAddress);
   }
 
-  /** private functions */
+  /** internal functions */
 
   function _addReferenceLendingPool(
     address _lendingPoolAddress,
     LendingProtocol _lendingPoolProtocol,
-    LendingPoolTokenType _lendingPoolProtocolTokenType
-  ) private {
-    /// get term details from underlying protocol
-    (
-      uint256 _termEndTimestamp,
-      uint256 _interestRate
-    ) = _getLendingProtocolAdapter(_lendingPoolAddress).getLendingPoolDetails(
-        _lendingPoolAddress
-      );
+    uint256 _protectionPurchaseLimitInDays
+  ) internal {
+    if (_referenceLendingPoolExists(_lendingPoolAddress)) {
+      return;
+    }
 
     uint256 _addedTimestamp = block.timestamp;
+    uint256 _protectionPurchaseLimitTimestamp = _addedTimestamp +
+      (_protectionPurchaseLimitInDays * 1 days);
+
     referenceLendingPools[_lendingPoolAddress] = ReferenceLendingPoolInfo({
-      addedTimestamp: _addedTimestamp,
       protocol: _lendingPoolProtocol,
-      tokenType: _lendingPoolProtocolTokenType,
-      termEndTimestamp: _termEndTimestamp,
-      interestRate: _interestRate
+      addedTimestamp: _addedTimestamp,
+      protectionPurchaseLimitTimestamp: _protectionPurchaseLimitTimestamp
     });
 
+    /// Create underlying protocol adapter if it doesn't exist
     if (
       address(lendingProtocolAdapters[_lendingPoolProtocol]) ==
       Constants.ZERO_ADDRESS
@@ -171,13 +171,13 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
     emit ReferenceLendingPoolAdded(
       _lendingPoolAddress,
       _lendingPoolProtocol,
-      _lendingPoolProtocolTokenType,
-      _addedTimestamp
+      _addedTimestamp,
+      _protectionPurchaseLimitTimestamp
     );
   }
 
   function _getLendingProtocolAdapter(address _lendingPoolAddress)
-    private
+    internal
     view
     returns (ILendingProtocolAdapter)
   {
@@ -188,7 +188,7 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
   }
 
   function _referenceLendingPoolExists(address _lendingPoolAddress)
-    private
+    internal
     view
     returns (bool)
   {

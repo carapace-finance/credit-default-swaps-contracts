@@ -13,11 +13,6 @@ abstract contract IReferenceLendingPools {
     Maple
   }
 
-  enum LendingPoolTokenType {
-    ERC20,
-    ERC721
-  }
-
   enum LendingPoolStatus {
     /// @notice This means the lending pool is not added to the basket
     None,
@@ -27,11 +22,9 @@ abstract contract IReferenceLendingPools {
   }
 
   struct ReferenceLendingPoolInfo {
-    uint256 addedTimestamp;
     LendingProtocol protocol;
-    LendingPoolTokenType tokenType;
-    uint256 termEndTimestamp;
-    uint256 interestRate;
+    uint256 addedTimestamp;
+    uint256 protectionPurchaseLimitTimestamp;
   }
 
   struct ProtectionPurchaseParams {
@@ -48,12 +41,12 @@ abstract contract IReferenceLendingPools {
 
   /*** events ***/
 
-  /// @notice emitted when a new reference lending pool is added
+  /// @notice emitted when a new reference lending pool is added to the basket
   event ReferenceLendingPoolAdded(
     address indexed lendingPoolAddress,
     LendingProtocol indexed lendingPoolProtocol,
-    LendingPoolTokenType lendingPoolProtocolTokenType,
-    uint256 addedTimestamp
+    uint256 addedTimestamp,
+    uint256 protectionExpirationTimestamp
   );
 
   /** errors */
@@ -72,13 +65,15 @@ abstract contract IReferenceLendingPools {
   function canBuyProtection(
     address buyer,
     ProtectionPurchaseParams memory _purchaseParams
-  ) external view virtual returns (bool);
+  ) public view virtual returns (bool);
 
   /**
-   * Calculates the protection buyer's annual yield from the underlying lending pool.
+   * @notice Calculates the protection buyer's annual interest rate for the specified underlying lending pool.
+   * @param _lendingPoolAddress address of the lending pool
+   * @return annual interest rate scaled to 18 decimals
    */
-  function calculateProtectionBuyerApy(address lendingPoolAddress)
-    external
+  function calculateProtectionBuyerInterestRate(address _lendingPoolAddress)
+    public
     view
     virtual
     returns (uint256);

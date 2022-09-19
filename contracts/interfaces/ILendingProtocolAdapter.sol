@@ -30,7 +30,7 @@ abstract contract ILendingProtocolAdapter {
     virtual
     returns (uint256 termEndTimestamp, uint256 interestRate);
 
-  function calculateProtectionBuyerApy(address lendingPoolAddress)
+  function calculateProtectionBuyerInterestRate(address lendingPoolAddress)
     external
     view
     virtual
