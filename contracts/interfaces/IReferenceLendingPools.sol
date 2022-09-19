@@ -18,11 +18,18 @@ abstract contract IReferenceLendingPools {
     ERC721
   }
 
+  enum LendingPoolStatus {
+    /// @notice This means the lending pool is not added to the basket
+    None,
+    Active,
+    Expired,
+    Defaulted
+  }
+
   struct ReferenceLendingPoolInfo {
     uint256 addedTimestamp;
     LendingProtocol protocol;
     LendingPoolTokenType tokenType;
-    uint256 termStartTimestamp;
     uint256 termEndTimestamp;
     uint256 interestRate;
   }
@@ -52,17 +59,11 @@ abstract contract IReferenceLendingPools {
   /** errors */
   error ReferenceLendingPoolsConstructionError(string error);
 
-  function isLendingPoolExpired(address lendingPoolAddress)
+  function getLendingPoolStatus(address lendingPoolAddress)
     external
     view
     virtual
-    returns (bool);
-
-  function isLendingPoolDefaulted(address lendingPoolAddress)
-    external
-    view
-    virtual
-    returns (bool);
+    returns (LendingPoolStatus poolStatus);
 
   /**
    * @notice A buyer can buy protection only within 1 quarter of the date an underlying lending pool added

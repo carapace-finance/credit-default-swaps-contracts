@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "../../interfaces/IReferenceLendingPools.sol";
 import "../../interfaces/ILendingProtocolAdapter.sol";
 import "../../libraries/Constants.sol";
+import "../../adapters/GoldfinchV2Adapter.sol";
 
 /**
  * @notice ReferenceLendingPools manages the basket of reference lending pools,
@@ -21,6 +22,9 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
   ///         i.e Goldfinch => GoldfinchAdapter
   mapping(LendingProtocol => ILendingProtocolAdapter)
     public lendingProtocolAdapters;
+
+  /** errors */
+  error ProtocolNotSupported(IReferenceLendingPools.LendingProtocol protocol);
 
   /** constructor */
 
@@ -70,35 +74,39 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
   /** view functions */
 
   /// @inheritdoc IReferenceLendingPools
-  function isLendingPoolExpired(address lendingPoolAddress)
+  function getLendingPoolStatus(address _lendingPoolAddress)
     external
     view
     override
-    returns (bool)
+    returns (LendingPoolStatus poolStatus)
   {
-    // TODO: should we check whether protection expiration is within the term of the lending pool?
-    return
-      block.timestamp >=
-      referenceLendingPools[lendingPoolAddress].termEndTimestamp;
-  }
+    if (!_referenceLendingPoolExists(_lendingPoolAddress)) {
+      return LendingPoolStatus.None;
+    }
 
-  function isLendingPoolDefaulted(address lendingPoolAddress)
-    external
-    view
-    override
-    returns (bool)
-  {
-    return
+    if (
       ILendingProtocolAdapter(
         lendingProtocolAdapters[
-          referenceLendingPools[lendingPoolAddress].protocol
+          referenceLendingPools[_lendingPoolAddress].protocol
         ]
-      ).isLendingPoolDefaulted(lendingPoolAddress);
+      ).isLendingPoolDefaulted(_lendingPoolAddress)
+    ) {
+      return LendingPoolStatus.Defaulted;
+    }
+
+    if (
+      block.timestamp >=
+      referenceLendingPools[_lendingPoolAddress].termEndTimestamp
+    ) {
+      return LendingPoolStatus.Expired;
+    }
+
+    return LendingPoolStatus.Active;
   }
 
   /// @inheritdoc IReferenceLendingPools
   function canBuyProtection(
-    address buyer,
+    address _buyer,
     ProtectionPurchaseParams memory _purchaseParams
   ) external view override returns (bool) {
     /// When the protection expiration is NOT within 1 quarter of the date an underlying lending pool added,
@@ -113,7 +121,7 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
     /// Verify that protection amount is NOT greater than the amount lent to the underlying lending pool
     return
       _getLendingProtocolAdapter(_purchaseParams.lendingPoolAddress)
-        .isProtectionAmountValid(buyer, _purchaseParams);
+        .isProtectionAmountValid(_buyer, _purchaseParams);
   }
 
   function calculateProtectionBuyerApy(address _lendingPoolAddress)
@@ -136,7 +144,6 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
   ) private {
     /// get term details from underlying protocol
     (
-      uint256 _termStartTimestamp,
       uint256 _termEndTimestamp,
       uint256 _interestRate
     ) = _getLendingProtocolAdapter(_lendingPoolAddress).getLendingPoolDetails(
@@ -148,16 +155,17 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
       addedTimestamp: _addedTimestamp,
       protocol: _lendingPoolProtocol,
       tokenType: _lendingPoolProtocolTokenType,
-      termStartTimestamp: _termStartTimestamp,
       termEndTimestamp: _termEndTimestamp,
       interestRate: _interestRate
     });
 
     if (
-      lendingProtocolAdapters[_lendingPoolProtocol] ==
-      ILendingProtocolAdapter(Constants.ZERO_ADDRESS)
+      address(lendingProtocolAdapters[_lendingPoolProtocol]) ==
+      Constants.ZERO_ADDRESS
     ) {
-      // TODO: create protocol adapter
+      lendingProtocolAdapters[_lendingPoolProtocol] = _createAdapter(
+        _lendingPoolProtocol
+      );
     }
 
     emit ReferenceLendingPoolAdded(
@@ -177,5 +185,24 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
       lendingProtocolAdapters[
         referenceLendingPools[_lendingPoolAddress].protocol
       ];
+  }
+
+  function _referenceLendingPoolExists(address _lendingPoolAddress)
+    private
+    view
+    returns (bool)
+  {
+    return referenceLendingPools[_lendingPoolAddress].addedTimestamp != 0;
+  }
+
+  function _createAdapter(LendingProtocol protocol)
+    internal
+    returns (ILendingProtocolAdapter)
+  {
+    if (protocol == IReferenceLendingPools.LendingProtocol.Goldfinch) {
+      return new GoldfinchV2Adapter();
+    } else {
+      revert ProtocolNotSupported(protocol);
+    }
   }
 }

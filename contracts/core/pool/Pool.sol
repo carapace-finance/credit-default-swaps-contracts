@@ -78,24 +78,27 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /*** modifiers ***/
 
   /**
+   * @notice Verifies that the status of the lending pool is ACTIVE,
+   *         otherwise reverts with the appropriate error message.
    * @param _lendingPoolAddress The address of the underlying lending pool.
    */
-  modifier whenNotExpired(address _lendingPoolAddress) {
-    if (
-      poolInfo.referenceLendingPools.isLendingPoolExpired(_lendingPoolAddress)
-    ) revert LendingPoolExpired(_lendingPoolAddress);
-    _;
-  }
+  modifier whenLendingPoolIsActive(address _lendingPoolAddress) {
+    IReferenceLendingPools.LendingPoolStatus poolStatus = poolInfo
+      .referenceLendingPools
+      .getLendingPoolStatus(_lendingPoolAddress);
 
-  /**
-   * @param _lendingPoolAddress The address of the underlying lending pool.
-   */
-  modifier whenNotDefault(address _lendingPoolAddress) {
-    if (
-      poolInfo.referenceLendingPools.isLendingPoolDefaulted(_lendingPoolAddress)
-    ) {
+    if (poolStatus == IReferenceLendingPools.LendingPoolStatus.None) {
+      revert LendingPoolNotSupported(_lendingPoolAddress);
+    }
+
+    if (poolStatus == IReferenceLendingPools.LendingPoolStatus.Expired) {
+      revert LendingPoolExpired(_lendingPoolAddress);
+    }
+
+    if (poolStatus == IReferenceLendingPools.LendingPoolStatus.Defaulted) {
       revert LendingPoolDefaulted(_lendingPoolAddress);
     }
+
     _;
   }
 
@@ -154,9 +157,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   )
     external
     override
-    whenNotExpired(_protectionPurchaseParams.lendingPoolAddress)
-    whenNotDefault(_protectionPurchaseParams.lendingPoolAddress)
     whenNotPaused
+    whenLendingPoolIsActive(_protectionPurchaseParams.lendingPoolAddress)
     nonReentrant
   {
     /// Step 1: Verify that buyer can buy the protection

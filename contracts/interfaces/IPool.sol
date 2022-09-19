@@ -86,6 +86,7 @@ abstract contract IPool {
   }
 
   /*** errors ***/
+  error LendingPoolNotSupported(address lendingPoolAddress);
   error LendingPoolExpired(address lendingPoolAddress);
   error LendingPoolDefaulted(address lendingPoolAddress);
   error ProtectionPurchaseNotAllowed(
