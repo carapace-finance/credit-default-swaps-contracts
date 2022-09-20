@@ -6,17 +6,30 @@ import "../external/goldfinch/ITranchedPool.sol";
 import "../external/goldfinch/IGoldfinchConfig.sol";
 import "../external/goldfinch/ConfigOptions.sol";
 import "../external/goldfinch/ISeniorPoolStrategy.sol";
+import "../external/goldfinch/ISeniorPool.sol";
 
 import "../interfaces/ILendingProtocolAdapter.sol";
 import "../interfaces/IReferenceLendingPools.sol";
 import "../libraries/Constants.sol";
 
+/**
+ * @notice Adapter for Goldfinch V2 lending protocol
+ * @author Carapace Finance
+ */
 contract GoldfinchV2Adapter is ILendingProtocolAdapter {
   /// Copied from Goldfinch's TranchingLogic.sol: https://github.com/goldfinch-eng/mono/blob/main/packages/protocol/contracts/protocol/core/TranchingLogic.sol#L42
   uint256 public constant NUM_TRANCHES_PER_SLICE = 2;
 
   address public constant GOLDFINCH_CONFIG_ADDRESS =
     0xaA425F8BfE82CD18f634e2Fe91E5DdEeFD98fDA1;
+
+  /// This contract stores mappings of useful goldfinch's "protocol config state".
+  /// These config vars are enumerated in the `ConfigOptions` library.
+  IGoldfinchConfig public immutable goldfinchConfig;
+
+  constructor() {
+    goldfinchConfig = IGoldfinchConfig(GOLDFINCH_CONFIG_ADDRESS);
+  }
 
   /// @inheritdoc ILendingProtocolAdapter
   function isLendingPoolDefaulted(address _lendingPoolAddress)
@@ -25,9 +38,9 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
     override
     returns (bool)
   {
-    // TODO: implement after Goldfinch response
-    /// When “potential default” loan has 1st write down, then lending pool is considered to be in “default” state
-    return false;
+    // TODO: might need update after Goldfinch response
+    /// When “potential default” loan has write down, then lending pool is considered to be in “default” state
+    return _getSeniorPool().writedowns(_lendingPoolAddress) > 0;
   }
 
   /// @inheritdoc ILendingProtocolAdapter
@@ -56,18 +69,16 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
   }
 
   /// @inheritdoc ILendingProtocolAdapter
-  function getLendingPoolDetails(address lendingPoolAddress)
+  function getLendingPoolTermEndTimestamp(address _lendingPoolAddress)
     external
     view
     override
-    returns (uint256 termEndTimestamp, uint256 interestRate)
+    returns (uint256 _termEndTimestamp)
   {
-    ITranchedPool _tranchedPool = ITranchedPool(lendingPoolAddress);
-    IV2CreditLine _creditLine = _tranchedPool.creditLine();
-
     /// Term end time in goldfinch is timestamp of first drawdown + term length in seconds
-    termEndTimestamp = _creditLine.termEndTime();
-    interestRate = _creditLine.interestApr();
+    _termEndTimestamp = ITranchedPool(_lendingPoolAddress)
+      .creditLine()
+      .termEndTime();
   }
 
   /// @inheritdoc ILendingProtocolAdapter
@@ -75,7 +86,7 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
     external
     view
     override
-    returns (uint256)
+    returns (uint256 _interestRate)
   {
     /// Backers receive an effective interest rate of:
     /// I(junior) = Interest Rate Percent ∗ (1 − Protocol Fee Percent + (Leverage Ratio ∗ Junior Reallocation Percent))
@@ -90,7 +101,7 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
     uint256 _juniorReallocationPercent = _tranchedPool.juniorFeePercent();
     uint256 _leverageRatio = _getLeverageRatio(_tranchedPool);
 
-    return
+    _interestRate =
       _loanInterestRate *
       (Constants.SCALE_18_DECIMALS -
         _protocolFeePercent +
@@ -113,13 +124,22 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
     return trancheId != 0 && (trancheId % NUM_TRANCHES_PER_SLICE) == 0;
   }
 
-  function _getProtocolFeePercent() internal view returns (uint256) {
-    uint256 reserveDenominator = IGoldfinchConfig(GOLDFINCH_CONFIG_ADDRESS)
-      .getNumber(ConfigOptions.Numbers.ReserveDenominator);
+  /**
+   * @dev Calculates the protocol fee percent based on reserve denominator
+   * @return _feePercent protocol fee percent scaled to 18 decimals
+   */
+  function _getProtocolFeePercent()
+    internal
+    view
+    returns (uint256 _feePercent)
+  {
+    uint256 reserveDenominator = goldfinchConfig.getNumber(
+      ConfigOptions.Numbers.ReserveDenominator
+    );
 
     /// Convert the denominator to percent and scale by 18 decimals
     /// reserveDenominator = 10 => 0.1 percent => (1 * 10 ** 18)/10 => 10 ** 17
-    return Constants.SCALE_18_DECIMALS / reserveDenominator;
+    _feePercent = Constants.SCALE_18_DECIMALS / reserveDenominator;
   }
 
   /**
@@ -133,9 +153,7 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
     returns (uint256 _leverageRatio)
   {
     ISeniorPoolStrategy _seniorPoolStrategy = ISeniorPoolStrategy(
-      IGoldfinchConfig(GOLDFINCH_CONFIG_ADDRESS).getAddress(
-        ConfigOptions.Addresses.SeniorPoolStrategy
-      )
+      goldfinchConfig.getAddress(ConfigOptions.Addresses.SeniorPoolStrategy)
     );
     return _seniorPoolStrategy.getLeverageRatio(_tranchedPool);
   }
@@ -143,9 +161,14 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
   function _getPoolTokens() internal view returns (IPoolTokens) {
     return
       IPoolTokens(
-        IGoldfinchConfig(GOLDFINCH_CONFIG_ADDRESS).getAddress(
-          ConfigOptions.Addresses.PoolTokens
-        )
+        goldfinchConfig.getAddress(ConfigOptions.Addresses.PoolTokens)
+      );
+  }
+
+  function _getSeniorPool() internal view returns (ISeniorPool) {
+    return
+      ISeniorPool(
+        goldfinchConfig.getAddress(ConfigOptions.Addresses.SeniorPool)
       );
   }
 }

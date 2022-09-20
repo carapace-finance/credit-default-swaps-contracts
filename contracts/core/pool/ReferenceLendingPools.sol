@@ -2,6 +2,8 @@
 pragma solidity ^0.8.13;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+
 import "../../interfaces/IReferenceLendingPools.sol";
 import "../../interfaces/ILendingProtocolAdapter.sol";
 import "../../libraries/Constants.sol";
@@ -9,10 +11,14 @@ import "../../adapters/GoldfinchV2Adapter.sol";
 
 /**
  * @notice ReferenceLendingPools manages the basket of reference lending pools,
-           against which the carapace protocol can provide the protection.
+ * against which the carapace protocol can provide the protection.
  * @author Carapace Finance
  */
-contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
+contract ReferenceLendingPools is
+  Ownable,
+  Initializable,
+  IReferenceLendingPools
+{
   /** state variables */
 
   /// @notice the mapping of the lending pool address to the lending pool info
@@ -23,16 +29,28 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
   mapping(LendingProtocol => ILendingProtocolAdapter)
     public lendingProtocolAdapters;
 
-  /** errors */
-  error ProtocolNotSupported(IReferenceLendingPools.LendingProtocol protocol);
+  /** modifiers */
+  modifier whenLendingPoolSupported(address _lendingPoolAddress) {
+    if (!_isReferenceLendingPoolAdded(_lendingPoolAddress)) {
+      revert ReferenceLendingPoolNotSupported(_lendingPoolAddress);
+    }
+    _;
+  }
 
   /** constructor */
+  constructor() {
+    /// disable the initialization of this implementation contract as
+    /// it is intended to be called through minimal proxies.
+    _disableInitializers();
+  }
 
-  constructor(
+  /// @inheritdoc IReferenceLendingPools
+  function initialize(
+    address _owner,
     address[] memory _lendingPools,
     LendingProtocol[] memory _lendingPoolProtocols,
     uint256[] memory _protectionPurchaseLimitsInDays
-  ) {
+  ) public override initializer {
     if (
       _lendingPools.length != _lendingPoolProtocols.length ||
       _lendingPools.length != _protectionPurchaseLimitsInDays.length
@@ -41,6 +59,14 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
         "_lendingPools, _lendingPoolProtocols & _protectionPurchaseLimitsInDays array length must match"
       );
     }
+
+    if (_owner == Constants.ZERO_ADDRESS) {
+      revert ReferenceLendingPoolsConstructionError(
+        "Owner address must not be zero"
+      );
+    }
+
+    _transferOwnership(_owner);
 
     for (uint256 i; i < _lendingPools.length; i++) {
       _addReferenceLendingPool(
@@ -82,7 +108,7 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
     override
     returns (LendingPoolStatus poolStatus)
   {
-    if (!_referenceLendingPoolExists(_lendingPoolAddress)) {
+    if (!_isReferenceLendingPoolAdded(_lendingPoolAddress)) {
       return LendingPoolStatus.None;
     }
 
@@ -94,7 +120,7 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
       return LendingPoolStatus.Defaulted;
     }
 
-    (uint256 _termEndTimestamp, ) = _adapter.getLendingPoolDetails(
+    uint256 _termEndTimestamp = _adapter.getLendingPoolTermEndTimestamp(
       _lendingPoolAddress
     );
     if (block.timestamp >= _termEndTimestamp) {
@@ -108,7 +134,13 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
   function canBuyProtection(
     address _buyer,
     ProtectionPurchaseParams memory _purchaseParams
-  ) public view override returns (bool) {
+  )
+    public
+    view
+    override
+    whenLendingPoolSupported(_purchaseParams.lendingPoolAddress)
+    returns (bool)
+  {
     /// When the protection expiration is NOT within 1 quarter of the date an underlying lending pool added,
     /// the buyer cannot purchase protection.
     ReferenceLendingPoolInfo storage lendingPoolInfo = referenceLendingPools[
@@ -130,6 +162,7 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
     public
     view
     override
+    whenLendingPoolSupported(_lendingPoolAddress)
     returns (uint256)
   {
     return
@@ -139,12 +172,15 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
 
   /** internal functions */
 
+  /**
+   * @dev Adds a new reference lending pool to the basket if it is not already added.
+   */
   function _addReferenceLendingPool(
     address _lendingPoolAddress,
     LendingProtocol _lendingPoolProtocol,
     uint256 _protectionPurchaseLimitInDays
   ) internal {
-    if (_referenceLendingPoolExists(_lendingPoolAddress)) {
+    if (_isReferenceLendingPoolAdded(_lendingPoolAddress)) {
       return;
     }
 
@@ -187,7 +223,7 @@ contract ReferenceLendingPools is IReferenceLendingPools, Ownable {
       ];
   }
 
-  function _referenceLendingPoolExists(address _lendingPoolAddress)
+  function _isReferenceLendingPoolAdded(address _lendingPoolAddress)
     internal
     view
     returns (bool)

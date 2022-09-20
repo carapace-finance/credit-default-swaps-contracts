@@ -4,6 +4,10 @@ pragma solidity ^0.8.13;
 import "./IReferenceLendingPools.sol";
 
 abstract contract ILendingProtocolAdapter {
+  /**
+   * @notice Determines whether the lending pool is defaulted or not.
+   * @param _lendingPoolAddress the address of the lending pool
+   */
   function isLendingPoolDefaulted(address _lendingPoolAddress)
     external
     view
@@ -11,7 +15,9 @@ abstract contract ILendingProtocolAdapter {
     returns (bool);
 
   /**
-   * @notice Determines whether protection amount is less than or equal to the amount lent to the underlying lending pool
+   * @notice Determines whether protection amount is less than or equal to the amount lent to the underlying lending pool by the specified buyer.
+   * @param _buyer the address of the buyer
+   * @param _purchaseParams the protection purchase params
    */
   function isProtectionAmountValid(
     address _buyer,
@@ -19,18 +25,22 @@ abstract contract ILendingProtocolAdapter {
   ) external view virtual returns (bool);
 
   /**
-   * @notice Returns the term end timestamp and interest rate of the lending pool
-   * @param lendingPoolAddress Address of the underlying lending pool
+   * @notice Returns the term end timestamp of the lending pool
+   * @param _lendingPoolAddress Address of the underlying lending pool
    * @return termEndTimestamp Timestamp of the term end
-   * @return interestRate Interest rate scaled to 18 decimals
    */
-  function getLendingPoolDetails(address lendingPoolAddress)
+  function getLendingPoolTermEndTimestamp(address _lendingPoolAddress)
     external
     view
     virtual
-    returns (uint256 termEndTimestamp, uint256 interestRate);
+    returns (uint256 termEndTimestamp);
 
-  function calculateProtectionBuyerInterestRate(address lendingPoolAddress)
+  /**
+   * @notice Calculates the interest rate for the protection buyer for the specified lending pool
+   * @param _lendingPoolAddress Address of the underlying lending pool
+   * @return Interest rate for the protection buyer, scaled to 18 decimals
+   */
+  function calculateProtectionBuyerInterestRate(address _lendingPoolAddress)
     external
     view
     virtual

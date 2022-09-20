@@ -67,4 +67,15 @@ abstract contract ISeniorPool {
   function assets() public view virtual returns (uint256);
 
   function getNumShares(uint256 amount) public view virtual returns (uint256);
+
+  /**
+   * @notice Provides the current writedown amount for a given tranched pool address
+   *
+   * This is added to access public state "mapping(ITranchedPool => uint256) public writedowns" from Goldfinch's SeniorPool contract.
+   */
+  function writedowns(address tranchedPoolAddress)
+    public
+    view
+    virtual
+    returns (uint256 writedownAmount);
 }

@@ -2,8 +2,9 @@
 pragma solidity ^0.8.13;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+
 import "./pool/Pool.sol";
 import "../interfaces/IPremiumCalculator.sol";
 import "../interfaces/IReferenceLendingPools.sol";
@@ -23,7 +24,7 @@ contract PoolFactory is Ownable {
     address poolAddress,
     uint256 floor,
     uint256 ceiling,
-    IERC20 underlyingToken,
+    IERC20Metadata underlyingToken,
     IReferenceLendingPools referenceLendingPools,
     IPremiumCalculator premiumCalculator
   );

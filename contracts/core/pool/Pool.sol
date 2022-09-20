@@ -275,16 +275,10 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     );
   }
 
-  /**
-   * @notice Attempts to deposit the underlying amount specified.
-   * @notice Upon successful deposit, receiver will get sTokens based on current exchange rate.
-   * @notice A deposit can only be made when the pool is in `Open` state.
-   * @notice Underlying amount needs to be approved for transfer to this contract.
-   * @param _underlyingAmount The amount of underlying token to deposit.
-   * @param _receiver The address to receive the STokens.
-   */
+  /// @inheritdoc IPool
   function deposit(uint256 _underlyingAmount, address _receiver)
     external
+    override
     whenPoolIsOpen
     whenNotPaused
     nonReentrant
@@ -314,14 +308,12 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     emit ProtectionSold(_receiver, _underlyingAmount);
   }
 
-  /**
-   * @notice Creates a withdrawal request for the given sToken amount to allow actual withdrawal at the next pool cycle.
-   * @notice Each user can have single request per withdrawal cycle and
-   *         hence this function will overwrite any existing request.
-   * @notice The actual withdrawal could be made when next pool cycle is opened for withdrawal with other constraints.
-   * @param _sTokenAmount The amount of sToken to withdraw.
-   */
-  function requestWithdrawal(uint256 _sTokenAmount) external whenNotPaused {
+  /// @inheritdoc IPool
+  function requestWithdrawal(uint256 _sTokenAmount)
+    external
+    override
+    whenNotPaused
+  {
     uint256 _sTokenBalance = balanceOf(msg.sender);
     if (_sTokenAmount > _sTokenBalance) {
       revert InsufficientSTokenBalance(msg.sender, _sTokenBalance);
@@ -367,23 +359,10 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     emit WithdrawalRequested(msg.sender, _sTokenAmount, _withdrawalCycleIndex);
   }
 
-  /**
-   * @notice Attempts to withdraw the sToken amount specified by the user with upper bound based on withdrawal phase.
-   * @notice A withdrawal request must be created during previous pool cycle.
-   * @notice A withdrawal can only be made when the pool is in `Open` state.
-   * @notice Proportional Underlying amount based on current exchange rate will be transferred to the receiver address.
-   * @notice Withdrawals are allowed in 2 phases:
-   *         1. Phase I: Users can withdraw their sTokens proportional to their share of total sTokens
-   *            requested for withdrawal based on leverage ratio floor.
-   *         2. Phase II: Users can withdraw up to remainder of their requested sTokens on
-   *            the first come first serve basis.
-   *         Withdrawal cycle begins at the open period of current pool cycle.
-   *         So withdrawal phase 2 will start after the half time is elapsed of current cycle's open duration.
-   * @param _sTokenWithdrawalAmount The amount of sToken to withdraw.
-   * @param _receiver The address to receive the underlying token.
-   */
+  /// @inheritdoc IPool
   function withdraw(uint256 _sTokenWithdrawalAmount, address _receiver)
     external
+    override
     whenPoolIsOpen
     whenNotPaused
     nonReentrant
@@ -472,12 +451,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     poolInfo.params.leverageRatioCeiling = newCeiling;
   }
 
-  /**
-   * @notice Calculates the premium accrued for all existing protections and updates the total premium accrued.
-   * @notice This method calculates premium accrued from the last timestamp to the current timestamp.
-   * @notice This method also removes expired protections.
-   */
-  function accruePremium() public {
+  /// @inheritdoc IPool
+  function accruePremium() public override {
     /// Ensure we accrue premium only once per the block
     if (block.timestamp == lastPremiumAccrualTimestamp) {
       return;

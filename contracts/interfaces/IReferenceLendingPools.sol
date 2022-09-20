@@ -21,9 +21,14 @@ abstract contract IReferenceLendingPools {
     Defaulted
   }
 
+  /// @notice This struct represents the information of the reference lending pool for which buyers can purchase the protection
   struct ReferenceLendingPoolInfo {
+    /// @notice the protocol of the lending pool
     LendingProtocol protocol;
+    /// @notice the timestamp at which the lending pool is added to the basket of pools
     uint256 addedTimestamp;
+    /// @notice the timestamp at which the protection purchase limit expires,
+    /// meaning the protection can NOT be purchased after this timestamp
     uint256 protectionPurchaseLimitTimestamp;
   }
 
@@ -51,19 +56,48 @@ abstract contract IReferenceLendingPools {
 
   /** errors */
   error ReferenceLendingPoolsConstructionError(string error);
+  error ProtocolNotSupported(IReferenceLendingPools.LendingProtocol protocol);
+  error ReferenceLendingPoolNotSupported(address lendingPoolAddress);
 
-  function getLendingPoolStatus(address lendingPoolAddress)
+  /**
+   * @notice the initialization function for the reference lending pools contract.
+   * This is intended to be called just once to create minimal proxies.
+   * @param _owner the owner of the contract
+   * @param _lendingPools the addresses of the lending pools which will be added to the basket
+   * @param _lendingPoolProtocols the corresponding protocols of the lending pools which will be added to the basket
+   * @param _protectionPurchaseLimitsInDays the corresponding protection purchase limits(in days) of the lending pools,
+   * which will be added to the basket
+   */
+  function initialize(
+    address _owner,
+    address[] memory _lendingPools,
+    LendingProtocol[] memory _lendingPoolProtocols,
+    uint256[] memory _protectionPurchaseLimitsInDays
+  ) public virtual;
+
+  /**
+   * @notice Provides the status of the specified lending pool.
+   * @param _lendingPoolAddress address of the lending pool
+   * @return the status of the lending pool
+   */
+  function getLendingPoolStatus(address _lendingPoolAddress)
     external
     view
     virtual
-    returns (LendingPoolStatus poolStatus);
+    returns (LendingPoolStatus);
 
   /**
-   * @notice A buyer can buy protection only within 1 quarter of the date an underlying lending pool added
-   *         to the basket of the Carapace eligible loans.
+   * @notice Determines whether a buyer can buy the protection for the specified lending pool or not.
+   * 1. A buyer can buy protection only within certain time an underlying lending pool added
+   * to the basket of the Carapace eligible loans.
+   * 2. A buyer can buy protection only when h/she has lent in the specified lending pool and
+   * protection amount is less than or equal to the lent amount.
+   * @param _buyer the address of the buyer
+   * @param _purchaseParams the protection purchase parameters
+   * @return true if the buyer can buy protection, false otherwise
    */
   function canBuyProtection(
-    address buyer,
+    address _buyer,
     ProtectionPurchaseParams memory _purchaseParams
   ) public view virtual returns (bool);
 
