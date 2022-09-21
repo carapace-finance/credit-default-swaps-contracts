@@ -10,14 +10,8 @@ import "./ConfigOptions.sol";
  *
  * Ethereum mainnet: https://etherscan.io/address/0xaA425F8BfE82CD18f634e2Fe91E5DdEeFD98fDA1#readProxyContract
  */
-interface IGoldfinchConfig {
-  function getAddress(ConfigOptions.Addresses index)
-    external
-    view
-    returns (address);
+abstract contract IGoldfinchConfig {
+  function getAddress(uint256 index) public view virtual returns (address);
 
-  function getNumber(ConfigOptions.Numbers index)
-    external
-    view
-    returns (uint256);
+  function getNumber(uint256 index) public view virtual returns (uint256);
 }

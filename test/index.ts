@@ -18,8 +18,10 @@ import {
   referenceLendingPoolsInstance,
   poolCycleManagerInstance,
   accruedPremiumCalculatorInstance,
-  riskFactorCalculatorInstance
+  riskFactorCalculatorInstance,
+  goldfinchV2AdapterInstance
 } from "../utils/deploy";
+import testGoldfinchV2Adapter from "./contracts/GoldfinchV2Adapter.test";
 
 describe("start testing", () => {
   before("deploy contracts", async () => {
@@ -37,6 +39,10 @@ describe("start testing", () => {
 
     it("run the PremiumCalculator test", async () => {
       testPremiumCalculator(premiumCalculatorInstance);
+    });
+
+    it("run the GoldfinchV2Adapter test", async () => {
+      testGoldfinchV2Adapter(goldfinchV2AdapterInstance);
     });
 
     it("run the PoolFactory test", async () => {

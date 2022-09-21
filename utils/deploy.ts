@@ -10,6 +10,7 @@ import { ReferenceLendingPools } from "../typechain-types/contracts/core/pool/Re
 import { PoolCycleManager } from "../typechain-types/contracts/core/PoolCycleManager";
 import { AccruedPremiumCalculator } from "../typechain-types/contracts/libraries/AccruedPremiumCalculator";
 import { RiskFactorCalculator } from "../typechain-types/contracts/libraries/RiskFactorCalculator";
+import { GoldfinchV2Adapter } from "../typechain-types/contracts/adapters/GoldfinchV2Adapter";
 import { parseUSDC } from "../test/utils/usdc";
 
 let deployer: Signer;
@@ -25,6 +26,7 @@ let referenceLendingPoolsInstance: ReferenceLendingPools;
 let poolCycleManagerInstance: PoolCycleManager;
 let accruedPremiumCalculatorInstance: AccruedPremiumCalculator;
 let riskFactorCalculatorInstance: RiskFactorCalculator;
+let goldfinchV2AdapterInstance: GoldfinchV2Adapter;
 
 (async () => {
   [deployer, account1, account2, account3, account4] =
@@ -100,6 +102,16 @@ const deployContracts: Function = async () => {
       poolCycleManagerInstance.address
     );
 
+    const goldfinchV2AdapterFactory = await contractFactory(
+      "GoldfinchV2Adapter"
+    );
+    goldfinchV2AdapterInstance = await goldfinchV2AdapterFactory.deploy();
+    await goldfinchV2AdapterInstance.deployed();
+    console.log(
+      "GoldfinchV2Adapter" + " deployed to:",
+      goldfinchV2AdapterInstance.address
+    );
+
     // Deploy PoolFactory
     const _poolFactoryFactory = await contractFactory("PoolFactory", {
       AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address
@@ -163,5 +175,6 @@ export {
   referenceLendingPoolsInstance,
   poolCycleManagerInstance,
   accruedPremiumCalculatorInstance,
-  riskFactorCalculatorInstance
+  riskFactorCalculatorInstance,
+  goldfinchV2AdapterInstance
 };

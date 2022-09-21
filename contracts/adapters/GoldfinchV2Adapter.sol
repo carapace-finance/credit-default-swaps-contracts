@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import "@prb/math/contracts/PRBMathUD60x18.sol";
+
 import "../external/goldfinch/IPoolTokens.sol";
 import "../external/goldfinch/ITranchedPool.sol";
 import "../external/goldfinch/IGoldfinchConfig.sol";
@@ -17,7 +19,10 @@ import "../libraries/Constants.sol";
  * @author Carapace Finance
  */
 contract GoldfinchV2Adapter is ILendingProtocolAdapter {
-  /// Copied from Goldfinch's TranchingLogic.sol: https://github.com/goldfinch-eng/mono/blob/main/packages/protocol/contracts/protocol/core/TranchingLogic.sol#L42
+  using PRBMathUD60x18 for uint256;
+
+  /// Copied from Goldfinch's TranchingLogic.sol:
+  /// https://github.com/goldfinch-eng/mono/blob/main/packages/protocol/contracts/protocol/core/TranchingLogic.sol#L42
   uint256 public constant NUM_TRANCHES_PER_SLICE = 2;
 
   address public constant GOLDFINCH_CONFIG_ADDRESS =
@@ -88,34 +93,32 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
     override
     returns (uint256 _interestRate)
   {
-    /// Backers receive an effective interest rate of:
-    /// I(junior) = Interest Rate Percent ∗ (1 − Protocol Fee Percent + (Leverage Ratio ∗ Junior Reallocation Percent))
-    /// details: https://docs.goldfinch.finance/goldfinch/protocol-mechanics/backers
-    /// For example: Consider a Borrower Pool with a 15% interest rate and 4.0X leverage ratio.
-    /// junior tranche(backers/buyers) interest rate: 0.15*(1 - 0.1 + 4*0.2) = 25.5%
     ITranchedPool _tranchedPool = ITranchedPool(_lendingPoolAddress);
     IV2CreditLine _creditLine = _tranchedPool.creditLine();
 
     uint256 _loanInterestRate = _creditLine.interestApr();
     uint256 _protocolFeePercent = _getProtocolFeePercent();
-    uint256 _juniorReallocationPercent = _tranchedPool.juniorFeePercent();
+
+    /// Junior Reallocation Percent is plain uint, so we need to scale it to 18 decimals
+    /// For example, juniorReallocationPercent of 20 => 0.2 => 20% => 20 * 10^16
+    uint256 _juniorReallocationPercent = (_tranchedPool.juniorFeePercent() *
+      Constants.SCALE_18_DECIMALS) / 100;
+
     uint256 _leverageRatio = _getLeverageRatio(_tranchedPool);
 
-    _interestRate =
-      _loanInterestRate *
-      (Constants.SCALE_18_DECIMALS -
+    /// Backers receive an effective interest rate of:
+    /// I(junior) = Interest Rate Percent ∗ (1 − Protocol Fee Percent + (Leverage Ratio ∗ Junior Reallocation Percent))
+    /// details: https://docs.goldfinch.finance/goldfinch/protocol-mechanics/backers
+    /// For example: Consider a Borrower Pool with a 15% interest rate and 4X leverage ratio.
+    /// junior tranche(backers/buyers) interest rate: 0.15 * (1 - 0.1 + (4 * 0.2)) = 0.255 = 25.5%
+    _interestRate = _loanInterestRate.mul(
+      Constants.SCALE_18_DECIMALS -
         _protocolFeePercent +
-        (_leverageRatio * _juniorReallocationPercent));
+        _leverageRatio.mul(_juniorReallocationPercent)
+    );
   }
 
   /** internal functions */
-
-  /**
-   * @dev derived from TranchingLogic: https://github.com/goldfinch-eng/mono/blob/main/packages/protocol/contracts/protocol/core/TranchingLogic.sol#L415
-   */
-  function _isSeniorTrancheId(uint256 trancheId) internal pure returns (bool) {
-    return (trancheId % NUM_TRANCHES_PER_SLICE) == 1;
-  }
 
   /**
    * @dev derived from TranchingLogic: https://github.com/goldfinch-eng/mono/blob/main/packages/protocol/contracts/protocol/core/TranchingLogic.sol#L419
@@ -134,7 +137,7 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
     returns (uint256 _feePercent)
   {
     uint256 reserveDenominator = goldfinchConfig.getNumber(
-      ConfigOptions.Numbers.ReserveDenominator
+      uint256(ConfigOptions.Numbers.ReserveDenominator)
     );
 
     /// Convert the denominator to percent and scale by 18 decimals
@@ -153,7 +156,9 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
     returns (uint256 _leverageRatio)
   {
     ISeniorPoolStrategy _seniorPoolStrategy = ISeniorPoolStrategy(
-      goldfinchConfig.getAddress(ConfigOptions.Addresses.SeniorPoolStrategy)
+      goldfinchConfig.getAddress(
+        uint256(ConfigOptions.Addresses.SeniorPoolStrategy)
+      )
     );
     return _seniorPoolStrategy.getLeverageRatio(_tranchedPool);
   }
@@ -161,14 +166,14 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
   function _getPoolTokens() internal view returns (IPoolTokens) {
     return
       IPoolTokens(
-        goldfinchConfig.getAddress(ConfigOptions.Addresses.PoolTokens)
+        goldfinchConfig.getAddress(uint256(ConfigOptions.Addresses.PoolTokens))
       );
   }
 
   function _getSeniorPool() internal view returns (ISeniorPool) {
     return
       ISeniorPool(
-        goldfinchConfig.getAddress(ConfigOptions.Addresses.SeniorPool)
+        goldfinchConfig.getAddress(uint256(ConfigOptions.Addresses.SeniorPool))
       );
   }
 }
