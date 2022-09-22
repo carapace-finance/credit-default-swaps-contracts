@@ -37,13 +37,30 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
   }
 
   /// @inheritdoc ILendingProtocolAdapter
+  function isLendingPoolExpired(address _lendingPoolAddress)
+    external
+    view
+    override
+    returns (bool)
+  {
+    IV2CreditLine _creditLine = ITranchedPool(_lendingPoolAddress).creditLine();
+    uint256 _termEndTimestamp = _creditLine.termEndTime();
+
+    /// Repaid logic derived from Goldfinch frontend code:
+    /// https://github.com/goldfinch-eng/mono/blob/bd9adae6fbd810d1ebb5f7ef22df5bb6f1eaee3b/packages/client2/lib/pools/index.ts#L54
+    /// when the credit line has zero balance with valid term end, it is considered repaid
+    return
+      block.timestamp >= _termEndTimestamp ||
+      (_termEndTimestamp > 0 && _creditLine.balance() == 0);
+  }
+
+  /// @inheritdoc ILendingProtocolAdapter
   function isLendingPoolDefaulted(address _lendingPoolAddress)
     external
     view
     override
     returns (bool)
   {
-    // TODO: might need update after Goldfinch response
     /// When “potential default” loan has write down, then lending pool is considered to be in “default” state
     return _getSeniorPool().writedowns(_lendingPoolAddress) > 0;
   }

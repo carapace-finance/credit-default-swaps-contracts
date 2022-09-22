@@ -9,13 +9,13 @@ import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
  */
 abstract contract IReferenceLendingPools {
   enum LendingProtocol {
-    Goldfinch,
+    GoldfinchV2,
     Maple
   }
 
   enum LendingPoolStatus {
     /// @notice This means the lending pool is not added to the basket
-    None,
+    NotSupported,
     Active,
     Expired,
     Defaulted
@@ -56,8 +56,13 @@ abstract contract IReferenceLendingPools {
 
   /** errors */
   error ReferenceLendingPoolsConstructionError(string error);
-  error ProtocolNotSupported(IReferenceLendingPools.LendingProtocol protocol);
+  error LendingProtocolNotSupported(
+    IReferenceLendingPools.LendingProtocol protocol
+  );
   error ReferenceLendingPoolNotSupported(address lendingPoolAddress);
+  error ReferenceLendingPoolAlreadyAdded(address lendingPoolAddress);
+  error ReferenceLendingPoolIsNotActive(address lendingPoolAddress);
+  error ReferenceLendingPoolIsZeroAddress();
 
   /**
    * @notice the initialization function for the reference lending pools contract.

@@ -25,7 +25,7 @@ contract ReferenceLendingPools is
   mapping(address => ReferenceLendingPoolInfo) public referenceLendingPools;
 
   /// @notice the mapping of the lending pool protocol to the lending protocol adapter
-  ///         i.e Goldfinch => GoldfinchAdapter
+  /// i.e Goldfinch => GoldfinchV2Adapter
   mapping(LendingProtocol => ILendingProtocolAdapter)
     public lendingProtocolAdapters;
 
@@ -56,7 +56,7 @@ contract ReferenceLendingPools is
       _lendingPools.length != _protectionPurchaseLimitsInDays.length
     ) {
       revert ReferenceLendingPoolsConstructionError(
-        "_lendingPools, _lendingPoolProtocols & _protectionPurchaseLimitsInDays array length must match"
+        "Array inputs length must match"
       );
     }
 
@@ -109,7 +109,7 @@ contract ReferenceLendingPools is
     returns (LendingPoolStatus poolStatus)
   {
     if (!_isReferenceLendingPoolAdded(_lendingPoolAddress)) {
-      return LendingPoolStatus.None;
+      return LendingPoolStatus.NotSupported;
     }
 
     ILendingProtocolAdapter _adapter = _getLendingProtocolAdapter(
@@ -120,10 +120,7 @@ contract ReferenceLendingPools is
       return LendingPoolStatus.Defaulted;
     }
 
-    uint256 _termEndTimestamp = _adapter.getLendingPoolTermEndTimestamp(
-      _lendingPoolAddress
-    );
-    if (block.timestamp >= _termEndTimestamp) {
+    if (_adapter.isLendingPoolExpired(_lendingPoolAddress)) {
       return LendingPoolStatus.Expired;
     }
 
@@ -141,12 +138,14 @@ contract ReferenceLendingPools is
     whenLendingPoolSupported(_purchaseParams.lendingPoolAddress)
     returns (bool)
   {
-    /// When the protection expiration is NOT within 1 quarter of the date an underlying lending pool added,
-    /// the buyer cannot purchase protection.
     ReferenceLendingPoolInfo storage lendingPoolInfo = referenceLendingPools[
       _purchaseParams.lendingPoolAddress
     ];
 
+    /// When the protection purchase is NOT within purchase limit duration after
+    /// a lending pool added, the buyer cannot purchase protection.
+    /// i.e. if the purchase limit is 90 days, the buyer cannot purchase protection
+    /// after 90 days of lending pool added to the basket
     if (block.timestamp > lendingPoolInfo.protectionPurchaseLimitTimestamp) {
       return false;
     }
@@ -180,8 +179,12 @@ contract ReferenceLendingPools is
     LendingProtocol _lendingPoolProtocol,
     uint256 _protectionPurchaseLimitInDays
   ) internal {
+    if (_lendingPoolAddress == Constants.ZERO_ADDRESS) {
+      revert ReferenceLendingPoolIsZeroAddress();
+    }
+
     if (_isReferenceLendingPoolAdded(_lendingPoolAddress)) {
-      return;
+      revert ReferenceLendingPoolAlreadyAdded(_lendingPoolAddress);
     }
 
     uint256 _addedTimestamp = block.timestamp;
@@ -202,6 +205,11 @@ contract ReferenceLendingPools is
       lendingProtocolAdapters[_lendingPoolProtocol] = _createAdapter(
         _lendingPoolProtocol
       );
+    }
+
+    LendingPoolStatus _poolStatus = getLendingPoolStatus(_lendingPoolAddress);
+    if (_poolStatus != LendingPoolStatus.Active) {
+      revert ReferenceLendingPoolIsNotActive(_lendingPoolAddress);
     }
 
     emit ReferenceLendingPoolAdded(
@@ -235,10 +243,10 @@ contract ReferenceLendingPools is
     internal
     returns (ILendingProtocolAdapter)
   {
-    if (protocol == IReferenceLendingPools.LendingProtocol.Goldfinch) {
+    if (protocol == IReferenceLendingPools.LendingProtocol.GoldfinchV2) {
       return new GoldfinchV2Adapter();
     } else {
-      revert ProtocolNotSupported(protocol);
+      revert LendingProtocolNotSupported(protocol);
     }
   }
 }

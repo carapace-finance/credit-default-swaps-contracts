@@ -15,6 +15,16 @@ abstract contract ILendingProtocolAdapter {
     returns (bool);
 
   /**
+   * @notice Determines whether the lending pool's term has ended or balance has been repaid.
+   * @param _lendingPoolAddress the address of the lending pool
+   */
+  function isLendingPoolExpired(address _lendingPoolAddress)
+    external
+    view
+    virtual
+    returns (bool);
+
+  /**
    * @notice Determines whether protection amount is less than or equal to the amount lent to the underlying lending pool by the specified buyer.
    * @param _buyer the address of the buyer
    * @param _purchaseParams the protection purchase params

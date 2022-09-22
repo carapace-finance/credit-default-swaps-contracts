@@ -87,7 +87,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       .referenceLendingPools
       .getLendingPoolStatus(_lendingPoolAddress);
 
-    if (poolStatus == IReferenceLendingPools.LendingPoolStatus.None) {
+    if (poolStatus == IReferenceLendingPools.LendingPoolStatus.NotSupported) {
       revert LendingPoolNotSupported(_lendingPoolAddress);
     }
 

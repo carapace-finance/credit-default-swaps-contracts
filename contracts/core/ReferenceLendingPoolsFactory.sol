@@ -14,6 +14,8 @@ import "../interfaces/IReferenceLendingPools.sol";
 contract ReferenceLendingPoolsFactory is Ownable {
   address public immutable referenceLendingPoolsImplementation;
 
+  event ReferenceLendingPoolsCreated(address indexed referenceLendingPools);
+
   /**
    * @param _referenceLendingPoolsImplementation the address of the {IReferenceLendingPools} implementation contract
    */
@@ -47,5 +49,7 @@ contract ReferenceLendingPoolsFactory is Ownable {
       _lendingPoolProtocols,
       _protectionPurchaseLimitsInDays
     );
+
+    emit ReferenceLendingPoolsCreated(address(_referenceLendingPools));
   }
 }

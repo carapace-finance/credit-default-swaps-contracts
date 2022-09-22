@@ -19,9 +19,14 @@ import {
   poolCycleManagerInstance,
   accruedPremiumCalculatorInstance,
   riskFactorCalculatorInstance,
-  goldfinchV2AdapterInstance
+  goldfinchV2AdapterInstance,
+  referenceLendingPoolsFactoryInstance,
+  referenceLendingPoolsImplementation,
+  GOLDFINCH_LENDING_POOLS
 } from "../utils/deploy";
-import testGoldfinchV2Adapter from "./contracts/GoldfinchV2Adapter.test";
+
+import { testGoldfinchV2Adapter } from "./contracts/GoldfinchV2Adapter.test";
+import { testReferenceLendingPools } from "./contracts/ReferenceLendingPools.test";
 
 describe("start testing", () => {
   before("deploy contracts", async () => {
@@ -62,6 +67,18 @@ describe("start testing", () => {
     // Run this spec last because it moves time forward a lot and that impacts the pool tests
     it("run the PoolCycleManager test", async () => {
       testPoolCycleManager(deployer, account1, poolCycleManagerInstance);
+    });
+
+    // This spec also moves time forward, so keep it last
+    it("Run ReferenceLendingPools test", async () => {
+      testReferenceLendingPools(
+        deployer,
+        account1,
+        referenceLendingPoolsImplementation,
+        referenceLendingPoolsInstance,
+        referenceLendingPoolsFactoryInstance,
+        GOLDFINCH_LENDING_POOLS
+      );
     });
   });
 });

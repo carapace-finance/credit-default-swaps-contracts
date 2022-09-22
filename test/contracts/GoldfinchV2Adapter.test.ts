@@ -1,7 +1,5 @@
 import { expect } from "chai";
-import { Signer } from "ethers/lib/ethers";
-import { parseEther, formatEther } from "ethers/lib/utils";
-import { ethers } from "hardhat";
+import { parseEther } from "ethers/lib/utils";
 
 import { GoldfinchV2Adapter } from "../../typechain-types/contracts/adapters/GoldfinchV2Adapter";
 import { IReferenceLendingPools } from "../../typechain-types/contracts/interfaces/IReferenceLendingPools";
@@ -13,6 +11,7 @@ const GOLDFINCH_ALMAVEST_BASKET_6_ADDRESS =
 const BUYER1 = "0x0196ad265c56f2b18b708c75ce9358a0b6df64cf";
 const BUYER2 = "0x1b027485ee2ba9b2e9b43689435188b1a1556a1c";
 const BUYER3 = "0x10a590f528eff3d5de18c90da6e03a4acdde3a7d";
+
 const testGoldfinchV2Adapter: Function = (
   goldfinchV2Adapter: GoldfinchV2Adapter
 ) => {
@@ -42,6 +41,22 @@ const testGoldfinchV2Adapter: Function = (
       // Could not find a pool with writedown > 0
       xit("...should return true for a pool with writedown > 0", async () => {
         expect(await goldfinchV2Adapter.isLendingPoolDefaulted("")).to.be.false;
+      });
+    });
+
+    describe("isLendingPoolExpired", () => {
+      it("...should return true for a pool with balance = 0", async () => {
+        // se: https://app.goldfinch.finance/pools/0xf74ea34ac88862b7ff419e60e476be2651433e68
+        expect(
+          await goldfinchV2Adapter.isLendingPoolExpired(
+            "0xf74ea34ac88862b7ff419e60e476be2651433e68"
+          )
+        ).to.be.true;
+      });
+
+      // Could not find a pool with term ended
+      xit("...should return true for a pool with term ended", async () => {
+        expect(await goldfinchV2Adapter.isLendingPoolExpired("")).to.be.true;
       });
     });
 
@@ -131,4 +146,4 @@ const testGoldfinchV2Adapter: Function = (
   });
 };
 
-export default testGoldfinchV2Adapter;
+export { testGoldfinchV2Adapter };
