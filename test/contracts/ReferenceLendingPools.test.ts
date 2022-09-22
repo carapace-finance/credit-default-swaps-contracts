@@ -95,32 +95,6 @@ const testReferenceLendingPools: Function = (
           );
         });
 
-        it("...should revert when array lengths are not equal", async () => {
-          await expect(
-            referenceLendingPoolsFactoryInstance.createReferenceLendingPools(
-              [ZERO_ADDRESS],
-              [],
-              []
-            )
-          ).to.be.revertedWith("Array inputs length must match");
-
-          await expect(
-            referenceLendingPoolsFactoryInstance.createReferenceLendingPools(
-              [],
-              [0],
-              []
-            )
-          ).to.be.revertedWith("Array inputs length must match");
-
-          await expect(
-            referenceLendingPoolsFactoryInstance.createReferenceLendingPools(
-              [ZERO_ADDRESS],
-              [1],
-              [10, 11]
-            )
-          ).to.be.revertedWith("Array inputs length must match");
-        });
-
         it("...should have 2 lending pools added", async () => {
           const latestTimestamp = await getLatestBlockTimestamp();
           const purchaseLimitTimestamp = latestTimestamp + getDaysInSeconds(90);
@@ -168,11 +142,7 @@ const testReferenceLendingPools: Function = (
           await expect(
             referenceLendingPoolsInstance
               .connect(implementationDeployer)
-              .addReferenceLendingPool(
-                "0x0000000000000000000000000000000000000000",
-                0,
-                0
-              )
+              .addReferenceLendingPool(ZERO_ADDRESS, 0, 0)
           ).to.be.revertedWith("Ownable: caller is not the owner");
         });
 

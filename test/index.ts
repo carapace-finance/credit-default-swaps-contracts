@@ -5,6 +5,10 @@ import { testAccruedPremiumCalculator } from "./contracts/AccruedPremiumCalculat
 import { testPremiumCalculator } from "./contracts/PremiumCalculator.test";
 import { testRiskFactorCalculator } from "./contracts/RiskFactorCalculator.test";
 
+import { testGoldfinchV2Adapter } from "./contracts/GoldfinchV2Adapter.test";
+import { testReferenceLendingPools } from "./contracts/ReferenceLendingPools.test";
+import { testReferenceLendingPoolsFactory } from "./contracts/ReferenceLendingPoolsFactory.test";
+
 import {
   deployer,
   account1,
@@ -22,11 +26,9 @@ import {
   goldfinchV2AdapterInstance,
   referenceLendingPoolsFactoryInstance,
   referenceLendingPoolsImplementation,
-  GOLDFINCH_LENDING_POOLS
+  GOLDFINCH_LENDING_POOLS,
+  getReferenceLendingPoolsInstanceFromTx
 } from "../utils/deploy";
-
-import { testGoldfinchV2Adapter } from "./contracts/GoldfinchV2Adapter.test";
-import { testReferenceLendingPools } from "./contracts/ReferenceLendingPools.test";
 
 describe("start testing", () => {
   before("deploy contracts", async () => {
@@ -48,6 +50,16 @@ describe("start testing", () => {
 
     it("run the GoldfinchV2Adapter test", async () => {
       testGoldfinchV2Adapter(goldfinchV2AdapterInstance);
+    });
+
+    it("run referenceLendingPoolsFactory test", async () => {
+      testReferenceLendingPoolsFactory(
+        deployer,
+        account1,
+        referenceLendingPoolsImplementation,
+        referenceLendingPoolsFactoryInstance,
+        getReferenceLendingPoolsInstanceFromTx
+      );
     });
 
     it("run the PoolFactory test", async () => {

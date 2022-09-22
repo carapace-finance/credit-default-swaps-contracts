@@ -11,6 +11,7 @@ library Constants {
   int256 public constant SCALED_DAYS_IN_YEAR = 36524;
 
   int256 public constant SECONDS_IN_DAY = 60 * 60 * 24;
+  uint256 public constant SECONDS_IN_DAY_UINT = 60 * 60 * 24;
 
   address public constant ZERO_ADDRESS = address(0);
 }

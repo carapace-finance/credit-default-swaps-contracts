@@ -129,16 +129,8 @@ const deployContracts: Function = async () => {
         _lendingProtocols,
         _purchaseLimitsInDays
       );
-    const receipt1: any = await tx1.wait();
-
-    referenceLendingPoolsInstance = (await ethers.getContractAt(
-      "ReferenceLendingPools",
-      receipt1.events[4].args.referenceLendingPools
-    )) as ReferenceLendingPools;
-    console.log(
-      "ReferenceLendingPools instance created at: ",
-      referenceLendingPoolsInstance.address
-    );
+    referenceLendingPoolsInstance =
+      await getReferenceLendingPoolsInstanceFromTx(tx1);
 
     // Deploy PoolCycleManager
     const poolCycleManagerFactory = await contractFactory("PoolCycleManager");
@@ -210,6 +202,28 @@ const deployContracts: Function = async () => {
   }
 };
 
+async function getReferenceLendingPoolsInstanceFromTx(
+  tx: any
+): Promise<ReferenceLendingPools> {
+  const receipt: any = await tx.wait();
+
+  const referenceLendingPoolsCreatedEvent = receipt.events.find(
+    (eventInfo: any) => eventInfo.event === "ReferenceLendingPoolsCreated"
+  );
+
+  const newReferenceLendingPoolsInstance = (await ethers.getContractAt(
+    "ReferenceLendingPools",
+    referenceLendingPoolsCreatedEvent.args.referenceLendingPools
+  )) as ReferenceLendingPools;
+
+  console.log(
+    "ReferenceLendingPools instance created at: ",
+    newReferenceLendingPoolsInstance.address
+  );
+
+  return newReferenceLendingPoolsInstance;
+}
+
 export {
   deployer,
   account1,
@@ -227,5 +241,6 @@ export {
   goldfinchV2AdapterInstance,
   referenceLendingPoolsImplementation, // implementation contract which is used to create proxy contract
   referenceLendingPoolsFactoryInstance,
-  GOLDFINCH_LENDING_POOLS
+  GOLDFINCH_LENDING_POOLS,
+  getReferenceLendingPoolsInstanceFromTx
 };

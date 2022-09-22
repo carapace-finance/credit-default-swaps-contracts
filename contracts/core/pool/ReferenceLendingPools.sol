@@ -189,7 +189,7 @@ contract ReferenceLendingPools is
 
     uint256 _addedTimestamp = block.timestamp;
     uint256 _protectionPurchaseLimitTimestamp = _addedTimestamp +
-      (_protectionPurchaseLimitInDays * 1 days);
+      (_protectionPurchaseLimitInDays * Constants.SECONDS_IN_DAY_UINT);
 
     referenceLendingPools[_lendingPoolAddress] = ReferenceLendingPoolInfo({
       protocol: _lendingPoolProtocol,
