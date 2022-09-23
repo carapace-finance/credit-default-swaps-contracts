@@ -10,7 +10,10 @@ import {
   USDC_ABI
 } from "../utils/constants";
 import { Pool, IPool } from "../../typechain-types/contracts/core/pool/Pool";
-import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
+import {
+  IReferenceLendingPools,
+  ReferenceLendingPools
+} from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";
 import {
   PoolCycleManager,
@@ -30,9 +33,17 @@ const testPool: Function = (
   buyer: Signer,
   seller: Signer,
   account4: Signer,
-  pool: Pool
+  pool: Pool,
+  goldfinchLendingPools: string[] // these lending pools have been already added to referenceLendingPools instance
 ) => {
   describe("Pool", () => {
+    const PROTECTION_BUYER1_ADDRESS =
+      "0x008c84421da5527f462886cec43d2717b686a7e4";
+
+    // Lending pool details: https://app.goldfinch.finance/pools/0xd09a57127bc40d680be7cb061c2a6629fe71abef
+    // Lending pool tokens: https://lark.market/?attributes%5BPool+Address%5D=0xd09a57127bc40d680be7cb061c2a6629fe71abef
+    const LENDING_POOL_ADDRESS = goldfinchLendingPools[1];
+
     const _newFloor: BigNumber = BigNumber.from(100);
     const _newCeiling: BigNumber = BigNumber.from(500);
     let deployerAddress: string;
@@ -46,6 +57,8 @@ const testPool: Function = (
     let premiumCalculator: PremiumCalculator;
     let referenceLendingPools: ReferenceLendingPools;
     let before1stDepositSnapshotId: string;
+    let _protectionBuyer1: Signer;
+    let circleAccount: Signer;
 
     const calculateTotalSellerDeposit = async () => {
       // seller deposit should total sToken underlying - premium accrued
@@ -53,6 +66,7 @@ const testPool: Function = (
         await pool.totalPremiumAccrued()
       );
     };
+
     const depositAndRequestWithdrawal = async (
       _account: Signer,
       _accountAddress: string,
@@ -71,19 +85,27 @@ const testPool: Function = (
       const accountAddress = await account.getAddress();
       const sTokenBalanceBefore = await pool.balanceOf(accountAddress);
       const usdcBalanceBefore = await USDC.balanceOf(accountAddress);
-
       // withdraw sTokens
       await expect(
         pool.connect(account).withdraw(withdrawalAmt, accountAddress)
       )
         .to.emit(pool, "WithdrawalMade")
         .withArgs(accountAddress, withdrawalAmt, accountAddress);
-
       const sTokenBalanceAfter = await pool.balanceOf(accountAddress);
       expect(sTokenBalanceBefore.sub(sTokenBalanceAfter)).to.eq(withdrawalAmt);
-
       const usdcBalanceAfter = await USDC.balanceOf(accountAddress);
       expect(usdcBalanceAfter).to.be.gt(usdcBalanceBefore);
+    };
+
+    const transferAndApproveUsdc = async (
+      _buyer: Signer,
+      _amount: BigNumber
+    ) => {
+      await USDC.connect(circleAccount).transfer(
+        await _buyer.getAddress(),
+        _amount
+      );
+      await USDC.connect(_buyer).approve(pool.address, _amount);
     };
 
     before("setup", async () => {
@@ -92,51 +114,45 @@ const testPool: Function = (
       buyerAddress = await buyer.getAddress();
       ownerAddress = await owner.getAddress();
       account4Address = await account4.getAddress();
-
       poolInfo = await pool.poolInfo();
-
       USDC = await new Contract(USDC_ADDRESS, USDC_ABI, deployer);
-
       // Impersonate CIRCLE account and transfer some USDC to test accounts
-      const circleAccount = await ethers.getImpersonatedSigner(
+      circleAccount = await ethers.getImpersonatedSigner(
         CIRCLE_ACCOUNT_ADDRESS
       );
       USDC.connect(circleAccount).transfer(
         deployerAddress,
-        BigNumber.from(1000000).mul(USDC_DECIMALS)
+        parseUSDC("1000000")
       );
-      USDC.connect(circleAccount).transfer(
-        ownerAddress,
-        BigNumber.from(20000).mul(USDC_DECIMALS)
-      );
-      USDC.connect(circleAccount).transfer(
-        sellerAddress,
-        BigNumber.from(20000).mul(USDC_DECIMALS)
-      );
-      USDC.connect(circleAccount).transfer(
-        account4Address,
-        BigNumber.from(20000).mul(USDC_DECIMALS)
-      );
+      USDC.connect(circleAccount).transfer(ownerAddress, parseUSDC("20000"));
+      USDC.connect(circleAccount).transfer(sellerAddress, parseUSDC("20000"));
+      USDC.connect(circleAccount).transfer(account4Address, parseUSDC("20000"));
 
       poolCycleManager = (await ethers.getContractAt(
         "PoolCycleManager",
         await pool.poolCycleManager()
       )) as PoolCycleManager;
-
       premiumCalculator = (await ethers.getContractAt(
         "PremiumCalculator",
         await pool.premiumCalculator()
       )) as PremiumCalculator;
-
       referenceLendingPools = (await ethers.getContractAt(
         "ReferenceLendingPools",
         poolInfo.referenceLendingPools
       )) as ReferenceLendingPools;
-
       expect(
         (await poolCycleManager.getCurrentPoolCycle(poolInfo.poolId))
           .currentCycleIndex
       ).to.equal(0);
+
+      // 420K principal for token 590
+      _protectionBuyer1 = await ethers.getImpersonatedSigner(
+        PROTECTION_BUYER1_ADDRESS
+      );
+      USDC.connect(circleAccount).transfer(
+        PROTECTION_BUYER1_ADDRESS,
+        parseUSDC("1000000")
+      );
     });
 
     describe("constructor", () => {
@@ -220,30 +236,24 @@ const testPool: Function = (
 
     describe("...1st pool cycle", async () => {
       describe("buyProtection", () => {
-        const _lendingPoolId: BigNumber = BigNumber.from(0);
-        let _protectionBuyerApy: BigNumber = parseEther("0.17"); // 17%
-        let _protectionAmount: BigNumber;
+        let _purchaseParams: IReferenceLendingPools.ProtectionPurchaseParamsStruct;
 
-        it("...should expire the referenceLendingPools", async () => {
-          //   await referenceLendingPools.setIsExpired(true);
-          //   const _checkIsExpired: boolean =
-          //     await referenceLendingPools.checkIsExpired();
-          //   expect(_checkIsExpired.toString()).to.eq("true");
-        });
-
-        it("...fails if the lending pool has expired already", async () => {
-          // await expect(pool.buyProtection(0,0,0)).to.be.revertedWith("Lending pool has expired");
-        });
-
-        it("...should roll back the expiration the referenceLendingPools for testing", async () => {
-          //   await referenceLendingPools.setIsExpired(true);
-          //   const _checkIsExpired: boolean =
-          //     await referenceLendingPools.checkIsExpired();
-          //   expect(_checkIsExpired.toString()).to.eq("true");
-        });
-
-        it("...fails if the lending pool has defaulted", async () => {
-          // even if a pool defaults, there may be more default from other loans in the pool. whenNotDefault should be valid only when all the loans in the lending pool default?
+        it("...fails if the lending pool is not supported/added", async () => {
+          const buyer = await ethers.getImpersonatedSigner(
+            "0x8481a6ebaf5c7dabc3f7e09e44a89531fd31f822"
+          );
+          const _notSupportedLendingPool =
+            "0xC13465CE9Ae3Aa184eB536F04FDc3f54D2dEf277";
+          await expect(
+            pool.connect(buyer).buyProtection({
+              lendingPoolAddress: _notSupportedLendingPool,
+              nftLpTokenId: 91,
+              protectionAmount: parseUSDC("100"),
+              protectionExpirationTimestamp: 1740068036
+            })
+          ).to.be.revertedWith(
+            `LendingPoolNotSupported("${_notSupportedLendingPool}")`
+          );
         });
 
         it("...pause the pool contract", async () => {
@@ -252,17 +262,22 @@ const testPool: Function = (
         });
 
         it("...fails if the pool contract is paused", async () => {
-          await expect(pool.buyProtection(0, 0, 0, 0)).to.be.revertedWith(
-            "Pausable: paused"
-          );
+          await expect(
+            pool.connect(_protectionBuyer1).buyProtection({
+              lendingPoolAddress: LENDING_POOL_ADDRESS,
+              nftLpTokenId: 583,
+              protectionAmount: parseUSDC("101"),
+              protectionExpirationTimestamp: await getUnixTimestampAheadByDays(
+                10
+              )
+            })
+          ).to.be.revertedWith("Pausable: paused");
         });
 
         it("...unpause the pool contract", async () => {
           await pool.unpause();
           expect(await pool.paused()).to.be.false;
         });
-
-        it("...reentrancy should fail", async () => {});
 
         it("...the buyer account doesn't exist for the msg.sender", async () => {
           expect(
@@ -271,25 +286,31 @@ const testPool: Function = (
         });
 
         it("...fail if USDC is not approved", async () => {
-          _protectionAmount = BigNumber.from(10).mul(USDC_DECIMALS);
           await expect(
-            pool.buyProtection(
-              _lendingPoolId,
-              await getUnixTimestampAheadByDays(10),
-              _protectionAmount,
-              _protectionBuyerApy
-            )
+            pool.connect(_protectionBuyer1).buyProtection({
+              lendingPoolAddress: LENDING_POOL_ADDRESS,
+              nftLpTokenId: 590,
+              protectionAmount: parseUSDC("101"),
+              protectionExpirationTimestamp: await getUnixTimestampAheadByDays(
+                10
+              )
+            })
           ).to.be.revertedWith("ERC20: transfer amount exceeds allowance");
         });
 
         it("...approve 2500 USDC to be transferred by the Pool contract", async () => {
           const _approvedAmt = parseUSDC("2500");
-          expect(await USDC.approve(pool.address, _approvedAmt))
+          expect(
+            await USDC.connect(_protectionBuyer1).approve(
+              pool.address,
+              _approvedAmt
+            )
+          )
             .to.emit(USDC, "Approval")
-            .withArgs(deployerAddress, pool.address, _approvedAmt);
+            .withArgs(PROTECTION_BUYER1_ADDRESS, pool.address, _approvedAmt);
 
           const _allowanceAmount: number = await USDC.allowance(
-            deployerAddress,
+            PROTECTION_BUYER1_ADDRESS,
             pool.address
           );
           expect(_allowanceAmount).to.eq(_approvedAmt);
@@ -297,41 +318,44 @@ const testPool: Function = (
 
         it("...create a new buyer account and buy protection", async () => {
           const _initialBuyerAccountId: BigNumber = BigNumber.from(1);
-          let _expirationTime: BigNumber = await getUnixTimestampAheadByDays(
-            90
-          );
-          _protectionAmount = parseUSDC("100000"); // 100,000 USDC
-
           const _initialPremiumAmountOfAccount: BigNumber = BigNumber.from(0);
           const _premiumTotalOfLendingPoolIdBefore: BigNumber =
-            await pool.lendingPoolIdToPremiumTotal(_lendingPoolId);
+            await pool.lendingPoolIdToPremiumTotal(LENDING_POOL_ADDRESS);
           const _premiumTotalBefore: BigNumber = await pool.totalPremium();
-
           const _expectedPremiumAmount = parseUSDC("2418.902585");
+
+          const _protectionAmount = parseUSDC("100000"); // 100,000 USDC
+          _purchaseParams = {
+            lendingPoolAddress: LENDING_POOL_ADDRESS,
+            nftLpTokenId: 590,
+            protectionAmount: _protectionAmount,
+            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(90)
+          };
+
           expect(
-            await pool.buyProtection(
-              _lendingPoolId,
-              _expirationTime,
-              _protectionAmount,
-              _protectionBuyerApy
-            )
+            await pool.connect(_protectionBuyer1).buyProtection(_purchaseParams)
           )
             .emit(pool, "PremiumAccrued")
             .to.emit(pool, "BuyerAccountCreated")
-            .withArgs(deployerAddress, _initialBuyerAccountId)
+            .withArgs(PROTECTION_BUYER1_ADDRESS, _initialBuyerAccountId)
             .to.emit(pool, "CoverageBought")
-            .withArgs(deployerAddress, _lendingPoolId, _protectionAmount);
+            .withArgs(
+              PROTECTION_BUYER1_ADDRESS,
+              LENDING_POOL_ADDRESS,
+              _protectionAmount
+            );
 
           const _premiumAmountOfAccountAfter: BigNumber =
-            await pool.buyerAccounts(_initialBuyerAccountId, _lendingPoolId);
+            await pool.buyerAccounts(
+              _initialBuyerAccountId,
+              LENDING_POOL_ADDRESS
+            );
           const _premiumTotalOfLendingPoolIdAfter: BigNumber =
-            await pool.lendingPoolIdToPremiumTotal(_lendingPoolId);
+            await pool.lendingPoolIdToPremiumTotal(LENDING_POOL_ADDRESS);
           const _premiumTotalAfter: BigNumber = await pool.totalPremium();
-
           expect(
             _premiumAmountOfAccountAfter.sub(_initialPremiumAmountOfAccount)
           ).to.eq(_expectedPremiumAmount);
-
           expect(_premiumTotalBefore.add(_expectedPremiumAmount)).to.eq(
             _premiumTotalAfter
           );
@@ -350,20 +374,20 @@ const testPool: Function = (
         });
 
         it("...fail when total protection crosses min requirement with leverage ratio breaching floor", async () => {
-          const _expirationTime: BigNumber = await getUnixTimestampAheadByDays(
-            30
-          );
-
           const _protectionAmount = parseUSDC("110000");
-          await USDC.approve(pool.address, _protectionAmount);
+          await USDC.connect(_protectionBuyer1).approve(
+            pool.address,
+            parseUSDC("2500")
+          );
+          _purchaseParams = {
+            lendingPoolAddress: LENDING_POOL_ADDRESS,
+            nftLpTokenId: 590,
+            protectionAmount: _protectionAmount,
+            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(30)
+          };
 
           await expect(
-            pool.buyProtection(
-              1,
-              _expirationTime,
-              _protectionAmount,
-              _protectionBuyerApy
-            )
+            pool.connect(_protectionBuyer1).buyProtection(_purchaseParams)
           ).to.be.revertedWith("PoolLeverageRatioTooLow(1, 2990476190)");
         });
       });
@@ -392,7 +416,6 @@ const testPool: Function = (
               pool.address,
               BigNumber.from(0).mul(USDC_DECIMALS)
             );
-
           const _allowanceAmount: number = await USDC.allowance(
             deployerAddress,
             pool.address
@@ -407,7 +430,6 @@ const testPool: Function = (
             "evm_snapshot",
             []
           );
-
           expect(
             await poolCycleManager.getCurrentCycleState(poolInfo.poolId)
           ).to.equal(1); // 1 = Open
@@ -415,7 +437,6 @@ const testPool: Function = (
           // pause the pool
           await pool.connect(deployer).pause();
           expect(await pool.paused()).to.be.true;
-
           await expect(
             pool.deposit(_underlyingAmount, deployerAddress)
           ).to.be.revertedWith("Pausable: paused");
@@ -445,7 +466,6 @@ const testPool: Function = (
               pool.address,
               BigNumber.from(100000000).mul(USDC_DECIMALS)
             );
-
           const _allowanceAmount: number = await USDC.allowance(
             deployerAddress,
             pool.address
@@ -497,9 +517,7 @@ const testPool: Function = (
         // for some reason, this test fails without hardhat generating stacktrace
         xit("...fail if deposit causes to breach leverage ratio ceiling", async () => {
           expect(await pool.totalProtection()).to.eq(parseUSDC("100000"));
-
           const depositAmt: BigNumber = parseUSDC("52000");
-
           await expect(
             pool.deposit(depositAmt, sellerAddress)
           ).to.be.revertedWith("PoolLeverageRatioTooHigh");
@@ -527,7 +545,6 @@ const testPool: Function = (
           const convertedUnderlying = await pool.convertToUnderlying(
             await pool.balanceOf(sellerAddress)
           );
-
           // Seller should receive little bit more USDC amt than deposited because of accrued premium
           expect(convertedUnderlying)
             .to.be.gt(parseUSDC("19.9877"))
@@ -547,7 +564,6 @@ const testPool: Function = (
         const _withdrawalCycleIndex = 1; // current pool cycle index + 1
         const _requestedTokenAmt1 = parseEther("11");
         const _requestedTokenAmt2 = parseEther("5");
-
         const verifyTotalRequestedWithdrawal = async (
           _expectedTotalWithdrawal: BigNumber
         ) => {
@@ -558,7 +574,6 @@ const testPool: Function = (
             _expectedTotalWithdrawal
           );
         };
-
         it("...fail when pool is paused", async () => {
           await pool.connect(deployer).pause();
           expect(await pool.paused()).to.be.true;
@@ -567,12 +582,10 @@ const testPool: Function = (
             "Pausable: paused"
           );
         });
-
         it("...unpause the pool", async () => {
           await pool.connect(deployer).unpause();
           expect(await pool.paused()).to.be.false;
         });
-
         it("...fail when an user has zero balance", async () => {
           const _tokenAmt = parseEther("0.001");
           await expect(
@@ -581,7 +594,6 @@ const testPool: Function = (
             `InsufficientSTokenBalance("${buyerAddress}", 0)`
           );
         });
-
         it("...fail when withdrawal amount is higher than token balance", async () => {
           const _tokenAmt = parseEther("21");
           const _tokenBalance = await pool.balanceOf(sellerAddress);
@@ -591,7 +603,6 @@ const testPool: Function = (
             `InsufficientSTokenBalance("${sellerAddress}", ${_tokenBalance})`
           );
         });
-
         it("...1st request is successful", async () => {
           await expect(
             pool.connect(seller).requestWithdrawal(_requestedTokenAmt1)
@@ -602,25 +613,20 @@ const testPool: Function = (
               _requestedTokenAmt1,
               _withdrawalCycleIndex
             );
-
           const request = await pool
             .connect(seller)
             .getWithdrawalRequest(_withdrawalCycleIndex);
           expect(request.sTokenAmount).to.eq(_requestedTokenAmt1);
-
           // withdrawal cycle's total sToken requested amount should be same as the requested amount
           await verifyTotalRequestedWithdrawal(_requestedTokenAmt1);
-
           const withdrawalCycleDetail = await pool.withdrawalCycleDetails(
             _withdrawalCycleIndex
           );
-
           // Withdrawal cycle begins at the open period of next pool cycle
           // So withdrawal phase 2 will start after the half time is elapsed of next cycle's open duration.
           const currentPoolCycle = await poolCycleManager.getCurrentPoolCycle(
             poolInfo.poolId
           );
-
           const currentPoolCycleStartTime =
             await currentPoolCycle.currentCycleStartTime;
           const expectedTimestamp = currentPoolCycleStartTime.add(
@@ -628,12 +634,10 @@ const testPool: Function = (
               poolInfo.params.poolCycleParams.openCycleDuration.div(2)
             )
           );
-
           expect(withdrawalCycleDetail.withdrawalPhase2StartTimestamp).to.eq(
             expectedTimestamp
           );
         });
-
         it("...2nd request by same user should update existing request", async () => {
           await expect(
             pool.connect(seller).requestWithdrawal(_requestedTokenAmt2)
@@ -644,16 +648,13 @@ const testPool: Function = (
               _requestedTokenAmt2,
               _withdrawalCycleIndex
             );
-
           const request = await pool
             .connect(seller)
             .getWithdrawalRequest(_withdrawalCycleIndex);
           expect(request.sTokenAmount).to.eq(_requestedTokenAmt2);
-
           // withdrawal cycle's total sToken requested amount should be same as the new requested amount
           await verifyTotalRequestedWithdrawal(_requestedTokenAmt2);
         });
-
         it("...fail when amount in updating request is higher than token balance", async () => {
           const _tokenAmt = parseEther("21");
           const _tokenBalance = await pool.balanceOf(sellerAddress);
@@ -663,17 +664,14 @@ const testPool: Function = (
             `InsufficientSTokenBalance("${sellerAddress}", ${_tokenBalance})`
           );
         });
-
         it("...2nd request by another user is successful", async () => {
           const _underlyingAmount = parseUSDC("20");
           await USDC.connect(owner).approve(pool.address, _underlyingAmount);
           await pool.connect(owner).deposit(_underlyingAmount, ownerAddress);
-
           const _tokenBalance = await pool.balanceOf(ownerAddress);
           await expect(pool.connect(owner).requestWithdrawal(_tokenBalance))
             .to.emit(pool, "WithdrawalRequested")
             .withArgs(ownerAddress, _tokenBalance, _withdrawalCycleIndex);
-
           const request = await pool
             .connect(owner)
             .getWithdrawalRequest(_withdrawalCycleIndex);
@@ -688,22 +686,18 @@ const testPool: Function = (
         it("...fails when pool is paused", async () => {
           await pool.connect(deployer).pause();
           expect(await pool.paused()).to.be.true;
-
           await expect(
             pool.withdraw(parseEther("1"), deployerAddress)
           ).to.be.revertedWith("Pausable: paused");
         });
-
         it("...unpause the pool", async () => {
           await pool.connect(deployer).unpause();
           expect(await pool.paused()).to.be.false;
         });
-
         it("...fails because there was no previous cycle", async () => {
           const currentPoolCycle = await poolCycleManager.getCurrentPoolCycle(
             poolInfo.poolId
           );
-
           await expect(
             pool.withdraw(parseEther("1"), deployerAddress)
           ).to.be.revertedWith(
@@ -741,7 +735,6 @@ const testPool: Function = (
         it("...should accrue premium and update last accrual timestamp", async () => {
           const totalPremiumAccruedBefore = await pool.totalPremiumAccrued();
           await expect(pool.accruePremium()).to.emit(pool, "PremiumAccrued");
-
           expect(await pool.totalPremiumAccrued()).to.be.gt(
             totalPremiumAccruedBefore
           );
@@ -754,13 +747,18 @@ const testPool: Function = (
           const protectionCount = (await pool.getAllProtections()).length;
           expect(protectionCount).to.eq(1);
           expect(await pool.totalProtection()).to.eq(parseUSDC("100000"));
-          const lendingPoolId = BigNumber.from(11);
-          await pool.buyProtection(
-            lendingPoolId,
-            await getUnixTimestampAheadByDays(30),
-            parseUSDC("20000"),
-            parseEther("0.17")
-          );
+
+          const _protectionAmount = parseUSDC("20000");
+          const _purchaseParams = {
+            lendingPoolAddress: LENDING_POOL_ADDRESS,
+            nftLpTokenId: 590,
+            protectionAmount: _protectionAmount,
+            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(30)
+          };
+
+          const _premiumPaid = parseUSDC("427.926831");
+          await pool.connect(_protectionBuyer1).buyProtection(_purchaseParams);
+
           expect(await pool.totalProtection()).to.eq(parseUSDC("120000")); // 120K
           expect(await pool.getAllProtections()).to.have.lengthOf(2);
 
@@ -768,14 +766,17 @@ const testPool: Function = (
           await moveForwardTime(getDaysInSeconds(31));
 
           // 2nd protection should be expired and removed
+          const _totalPremiumAccruedBefore = await pool.totalPremiumAccrued();
           await pool.accruePremium();
+
           expect(await pool.getAllProtections()).to.have.lengthOf(1);
           expect(await pool.totalProtection()).to.eq(parseUSDC("100000"));
 
           // all premium for expired protection should be accrued
-          expect(await pool.lendingPoolIdToPremiumTotal(lendingPoolId)).to.eq(
-            parseUSDC("427.926831")
-          );
+          const _totalPremiumAccruedAfter = await pool.totalPremiumAccrued();
+          expect(
+            _totalPremiumAccruedAfter.sub(_totalPremiumAccruedBefore)
+          ).to.be.gt(_premiumPaid);
         });
 
         it("...should remove multiple expired protection", async () => {
@@ -783,29 +784,51 @@ const testPool: Function = (
           expect(protectionCount).to.eq(1);
           expect(await pool.totalProtection()).to.eq(parseUSDC("100000"));
 
-          // add bunch of protections
-          await pool.buyProtection(
-            BigNumber.from(2),
-            await getUnixTimestampAheadByDays(10),
-            parseUSDC("20000"),
-            parseEther("0.15")
+          // Impersonate accounts with lending pool positions
+          const _buyer1 = await ethers.getImpersonatedSigner(
+            "0xcb726f13479963934e91b6f34b6e87ec69c21bb9"
+          );
+          const _buyer2 = await ethers.getImpersonatedSigner(
+            "0x5cd8c821c080b7340df6969252a979ed416a4e3f"
+          );
+          const _buyer3 = await ethers.getImpersonatedSigner(
+            "0xb5a790758cdb6644305d1cf368b67bbba4c9a68c"
           );
 
-          await pool.buyProtection(
-            BigNumber.from(1),
-            await getUnixTimestampAheadByDays(20),
-            parseUSDC("30000"),
-            parseEther("0.15")
-          );
+          // Transfer USDC to buyers from circle account
+          // and approve premium to pool from these buyer accounts
+          const _premiumAmount = parseUSDC("2000");
+          for (const _buyer of [_buyer1, _buyer2, _buyer3]) {
+            await transferAndApproveUsdc(_buyer, _premiumAmount);
+          }
 
-          await pool.buyProtection(
-            BigNumber.from(1),
-            await getUnixTimestampAheadByDays(30),
-            parseUSDC("40000"),
-            parseEther("0.15")
-          );
+          // Add bunch of protections
+          // buyer 1 has principal of 35K USDC with token id: 615
+          await pool.connect(_buyer1).buyProtection({
+            lendingPoolAddress: LENDING_POOL_ADDRESS,
+            nftLpTokenId: 615,
+            protectionAmount: parseUSDC("20000"),
+            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(10)
+          });
 
-          expect(await pool.totalProtection()).to.eq(parseUSDC("190000")); // 190K USDC
+          // buyer 2 has principal of 63K USDC with token id: 579
+          await pool.connect(_buyer2).buyProtection({
+            lendingPoolAddress: LENDING_POOL_ADDRESS,
+            nftLpTokenId: 579,
+            protectionAmount: parseUSDC("30000"),
+            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(20)
+          });
+
+          // buyer 3 has principal of 60K USDC with token id: 620
+          await pool.connect(_buyer3).buyProtection({
+            lendingPoolAddress: LENDING_POOL_ADDRESS,
+            nftLpTokenId: 620,
+            protectionAmount: parseUSDC("40000"),
+            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(30)
+          });
+
+          // 190K USDC = 100K + 20K + 30K + 40K
+          expect(await pool.totalProtection()).to.eq(parseUSDC("190000"));
           expect(await pool.getAllProtections()).to.have.lengthOf(4);
 
           // move forward time by 21 days
@@ -813,23 +836,33 @@ const testPool: Function = (
 
           // 2nd & 3rd protections should be expired and removed
           await pool.accruePremium();
+
           expect(await pool.getAllProtections()).to.have.lengthOf(2);
-          expect(await pool.totalProtection()).to.eq(parseUSDC("140000"));
+          expect(await pool.totalProtection()).to.eq(parseUSDC("140000")); // 140K USDC = 100K + 40K
         });
 
         // This test is meant to report gas usage for buyProtection with large numbers of protections in the pool
         xit("...gas consumption test", async () => {
           const gasUsage = [];
+
+          // buyer 0x4535498cfbee9c7e2f817d1df21b2e9e2d9ec9b4 has principal of 25K USDC with token id: 575
+          const buyer1 = await ethers.getImpersonatedSigner(
+            "0x4535498cfbee9c7e2f817d1df21b2e9e2d9ec9b4"
+          );
+
           for (let index = 0; index < 151; index++) {
-            const tx = await pool.buyProtection(
-              BigNumber.from(1),
-              await getUnixTimestampAheadByDays(30),
-              parseUSDC("10000"),
-              parseEther("0.15"),
+            const tx = await pool.connect(buyer1).buyProtection(
+              {
+                lendingPoolAddress: LENDING_POOL_ADDRESS,
+                nftLpTokenId: 575,
+                protectionAmount: parseUSDC("10000"),
+                protectionExpirationTimestamp:
+                  await getUnixTimestampAheadByDays(30)
+              },
               { gasLimit: 10_000_000 } // 30_000_000 is block gas limit
             );
-
             const receipt = await tx.wait();
+
             console.log(
               `Gas used for protection# ${
                 index + 1
@@ -850,29 +883,34 @@ const testPool: Function = (
               before1stDepositSnapshotId
             ])
           ).to.eq(true);
-
           console.log(
             "***** Current Pool Cycle State: " +
               (await poolCycleManager.getCurrentCycleState(poolInfo.poolId))
           );
 
+          // buyer 0x4535498cfbee9c7e2f817d1df21b2e9e2d9ec9b4 has principal of 25K USDC with token id: 575
+          const buyer1 = await ethers.getImpersonatedSigner(
+            "0x4535498cfbee9c7e2f817d1df21b2e9e2d9ec9b4"
+          );
+
           // Approve the pool to spend USDC
           await USDC.approve(pool.address, parseUSDC("1000000"));
-
           for (let index = 0; index < 150; index++) {
-            await pool.buyProtection(
-              BigNumber.from(1),
-              await getUnixTimestampAheadByDays(60),
-              parseUSDC("10000"),
-              parseEther("0.15"),
+            await pool.connect(buyer1).buyProtection(
+              {
+                lendingPoolAddress: LENDING_POOL_ADDRESS,
+                nftLpTokenId: 575,
+                protectionAmount: parseUSDC("10000"),
+                protectionExpirationTimestamp:
+                  await getUnixTimestampAheadByDays(60)
+              },
               { gasLimit: 10_000_000 } // 30_000_000 is block gas limit
             );
-
             const tx = await pool.deposit(parseUSDC("1000"), deployerAddress, {
               gasLimit: 10_000_000
             }); // 30_000_000 is block gas limit
-
             const receipt = await tx.wait();
+
             console.log(
               `Gas used for deposit after protection# ${
                 index + 1
@@ -887,27 +925,25 @@ const testPool: Function = (
 
       describe("buyProtection after deposit", async () => {
         it("...should succeed when total protection is higher than min requirement and leverage ratio higher than floor", async () => {
-          const _expirationTime: BigNumber = getUnixTimestampAheadByDays(30);
-          const _protectionAmount = parseUSDC("10000");
-          const _underlyingAmount = parseUSDC("1000");
-
           // Revert the state of the pool to the open state
           await network.provider.send("evm_revert", [
             before1stDepositSnapshotId
           ]);
 
-          await USDC.approve(
-            pool.address,
-            _underlyingAmount.add(_protectionAmount)
-          );
-
+          // Approve the pool to spend USDC & deposit 1K USDC
+          const _underlyingAmount = parseUSDC("1000");
+          await USDC.approve(pool.address, _underlyingAmount);
           await pool.deposit(_underlyingAmount, sellerAddress);
-          await pool.buyProtection(
-            1,
-            _expirationTime,
-            _protectionAmount,
-            parseEther("0.15")
-          );
+
+          // Buyer 1 buys protection of 10K USDC, so approve premium to be paid
+          transferAndApproveUsdc(_protectionBuyer1, parseUSDC("500"));
+          await pool.connect(_protectionBuyer1).buyProtection({
+            lendingPoolAddress: LENDING_POOL_ADDRESS,
+            // see: https://lark.market/tokenDetail?tokenId=590
+            nftLpTokenId: 590, // this token has 420K principal for buyer 1
+            protectionAmount: parseUSDC("10000"),
+            protectionExpirationTimestamp: getUnixTimestampAheadByDays(30)
+          });
 
           expect(await pool.getAllProtections()).to.have.lengthOf(2);
           expect(await pool.totalProtection()).to.eq(parseUSDC("110000")); // 100K + 10K
@@ -920,7 +956,6 @@ const testPool: Function = (
       describe("...before 1st pool cycle is locked", async () => {
         it("...can create withdrawal requests for next cycle", async () => {
           // create withdrawal requests before moving 1st cycle to locked state
-
           // Seller1: deposit 2000 USDC & request withdrawal of 1000 sTokens
           const _depositAmount1 = parseUSDC("2000");
           await depositAndRequestWithdrawal(
@@ -929,7 +964,6 @@ const testPool: Function = (
             _depositAmount1,
             parseEther("1000")
           );
-
           // Seller2: deposit 10000 USDC & request withdrawal of 1000 sTokens
           const _depositAmount2 = parseUSDC("10000");
           await depositAndRequestWithdrawal(
@@ -938,7 +972,6 @@ const testPool: Function = (
             _depositAmount2,
             parseEther("1000")
           );
-
           // Seller3: deposit 2000 USDC & request withdrawal of 1000 sTokens
           const _depositAmount3 = parseUSDC("3000");
           await depositAndRequestWithdrawal(
@@ -980,7 +1013,6 @@ const testPool: Function = (
 
     describe("...2nd pool cycle", async () => {
       const currentPoolCycleIndex = 1;
-
       describe("...withdraw with withdrawal percent 1 (more total sToken underlying available than requested)", async () => {
         before(async () => {
           // Move pool cycle(10 days open period, 30 days total duration) to open state (next pool cycle)
@@ -1025,11 +1057,9 @@ const testPool: Function = (
             await pool.withdrawalCycleDetails(currentPoolCycleIndex)
           ).totalSTokenRequested;
           expect(totalSTokenRequested).to.eq(parseEther("3000"));
-
           const totalSTokenUnderlying = await pool.totalSTokenUnderlying();
           expect(totalSTokenUnderlying).to.be.gt(parseUSDC("15000")); // 3 deposits = 2000 + 10000 + 3000
           expect(await pool.totalProtection()).to.eq(parseUSDC("110000"));
-
           // 11,000 = (0.1 * total protection) is not available for withdrawal
           const totalAvailableToWithdraw = totalSTokenUnderlying.sub(
             parseUSDC("11000")
@@ -1044,7 +1074,6 @@ const testPool: Function = (
           // Seller has requested 1000 sTokens in previous cycle
           const withdrawalAmt = parseEther("1000");
           await verifyWithdrawal(seller, withdrawalAmt);
-
           // withdrawal percent is 1 (100%)
           expect(
             (await pool.withdrawalCycleDetails(1)).withdrawalPercent
@@ -1060,7 +1089,6 @@ const testPool: Function = (
                 .getWithdrawalRequest(currentPoolCycleIndex)
             ).sTokenAmount
           ).to.eq(0);
-
           await expect(
             pool.connect(seller).withdraw(parseEther("1"), sellerAddress)
           ).to.be.revertedWith(
@@ -1072,7 +1100,6 @@ const testPool: Function = (
           // 2nd seller (Owner account) has requested 1000 sTokens in previous cycle
           const withdrawalAmt = parseEther("1000");
           verifyWithdrawal(owner, withdrawalAmt);
-
           // withdrawal percent is still 1 (100%)
           expect(
             (await pool.withdrawalCycleDetails(1)).withdrawalPercent
@@ -1084,7 +1111,6 @@ const testPool: Function = (
           expect(
             (await pool.connect(owner).getWithdrawalRequest(1)).sTokenAmount
           ).to.eq(0);
-
           await expect(
             pool.connect(owner).withdraw(parseEther("1"), ownerAddress)
           ).to.be.revertedWith(
@@ -1094,7 +1120,6 @@ const testPool: Function = (
 
         it("...is successful for 3rd seller with 2 transactions", async () => {
           const sTokenBalanceBefore = await pool.balanceOf(account4Address);
-
           // 3rd seller (Account4) has requested total 1000 sTokens in previous cycle,
           // so partial withdrawal should be possible
           await verifyWithdrawal(account4, parseEther("600"));
@@ -1107,7 +1132,6 @@ const testPool: Function = (
           expect(
             (await pool.connect(account4).getWithdrawalRequest(1)).sTokenAmount
           ).to.eq(parseEther("100"));
-
           // withdrawing more(101) sTokens than remaining requested should fail
           await expect(
             pool.connect(account4).withdraw(parseEther("101"), account4Address)
@@ -1147,7 +1171,6 @@ const testPool: Function = (
           expect(
             (await pool.connect(account4).getWithdrawalRequest(1)).sTokenAmount
           ).to.eq(0);
-
           // withdraw should fail
           await expect(
             pool.connect(account4).withdraw(parseEther("0.1"), account4Address)
@@ -1160,13 +1183,10 @@ const testPool: Function = (
       describe("...before 2nd pool cycle is locked", async () => {
         it("...can create withdrawal requests for next cycle", async () => {
           // create withdrawal requests before moving 2nd cycle to locked state
-
           // Seller1: deposited 2000 USDC in 1st cycle. Now request withdrawal of 1000 sTokens
           await pool.connect(seller).requestWithdrawal(parseEther("1000"));
-
           // Seller2: deposited 10000 USDC in 1st cycle, now request withdrawal of 5000 sTokens
           await pool.connect(owner).requestWithdrawal(parseEther("5000"));
-
           // Seller3: deposited 2000 USDC in 1st cycle, now request withdrawal of 1000 sTokens
           await pool.connect(account4).requestWithdrawal(parseEther("1000"));
         });
@@ -1202,8 +1222,7 @@ const testPool: Function = (
 
     describe("...3rd pool cycle", async () => {
       const currentPoolCycleIndex = 2;
-      const withdrawalPercentScaled = parseEther("0.592540112872853133000");
-
+      const withdrawalPercentScaled = parseEther("0.592654410164652266");
       describe("...withdraw with withdrawal percent < 1 (less total sToken underlying available than requested)", async () => {
         before(async () => {
           // Move pool cycle(10 days open period, 30 days total duration) to open state (next pool cycle)
@@ -1228,14 +1247,11 @@ const testPool: Function = (
             await pool.withdrawalCycleDetails(currentPoolCycleIndex)
           ).totalSTokenRequested;
           expect(totalSTokenRequested).to.eq(parseEther("7000"));
-
           const totalSTokenUnderlying = await pool.totalSTokenUnderlying();
           // 3 deposits = 2000 + 10000 + 2000 - 3000(withdrawals in 2nd cycle) = 12000
           expect(totalSTokenUnderlying).to.be.gt(parseUSDC("12000"));
-
           // 10K protection from "buyProtection after deposit" test case is expired
           expect(await pool.totalProtection()).to.eq(parseUSDC("100000"));
-
           // 10,000 = (0.1 * total protection) is not available for withdrawal
           const totalAvailableToWithdraw = totalSTokenUnderlying.sub(
             parseUSDC("10000")
@@ -1248,8 +1264,6 @@ const testPool: Function = (
 
         it("...fails for 1st seller when withdrawal amt is higher than allowed", async () => {
           const withdrawalAmt = parseEther("1000");
-          const allowedAmount = parseEther("592.540112872853133"); // 0.5925(withdrawalPercent) * 1000(requestedAmount)
-
           await expect(
             pool.connect(seller).withdraw(withdrawalAmt, sellerAddress)
           ).to.be.revertedWith;
@@ -1257,9 +1271,8 @@ const testPool: Function = (
 
         it("...is successful for 1st seller when withdrawal amount is allowed", async () => {
           // Seller has requested 1000 sTokens in 2nd cycle, but max allowed is 592.xx sTokens
-          const withdrawalAmt = parseEther("592.540112872853133");
+          const withdrawalAmt = parseEther("592.654410164652266"); // 0.5926(withdrawalPercent) * 1000(requestedAmount)
           await verifyWithdrawal(seller, withdrawalAmt);
-
           const withdrawalRequest = await pool
             .connect(seller)
             .getWithdrawalRequest(currentPoolCycleIndex);
@@ -1277,7 +1290,6 @@ const testPool: Function = (
 
         it("...fails for 1st seller on 2nd withdrawal", async () => {
           const withdrawalAmt = parseEther("1");
-
           await expect(
             pool.connect(seller).withdraw(withdrawalAmt, sellerAddress)
           ).to.be.revertedWith(
@@ -1288,20 +1300,16 @@ const testPool: Function = (
         it("...is successful for 2nd seller when withdrawal amount is less than allowed", async () => {
           // 2nd Seller has requested 5000 sTokens in 2nd cycle, but max allowed is 2962.xx (0.5925 * 5000)
           await verifyWithdrawal(owner, parseEther("1000"));
-
           const withdrawalRequest = await pool
             .connect(owner)
             .getWithdrawalRequest(currentPoolCycleIndex);
-
           // phase1STokenAmountCalculated flag should be set to true for seller's request
           expect(withdrawalRequest.phaseOneSTokenAmountCalculated).to.eq(true);
           expect(withdrawalRequest.remainingPhaseOneSTokenAmount)
-            .to.be.gt(parseEther("1962"))
-            .and.lt(parseEther("1963"));
-
+            .to.be.gt(parseEther("1963"))
+            .and.lt(parseEther("1963.5"));
           // 2nd withdrawal should be successful
           await verifyWithdrawal(owner, parseEther("500"));
-
           expect(
             (
               await pool
@@ -1309,9 +1317,8 @@ const testPool: Function = (
                 .getWithdrawalRequest(currentPoolCycleIndex)
             ).remainingPhaseOneSTokenAmount
           )
-            .to.be.gt(parseEther("1462"))
-            .and.lt(parseEther("1463"));
-
+            .to.be.gt(parseEther("1463"))
+            .and.lt(parseEther("1464"));
           // withdrawal percent is 0.5925...
           expect(
             (await pool.withdrawalCycleDetails(currentPoolCycleIndex))
@@ -1337,16 +1344,15 @@ const testPool: Function = (
 
         it("...is successful for 1st seller for remaining requested sTokens", async () => {
           // 1st Seller(seller) has withdrawn allowed sTokens in previous phase,
-          // so withdrawal request should have remaining sTokens (1000 - 592.54xxx = 407.45xxx)
+          // so withdrawal request should have remaining sTokens (1000 - 592.56xxx = 407.34xxx)
           const remainingRequestedSTokens = (
             await pool
               .connect(seller)
               .getWithdrawalRequest(currentPoolCycleIndex)
           ).sTokenAmount;
           expect(remainingRequestedSTokens)
-            .to.be.gt(parseEther("407.45"))
-            .and.lt(parseEther("407.46"));
-
+            .to.be.gt(parseEther("407.34"))
+            .and.lt(parseEther("407.35"));
           // withdraw should be fine for remaining sTokens
           await verifyWithdrawal(seller, remainingRequestedSTokens);
         });
@@ -1357,7 +1363,6 @@ const testPool: Function = (
           expect(
             (await pool.connect(seller).getWithdrawalRequest(1)).sTokenAmount
           ).to.eq(0);
-
           await expect(
             pool.connect(seller).withdraw(parseEther("0.1"), sellerAddress)
           ).to.be.revertedWith(
@@ -1389,11 +1394,10 @@ const testPool: Function = (
                 .getWithdrawalRequest(currentPoolCycleIndex)
             ).sTokenAmount
           ).to.eq(parseEther("3500"));
-
           // withdraw should fail
           await expect(
             pool.connect(owner).withdraw(parseEther("1000"), account4Address)
-          ).to.be.revertedWith("PoolLeverageRatioTooLow(1, 97272135180000000)");
+          ).to.be.revertedWith("PoolLeverageRatioTooLow");
         });
 
         it("...fails for 3rd seller", async () => {
@@ -1406,7 +1410,6 @@ const testPool: Function = (
                 .getWithdrawalRequest(currentPoolCycleIndex)
             ).sTokenAmount
           ).to.eq(0);
-
           // withdraw should fail
           await expect(
             pool.connect(account4).withdraw(parseEther("0.1"), account4Address)

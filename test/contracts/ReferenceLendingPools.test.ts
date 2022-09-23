@@ -185,11 +185,15 @@ const testReferenceLendingPools: Function = (
         });
 
         // Could not find defaulted lending pool
-        xit("...should revert when defaulted pool is added by owner", async () => {
+        it("...should revert when defaulted pool is added by owner", async () => {
           await expect(
             referenceLendingPoolsInstance
               .connect(deployer)
-              .addReferenceLendingPool("", [0], [10])
+              .addReferenceLendingPool(
+                "0xc13465ce9ae3aa184eb536f04fdc3f54d2def277",
+                [0],
+                [10]
+              )
           ).to.be.revertedWith("ReferenceLendingPoolIsNotActive");
         });
 

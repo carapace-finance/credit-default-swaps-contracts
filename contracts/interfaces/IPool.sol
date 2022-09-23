@@ -156,7 +156,9 @@ abstract contract IPool {
   );
 
   /**
-   * @notice A buyer can buy protection for a lending pool.
+   * @notice A buyer can buy protection for a loan in lending pool when lending pool is supported & active (not defaulted or expired).
+   * Buyer must have a position in the lending pool & principal must be less or equal to the protection amount.
+   * Buyer must approve underlying tokens to pay the expected premium.
    * @param _protectionPurchaseParams The protection purchase parameters.
    */
   function buyProtection(

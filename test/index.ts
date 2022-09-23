@@ -73,7 +73,15 @@ describe("start testing", () => {
     });
 
     it("run the Pool test", async () => {
-      testPool(deployer, account1, account2, account3, account4, poolInstance);
+      testPool(
+        deployer,
+        account1,
+        account2,
+        account3,
+        account4,
+        poolInstance,
+        GOLDFINCH_LENDING_POOLS
+      );
     });
 
     // Run this spec last because it moves time forward a lot and that impacts the pool tests
