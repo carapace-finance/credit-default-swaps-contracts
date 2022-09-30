@@ -9,8 +9,7 @@ import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
  */
 abstract contract IReferenceLendingPools {
   enum LendingProtocol {
-    GoldfinchV2,
-    Maple
+    GoldfinchV2
   }
 
   enum LendingPoolStatus {
@@ -111,7 +110,7 @@ abstract contract IReferenceLendingPools {
    * @param _lendingPoolAddress address of the lending pool
    * @return annual interest rate scaled to 18 decimals
    */
-  function calculateProtectionBuyerInterestRate(address _lendingPoolAddress)
+  function calculateProtectionBuyerAPR(address _lendingPoolAddress)
     public
     view
     virtual

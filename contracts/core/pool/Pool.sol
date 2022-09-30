@@ -189,10 +189,10 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       }
     }
 
-    /// Step 4: Calculate the buyer's APY scaled to 18 decimals
-    uint256 _protectionBuyerApy = poolInfo
+    /// Step 4: Calculate the buyer's APR scaled to 18 decimals
+    uint256 _protectionBuyerApr = poolInfo
       .referenceLendingPools
-      .calculateProtectionBuyerInterestRate(
+      .calculateProtectionBuyerAPR(
         _protectionPurchaseParams.lendingPoolAddress
       );
 
@@ -203,7 +203,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         _scaleUnderlyingAmtTo18Decimals(
           _protectionPurchaseParams.protectionAmount
         ),
-        _protectionBuyerApy,
+        _protectionBuyerApr,
         _leverageRatio,
         totalSTokenUnderlying,
         totalProtection,

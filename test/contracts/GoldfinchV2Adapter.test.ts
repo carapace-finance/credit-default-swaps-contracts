@@ -71,18 +71,18 @@ const testGoldfinchV2Adapter: Function = (
       });
     });
 
-    describe("calculateProtectionBuyerInterestRate", () => {
+    describe("calculateProtectionBuyerAPR", () => {
       it("...should return the correct interest rate", async () => {
         // see USDC APY: https://app.goldfinch.finance/pools/0x418749e294cabce5a714efccc22a8aade6f9db57
         expect(
-          await goldfinchV2Adapter.calculateProtectionBuyerInterestRate(
+          await goldfinchV2Adapter.calculateProtectionBuyerAPR(
             GOLDFINCH_ALMAVEST_BASKET_6_ADDRESS
           )
         ).to.eq(parseEther("0.17"));
 
         // see USDC APY: https://app.goldfinch.finance/pools/0x00c27fc71b159a346e179b4a1608a0865e8a7470
         expect(
-          await goldfinchV2Adapter.calculateProtectionBuyerInterestRate(
+          await goldfinchV2Adapter.calculateProtectionBuyerAPR(
             "0x00c27fc71b159a346e179b4a1608a0865e8a7470"
           )
         ).to.eq(parseEther("0.187"));

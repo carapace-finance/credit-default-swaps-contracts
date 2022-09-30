@@ -119,9 +119,8 @@ const testReferenceLendingPools: Function = (
         });
 
         it("...should not have any other adapter created", async () => {
-          expect(
-            await referenceLendingPoolsInstance.lendingProtocolAdapters(1)
-          ).to.equal(ZERO_ADDRESS);
+          await expect(referenceLendingPoolsInstance.lendingProtocolAdapters(1))
+            .to.be.reverted;
         });
 
         it("...should transfer ownership during initialization", async () => {
@@ -168,7 +167,7 @@ const testReferenceLendingPools: Function = (
             referenceLendingPoolsInstance
               .connect(deployer)
               .addReferenceLendingPool(LENDING_POOL_3, [1], [10])
-          ).to.be.revertedWith("LendingProtocolNotSupported(1)");
+          ).to.be.revertedWith;
         });
 
         it("...should revert when expired(repaid) pool is added by owner", async () => {
@@ -303,11 +302,11 @@ const testReferenceLendingPools: Function = (
         });
       });
 
-      describe("calculateProtectionBuyerInterestRate", () => {
+      describe("calculateProtectionBuyerAPR", () => {
         it("...should return the correct interest rate", async () => {
           // see USDC APY: https://app.goldfinch.finance/pools/0x89d7c618a4eef3065da8ad684859a547548e6169
           expect(
-            await referenceLendingPoolsInstance.calculateProtectionBuyerInterestRate(
+            await referenceLendingPoolsInstance.calculateProtectionBuyerAPR(
               LENDING_POOL_3
             )
           ).to.eq(parseEther("0.17"));
@@ -315,7 +314,7 @@ const testReferenceLendingPools: Function = (
 
         it("...should revert when a pool is not added/supported", async () => {
           await expect(
-            referenceLendingPoolsInstance.calculateProtectionBuyerInterestRate(
+            referenceLendingPoolsInstance.calculateProtectionBuyerAPR(
               "0xaa2ccc5547f64c5dffd0a624eb4af2543a67ba65"
             )
           ).to.be.revertedWith("ReferenceLendingPoolNotSupported");

@@ -104,7 +104,7 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
   }
 
   /// @inheritdoc ILendingProtocolAdapter
-  function calculateProtectionBuyerInterestRate(address _lendingPoolAddress)
+  function calculateProtectionBuyerAPR(address _lendingPoolAddress)
     external
     view
     override

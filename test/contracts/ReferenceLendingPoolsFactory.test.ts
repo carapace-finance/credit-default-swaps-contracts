@@ -61,7 +61,7 @@ const testReferenceLendingPoolsFactory: Function = (
         await expect(
           referenceLendingPoolsFactory.createReferenceLendingPools(
             [ZERO_ADDRESS],
-            [1],
+            [0],
             [10, 11]
           )
         ).to.be.revertedWith("Array inputs length must match");

@@ -50,7 +50,7 @@ abstract contract ILendingProtocolAdapter {
    * @param _lendingPoolAddress Address of the underlying lending pool
    * @return Interest rate for the protection buyer, scaled to 18 decimals
    */
-  function calculateProtectionBuyerInterestRate(address _lendingPoolAddress)
+  function calculateProtectionBuyerAPR(address _lendingPoolAddress)
     external
     view
     virtual

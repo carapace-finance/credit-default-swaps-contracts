@@ -25,7 +25,7 @@ contract ReferenceLendingPools is
   mapping(address => ReferenceLendingPoolInfo) public referenceLendingPools;
 
   /// @notice the mapping of the lending pool protocol to the lending protocol adapter
-  /// i.e Goldfinch => GoldfinchV2Adapter
+  /// i.e GoldfinchV2 => GoldfinchV2Adapter
   mapping(LendingProtocol => ILendingProtocolAdapter)
     public lendingProtocolAdapters;
 
@@ -157,7 +157,7 @@ contract ReferenceLendingPools is
   }
 
   /// @inheritdoc IReferenceLendingPools
-  function calculateProtectionBuyerInterestRate(address _lendingPoolAddress)
+  function calculateProtectionBuyerAPR(address _lendingPoolAddress)
     public
     view
     override
@@ -166,7 +166,7 @@ contract ReferenceLendingPools is
   {
     return
       _getLendingProtocolAdapter(_lendingPoolAddress)
-        .calculateProtectionBuyerInterestRate(_lendingPoolAddress);
+        .calculateProtectionBuyerAPR(_lendingPoolAddress);
   }
 
   /** internal functions */
