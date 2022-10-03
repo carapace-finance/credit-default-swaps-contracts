@@ -10,16 +10,11 @@ pragma solidity ^0.8.13;
  * Changes:
  *  1. Updated compiler version to match the rest of the project
  *  2. Removed "pragma experimental ABIEncoderV2"
+ *  3. Removed all unused structs/events/functions
  *
  * Etherscan link: https://etherscan.io/address/0x4Df1e7fFB382F79736CA565F378F783678d995D8
  */
 interface ICreditLine {
-  function borrower() external view returns (address);
-
-  function limit() external view returns (uint256);
-
-  function maxLimit() external view returns (uint256);
-
   /**
    * Comments copied from GoldfinchFactory.createPool: https://github.com/goldfinch-eng/mono/blob/88f0e3f94f6dd23ebae429fe09e2511650df893a/packages/protocol/contracts/protocol/core/GoldfinchFactory.sol#L70
    * The interest amount, on an annualized basis (APR, so non-compounding), expressed as an integer.
@@ -34,8 +29,6 @@ interface ICreditLine {
    * ie. the frequency with which they need to make payments.
    */
   function paymentPeriodInDays() external view returns (uint256);
-
-  function principalGracePeriodInDays() external view returns (uint256);
 
   /**
    * Comments copied from GoldfinchFactory.createPool: https://github.com/goldfinch-eng/mono/blob/88f0e3f94f6dd23ebae429fe09e2511650df893a/packages/protocol/contracts/protocol/core/GoldfinchFactory.sol#L75
@@ -52,8 +45,6 @@ interface ICreditLine {
   function lateFeeApr() external view returns (uint256);
 
   function isLate() external view returns (bool);
-
-  function withinPrincipalGracePeriod() external view returns (bool);
 
   // Accounting variables
   function balance() external view returns (uint256);

@@ -10,7 +10,7 @@ import {ITranchedPool} from "./ITranchedPool.sol";
  * Changes:
  *  1. Updated compiler version to match the rest of the project
  *  2. Removed "pragma experimental ABIEncoderV2"
- *  3. Removed "invest" & "estimateInvestment" functions
+ *  3. Removed all unused structs/events/functions
  */
 abstract contract ISeniorPoolStrategy {
   function getLeverageRatio(ITranchedPool pool)
