@@ -3,15 +3,16 @@ pragma solidity ^0.8.13;
 
 import "@prb/math/contracts/PRBMathUD60x18.sol";
 
-import "../external/goldfinch/IPoolTokens.sol";
-import "../external/goldfinch/ITranchedPool.sol";
-import "../external/goldfinch/IGoldfinchConfig.sol";
-import "../external/goldfinch/ConfigOptions.sol";
-import "../external/goldfinch/ISeniorPoolStrategy.sol";
-import "../external/goldfinch/ISeniorPool.sol";
+import {IPoolTokens} from "../external/goldfinch/IPoolTokens.sol";
+import {ITranchedPool} from "../external/goldfinch/ITranchedPool.sol";
+import {ICreditLine} from "../external/goldfinch/ICreditLine.sol";
+import {IGoldfinchConfig} from "../external/goldfinch/IGoldfinchConfig.sol";
+import {ConfigOptions} from "../external/goldfinch/ConfigOptions.sol";
+import {ISeniorPoolStrategy} from "../external/goldfinch/ISeniorPoolStrategy.sol";
+import {ISeniorPool} from "../external/goldfinch/ISeniorPool.sol";
 
-import "../interfaces/ILendingProtocolAdapter.sol";
-import "../interfaces/IReferenceLendingPools.sol";
+import {ILendingProtocolAdapter} from "../interfaces/ILendingProtocolAdapter.sol";
+import {IReferenceLendingPools} from "../interfaces/IReferenceLendingPools.sol";
 import "../libraries/Constants.sol";
 
 /**
@@ -43,7 +44,7 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
     override
     returns (bool)
   {
-    IV2CreditLine _creditLine = ITranchedPool(_lendingPoolAddress).creditLine();
+    ICreditLine _creditLine = ITranchedPool(_lendingPoolAddress).creditLine();
     uint256 _termEndTimestamp = _creditLine.termEndTime();
 
     /// Repaid logic derived from Goldfinch frontend code:
@@ -111,7 +112,7 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
     returns (uint256 _interestRate)
   {
     ITranchedPool _tranchedPool = ITranchedPool(_lendingPoolAddress);
-    IV2CreditLine _creditLine = _tranchedPool.creditLine();
+    ICreditLine _creditLine = _tranchedPool.creditLine();
 
     uint256 _loanInterestRate = _creditLine.interestApr();
     uint256 _protocolFeePercent = _getProtocolFeePercent();

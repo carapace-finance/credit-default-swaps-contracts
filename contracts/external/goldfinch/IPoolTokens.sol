@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.13;
 
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
 /**
  * @dev Goldfinch ERC721 compliant token interface to represent junior tranche or senior tranche shares of any of the borrower pools.

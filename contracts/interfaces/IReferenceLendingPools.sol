@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-
 /**
  * @notice Interface to represent the basket of the Carapace eligible lending pools
  *         for which the protocol can provide the protection.

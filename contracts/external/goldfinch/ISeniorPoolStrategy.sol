@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.13;
 
-import "./ITranchedPool.sol";
+import {ITranchedPool} from "./ITranchedPool.sol";
 
 /**
  * @dev Goldfinch's senior pool strategy interface that is used to automatically invest across borrower pools.

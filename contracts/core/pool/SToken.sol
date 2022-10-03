@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Pausable} from "@openzeppelin/contracts/security/Pausable.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 /// @notice Implementation of the interest bearing token for the Carapace protocol. SToken is an EIP-20 compliant representation of balance supplied  in a junior tranche or senior tranche of a protection pool. Yields distribution such as premium and interest from rehypothecation are calculated based on this token.
 contract SToken is ERC20, Pausable, Ownable {

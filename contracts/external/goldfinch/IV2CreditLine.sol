@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.13;
 
-import "./ICreditLine.sol";
+import {ICreditLine} from "./ICreditLine.sol";
 
 /**
  * @dev Goldfinch's credit line interface version 2 that represents the agreement between Backers and a Borrower.

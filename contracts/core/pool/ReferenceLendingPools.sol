@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
-import "../../interfaces/IReferenceLendingPools.sol";
-import "../../interfaces/ILendingProtocolAdapter.sol";
+import {IReferenceLendingPools} from "../../interfaces/IReferenceLendingPools.sol";
+import {ILendingProtocolAdapter} from "../../interfaces/ILendingProtocolAdapter.sol";
+import {GoldfinchV2Adapter} from "../../adapters/GoldfinchV2Adapter.sol";
 import "../../libraries/Constants.sol";
-import "../../adapters/GoldfinchV2Adapter.sol";
 
 /**
  * @notice ReferenceLendingPools manages the basket of reference lending pools,

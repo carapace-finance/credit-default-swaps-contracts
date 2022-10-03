@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.13;
 
-import "./ITranchedPool.sol";
+import {ITranchedPool} from "./ITranchedPool.sol";
 
 /**
  * @dev Goldfinch's senior pool interface that is the main entry point for senior LPs (a.k.a. capital providers).
