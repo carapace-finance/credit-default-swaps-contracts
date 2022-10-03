@@ -1,0 +1,196 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.13;
+
+import "@prb/math/contracts/PRBMathUD60x18.sol";
+
+import "../external/goldfinch/IPoolTokens.sol";
+import "../external/goldfinch/ITranchedPool.sol";
+import "../external/goldfinch/IGoldfinchConfig.sol";
+import "../external/goldfinch/ConfigOptions.sol";
+import "../external/goldfinch/ISeniorPoolStrategy.sol";
+import "../external/goldfinch/ISeniorPool.sol";
+
+import "../interfaces/ILendingProtocolAdapter.sol";
+import "../interfaces/IReferenceLendingPools.sol";
+import "../libraries/Constants.sol";
+
+/**
+ * @notice Adapter for Goldfinch V2 lending protocol
+ * @author Carapace Finance
+ */
+contract GoldfinchV2Adapter is ILendingProtocolAdapter {
+  using PRBMathUD60x18 for uint256;
+
+  /// Copied from Goldfinch's TranchingLogic.sol:
+  /// https://github.com/goldfinch-eng/mono/blob/main/packages/protocol/contracts/protocol/core/TranchingLogic.sol#L42
+  uint256 public constant NUM_TRANCHES_PER_SLICE = 2;
+
+  address public constant GOLDFINCH_CONFIG_ADDRESS =
+    0xaA425F8BfE82CD18f634e2Fe91E5DdEeFD98fDA1;
+
+  /// This contract stores mappings of useful goldfinch's "protocol config state".
+  /// These config vars are enumerated in the `ConfigOptions` library.
+  IGoldfinchConfig public immutable goldfinchConfig;
+
+  constructor() {
+    goldfinchConfig = IGoldfinchConfig(GOLDFINCH_CONFIG_ADDRESS);
+  }
+
+  /// @inheritdoc ILendingProtocolAdapter
+  function isLendingPoolExpired(address _lendingPoolAddress)
+    external
+    view
+    override
+    returns (bool)
+  {
+    IV2CreditLine _creditLine = ITranchedPool(_lendingPoolAddress).creditLine();
+    uint256 _termEndTimestamp = _creditLine.termEndTime();
+
+    /// Repaid logic derived from Goldfinch frontend code:
+    /// https://github.com/goldfinch-eng/mono/blob/bd9adae6fbd810d1ebb5f7ef22df5bb6f1eaee3b/packages/client2/lib/pools/index.ts#L54
+    /// when the credit line has zero balance with valid term end, it is considered repaid
+    return
+      block.timestamp >= _termEndTimestamp ||
+      (_termEndTimestamp > 0 && _creditLine.balance() == 0);
+  }
+
+  /// @inheritdoc ILendingProtocolAdapter
+  function isLendingPoolDefaulted(address _lendingPoolAddress)
+    external
+    view
+    override
+    returns (bool)
+  {
+    /// When “potential default” loan has write down, then lending pool is considered to be in “default” state
+    return _getSeniorPool().writedowns(_lendingPoolAddress) > 0;
+  }
+
+  /// @inheritdoc ILendingProtocolAdapter
+  function isProtectionAmountValid(
+    address _buyer,
+    IReferenceLendingPools.ProtectionPurchaseParams memory _purchaseParams
+  ) external view override returns (bool _isValid) {
+    // Verify that buyer owns the specified token
+    IPoolTokens _poolTokens = _getPoolTokens();
+    bool ownsToken = _poolTokens.ownerOf(_purchaseParams.nftLpTokenId) ==
+      _buyer;
+
+    // Verify that buyer has a junior tranche position in the lending pool
+    IPoolTokens.TokenInfo memory tokenInfo = _poolTokens.getTokenInfo(
+      _purchaseParams.nftLpTokenId
+    );
+    bool hasJuniorTrancheToken = tokenInfo.pool ==
+      _purchaseParams.lendingPoolAddress &&
+      _isJuniorTrancheId(tokenInfo.tranche);
+
+    // Verify that protection amount is less than or equal to the principal amount lent to the lending pool
+    _isValid =
+      ownsToken &&
+      hasJuniorTrancheToken &&
+      _purchaseParams.protectionAmount <= tokenInfo.principalAmount;
+  }
+
+  /// @inheritdoc ILendingProtocolAdapter
+  function getLendingPoolTermEndTimestamp(address _lendingPoolAddress)
+    external
+    view
+    override
+    returns (uint256 _termEndTimestamp)
+  {
+    /// Term end time in goldfinch is timestamp of first drawdown + term length in seconds
+    _termEndTimestamp = ITranchedPool(_lendingPoolAddress)
+      .creditLine()
+      .termEndTime();
+  }
+
+  /// @inheritdoc ILendingProtocolAdapter
+  function calculateProtectionBuyerAPR(address _lendingPoolAddress)
+    external
+    view
+    override
+    returns (uint256 _interestRate)
+  {
+    ITranchedPool _tranchedPool = ITranchedPool(_lendingPoolAddress);
+    IV2CreditLine _creditLine = _tranchedPool.creditLine();
+
+    uint256 _loanInterestRate = _creditLine.interestApr();
+    uint256 _protocolFeePercent = _getProtocolFeePercent();
+
+    /// Junior Reallocation Percent is plain uint, so we need to scale it to 18 decimals
+    /// For example, juniorReallocationPercent of 20 => 0.2 => 20% => 20 * 10^16
+    uint256 _juniorReallocationPercent = (_tranchedPool.juniorFeePercent() *
+      Constants.SCALE_18_DECIMALS) / 100;
+
+    uint256 _leverageRatio = _getLeverageRatio(_tranchedPool);
+
+    /// Backers receive an effective interest rate of:
+    /// I(junior) = Interest Rate Percent ∗ (1 − Protocol Fee Percent + (Leverage Ratio ∗ Junior Reallocation Percent))
+    /// details: https://docs.goldfinch.finance/goldfinch/protocol-mechanics/backers
+    /// For example: Consider a Borrower Pool with a 15% interest rate and 4X leverage ratio.
+    /// junior tranche(backers/buyers) interest rate: 0.15 * (1 - 0.1 + (4 * 0.2)) = 0.255 = 25.5%
+    _interestRate = _loanInterestRate.mul(
+      Constants.SCALE_18_DECIMALS -
+        _protocolFeePercent +
+        _leverageRatio.mul(_juniorReallocationPercent)
+    );
+  }
+
+  /** internal functions */
+
+  /**
+   * @dev derived from TranchingLogic: https://github.com/goldfinch-eng/mono/blob/main/packages/protocol/contracts/protocol/core/TranchingLogic.sol#L419
+   */
+  function _isJuniorTrancheId(uint256 trancheId) internal pure returns (bool) {
+    return trancheId != 0 && (trancheId % NUM_TRANCHES_PER_SLICE) == 0;
+  }
+
+  /**
+   * @dev Calculates the protocol fee percent based on reserve denominator
+   * @return _feePercent protocol fee percent scaled to 18 decimals
+   */
+  function _getProtocolFeePercent()
+    internal
+    view
+    returns (uint256 _feePercent)
+  {
+    uint256 reserveDenominator = goldfinchConfig.getNumber(
+      uint256(ConfigOptions.Numbers.ReserveDenominator)
+    );
+
+    /// Convert the denominator to percent and scale by 18 decimals
+    /// reserveDenominator = 10 => 0.1 percent => (1 * 10 ** 18)/10 => 10 ** 17
+    _feePercent = Constants.SCALE_18_DECIMALS / reserveDenominator;
+  }
+
+  /**
+   * @dev Provides the leverage ratio used for specified tranched pool.
+   * @param _tranchedPool address of tranched pool
+   * @return _leverageRatio scaled to 18 decimals. For example: 4X leverage ratio => 4 * 10 ** 18
+   */
+  function _getLeverageRatio(ITranchedPool _tranchedPool)
+    internal
+    view
+    returns (uint256 _leverageRatio)
+  {
+    ISeniorPoolStrategy _seniorPoolStrategy = ISeniorPoolStrategy(
+      goldfinchConfig.getAddress(
+        uint256(ConfigOptions.Addresses.SeniorPoolStrategy)
+      )
+    );
+    return _seniorPoolStrategy.getLeverageRatio(_tranchedPool);
+  }
+
+  function _getPoolTokens() internal view returns (IPoolTokens) {
+    return
+      IPoolTokens(
+        goldfinchConfig.getAddress(uint256(ConfigOptions.Addresses.PoolTokens))
+      );
+  }
+
+  function _getSeniorPool() internal view returns (ISeniorPool) {
+    return
+      ISeniorPool(
+        goldfinchConfig.getAddress(uint256(ConfigOptions.Addresses.SeniorPool))
+      );
+  }
+}

@@ -60,12 +60,14 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /// @notice a buyer account id for each address
   mapping(address => uint256) public ownerAddressToBuyerAccountId;
 
+  // TODO: why do we need this?
   /// @notice The premium amount for each lending pool for each account id
   /// @dev a buyer account id to a lending pool id to the premium amount
-  mapping(uint256 => mapping(uint256 => uint256)) public buyerAccounts;
+  mapping(uint256 => mapping(address => uint256)) public buyerAccounts;
 
+  // TODO: why do we need this?
   /// @notice The total amount of premium for each lending pool
-  mapping(uint256 => uint256) public lendingPoolIdToPremiumTotal;
+  mapping(address => uint256) public lendingPoolIdToPremiumTotal;
 
   /// @notice The array to track the loan protection info for all protection bought.
   LoanProtectionInfo[] public loanProtectionInfos;
@@ -76,19 +78,27 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /*** modifiers ***/
 
   /**
-   * @param _lendingPoolId The id of the lending pool.
+   * @notice Verifies that the status of the lending pool is ACTIVE,
+   *         otherwise reverts with the appropriate error message.
+   * @param _lendingPoolAddress The address of the underlying lending pool.
    */
-  modifier whenNotExpired(uint256 _lendingPoolId) {
-    //   if (referenceLendingPools.checkIsExpired(_lendingPoolId) == true)
-    //     revert PoolExpired(_lendingPoolId);
-    _;
-  }
+  modifier whenLendingPoolIsActive(address _lendingPoolAddress) {
+    IReferenceLendingPools.LendingPoolStatus poolStatus = poolInfo
+      .referenceLendingPools
+      .getLendingPoolStatus(_lendingPoolAddress);
 
-  /**
-   * @param _lendingPoolId The id of the lending pool.
-   */
-  modifier whenNotDefault(uint256 _lendingPoolId) {
-    // require(referenceLendingPools.checkIsDefaulted(_lendingPoolId) == false, "defaulted");
+    if (poolStatus == IReferenceLendingPools.LendingPoolStatus.NotSupported) {
+      revert LendingPoolNotSupported(_lendingPoolAddress);
+    }
+
+    if (poolStatus == IReferenceLendingPools.LendingPoolStatus.Expired) {
+      revert LendingPoolExpired(_lendingPoolAddress);
+    }
+
+    if (poolStatus == IReferenceLendingPools.LendingPoolStatus.Defaulted) {
+      revert LendingPoolDefaulted(_lendingPoolAddress);
+    }
+
     _;
   }
 
@@ -113,7 +123,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /*** constructor ***/
   /**
-   * @param _poolInfo The information about the pool.
+   * @param _poolInfo The information about this pool.
    * @param _premiumCalculator an address of a premium calculator contract
    * @param _poolCycleManager an address of a pool cycle manager contract
    * @param _name a name of the sToken
@@ -140,36 +150,38 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /*** state-changing functions ***/
 
-  /**
-   * @notice Adds a new protection to the pool for a premium amount.
-   * @dev The underlying tokens in the amount of premium must be approved first.
-   * @param _lendingPoolId The id of the lending pool to be covered.
-   * @param _protectionExpirationTimestamp the expiration timestamp of the protection
-   * @param _protectionAmount the protection amount in underlying token
-   * @param _protectionBuyerApy the protection buyer's APY for the protected loan, scaled to 18 decimals
-   */
+  /// @inheritdoc IPool
   function buyProtection(
-    uint256 _lendingPoolId,
-    uint256 _protectionExpirationTimestamp,
-    uint256 _protectionAmount,
-    uint256 _protectionBuyerApy
+    IReferenceLendingPools.ProtectionPurchaseParams
+      calldata _protectionPurchaseParams
   )
     external
-    whenNotExpired(_lendingPoolId)
-    whenNotDefault(_lendingPoolId)
+    override
     whenNotPaused
+    whenLendingPoolIsActive(_protectionPurchaseParams.lendingPoolAddress)
     nonReentrant
   {
+    /// Step 1: Verify that buyer can buy the protection
+    if (
+      !poolInfo.referenceLendingPools.canBuyProtection(
+        msg.sender,
+        _protectionPurchaseParams
+      )
+    ) {
+      revert ProtectionPurchaseNotAllowed(_protectionPurchaseParams);
+    }
+
     if (_noBuyerAccountExist() == true) {
       _createBuyerAccount();
     }
 
-    /// accrue premium before calculating leverage ratio
+    /// Step 2: accrue premium before calculating leverage ratio
     accruePremium();
 
+    /// Step 3: Calculate & check the leverage ratio
     /// Calculate & when total protection is higher than required min protection,
     /// ensure that leverage ratio floor is not breached
-    totalProtection += _protectionAmount;
+    totalProtection += _protectionPurchaseParams.protectionAmount;
     uint256 _leverageRatio = calculateLeverageRatio();
     if (totalProtection > poolInfo.params.minRequiredProtection) {
       if (_leverageRatio < poolInfo.params.leverageRatioFloor) {
@@ -177,12 +189,21 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       }
     }
 
-    /// Calculate the protection premium amount scaled to 18 decimals and scale it to the underlying token decimals.
+    /// Step 4: Calculate the buyer's APR scaled to 18 decimals
+    uint256 _protectionBuyerApr = poolInfo
+      .referenceLendingPools
+      .calculateProtectionBuyerAPR(
+        _protectionPurchaseParams.lendingPoolAddress
+      );
+
+    /// Step 5: Calculate the protection premium amount scaled to 18 decimals and scale it to the underlying token decimals.
     (uint256 _premiumAmountIn18Decimals, bool _isMinPremium) = premiumCalculator
       .calculatePremium(
-        _protectionExpirationTimestamp,
-        _scaleUnderlyingAmtTo18Decimals(_protectionAmount),
-        _protectionBuyerApy,
+        _protectionPurchaseParams.protectionExpirationTimestamp,
+        _scaleUnderlyingAmtTo18Decimals(
+          _protectionPurchaseParams.protectionAmount
+        ),
+        _protectionBuyerApr,
         _leverageRatio,
         totalSTokenUnderlying,
         totalProtection,
@@ -194,20 +215,25 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     );
 
     uint256 _accountId = ownerAddressToBuyerAccountId[msg.sender];
-    buyerAccounts[_accountId][_lendingPoolId] += _premiumAmount;
+    buyerAccounts[_accountId][
+      _protectionPurchaseParams.lendingPoolAddress
+    ] += _premiumAmount;
+
+    /// Step 6: transfer premium amount from buyer to pool & track the premium amount
     poolInfo.underlyingToken.safeTransferFrom(
       msg.sender,
       address(this),
       _premiumAmount
     );
-    lendingPoolIdToPremiumTotal[_lendingPoolId] += _premiumAmount;
+    lendingPoolIdToPremiumTotal[
+      _protectionPurchaseParams.lendingPoolAddress
+    ] += _premiumAmount;
     totalPremium += _premiumAmount;
 
-    /// Calculate protection in days and scale it to 18 decimals.
-
-    uint256 _protectionDurationInDaysScaled = ((_protectionExpirationTimestamp -
-      block.timestamp) * Constants.SCALE_18_DECIMALS) /
-      uint256(Constants.SECONDS_IN_DAY);
+    /// Step 7: Calculate protection in days and scale it to 18 decimals.
+    uint256 _protectionDurationInDaysScaled = ((_protectionPurchaseParams
+      .protectionExpirationTimestamp - block.timestamp) *
+      Constants.SCALE_18_DECIMALS) / uint256(Constants.SECONDS_IN_DAY);
 
     console.log(
       "protectionDurationInDays: %s, protectionPremium: %s, leverageRatio: ",
@@ -216,7 +242,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _leverageRatio
     );
 
-    /// Capture loan protection data for premium accrual calculation
+    /// Step 8: Capture loan protection data for premium accrual calculation
     // solhint-disable-next-line
     (int256 _k, int256 _lambda) = AccruedPremiumCalculator.calculateKAndLambda(
       _premiumAmountIn18Decimals,
@@ -229,30 +255,30 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _isMinPremium ? poolInfo.params.minCarapaceRiskPremiumPercent : 0
     );
 
+    /// Step 9: Add protection to the pool & emit an event
     loanProtectionInfos.push(
       LoanProtectionInfo({
-        protectionAmount: _protectionAmount,
+        protectionAmount: _protectionPurchaseParams.protectionAmount,
         protectionPremium: _premiumAmount,
         startTimestamp: block.timestamp,
-        expirationTimestamp: _protectionExpirationTimestamp,
+        expirationTimestamp: _protectionPurchaseParams
+          .protectionExpirationTimestamp,
         K: _k,
         lambda: _lambda
       })
     );
 
-    emit ProtectionBought(msg.sender, _lendingPoolId, _protectionAmount);
+    emit ProtectionBought(
+      msg.sender,
+      _protectionPurchaseParams.lendingPoolAddress,
+      _premiumAmount
+    );
   }
 
-  /**
-   * @notice Attempts to deposit the underlying amount specified.
-   * @notice Upon successful deposit, receiver will get sTokens based on current exchange rate.
-   * @notice A deposit can only be made when the pool is in `Open` state.
-   * @notice Underlying amount needs to be approved for transfer to this contract.
-   * @param _underlyingAmount The amount of underlying token to deposit.
-   * @param _receiver The address to receive the STokens.
-   */
+  /// @inheritdoc IPool
   function deposit(uint256 _underlyingAmount, address _receiver)
     external
+    override
     whenPoolIsOpen
     whenNotPaused
     nonReentrant
@@ -282,14 +308,12 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     emit ProtectionSold(_receiver, _underlyingAmount);
   }
 
-  /**
-   * @notice Creates a withdrawal request for the given sToken amount to allow actual withdrawal at the next pool cycle.
-   * @notice Each user can have single request per withdrawal cycle and
-   *         hence this function will overwrite any existing request.
-   * @notice The actual withdrawal could be made when next pool cycle is opened for withdrawal with other constraints.
-   * @param _sTokenAmount The amount of sToken to withdraw.
-   */
-  function requestWithdrawal(uint256 _sTokenAmount) external whenNotPaused {
+  /// @inheritdoc IPool
+  function requestWithdrawal(uint256 _sTokenAmount)
+    external
+    override
+    whenNotPaused
+  {
     uint256 _sTokenBalance = balanceOf(msg.sender);
     if (_sTokenAmount > _sTokenBalance) {
       revert InsufficientSTokenBalance(msg.sender, _sTokenBalance);
@@ -335,23 +359,10 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     emit WithdrawalRequested(msg.sender, _sTokenAmount, _withdrawalCycleIndex);
   }
 
-  /**
-   * @notice Attempts to withdraw the sToken amount specified by the user with upper bound based on withdrawal phase.
-   * @notice A withdrawal request must be created during previous pool cycle.
-   * @notice A withdrawal can only be made when the pool is in `Open` state.
-   * @notice Proportional Underlying amount based on current exchange rate will be transferred to the receiver address.
-   * @notice Withdrawals are allowed in 2 phases:
-   *         1. Phase I: Users can withdraw their sTokens proportional to their share of total sTokens
-   *            requested for withdrawal based on leverage ratio floor.
-   *         2. Phase II: Users can withdraw up to remainder of their requested sTokens on
-   *            the first come first serve basis.
-   *         Withdrawal cycle begins at the open period of current pool cycle.
-   *         So withdrawal phase 2 will start after the half time is elapsed of current cycle's open duration.
-   * @param _sTokenWithdrawalAmount The amount of sToken to withdraw.
-   * @param _receiver The address to receive the underlying token.
-   */
+  /// @inheritdoc IPool
   function withdraw(uint256 _sTokenWithdrawalAmount, address _receiver)
     external
+    override
     whenPoolIsOpen
     whenNotPaused
     nonReentrant
@@ -440,12 +451,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     poolInfo.params.leverageRatioCeiling = newCeiling;
   }
 
-  /**
-   * @notice Calculates the premium accrued for all existing protections and updates the total premium accrued.
-   * @notice This method calculates premium accrued from the last timestamp to the current timestamp.
-   * @notice This method also removes expired protections.
-   */
-  function accruePremium() public {
+  /// @inheritdoc IPool
+  function accruePremium() public override {
     /// Ensure we accrue premium only once per the block
     if (block.timestamp == lastPremiumAccrualTimestamp) {
       return;

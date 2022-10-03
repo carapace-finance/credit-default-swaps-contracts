@@ -15,9 +15,10 @@ const config: HardhatUserConfig = {
   networks: {
     hardhat: {
       forking: {
-        url: `https://eth-mainnet.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`
+        url: `https://eth-mainnet.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`,
         // url: `https://mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`,
-        // blockNumber: 14961117 // use the same block number to make subsequent runs faster with cache.
+        // 09/23/2022: We are pinning to this block number to avoid goldfinch pool & token position changes
+        blockNumber: 15598870
       },
       gas: "auto", // gasLimit
       gasPrice: 259000000000, // check the latest gas price market in https://www.ethgasstation.info/

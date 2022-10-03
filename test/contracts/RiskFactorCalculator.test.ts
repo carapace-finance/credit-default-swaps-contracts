@@ -2,7 +2,6 @@ import { BigNumber } from "@ethersproject/bignumber";
 import { expect } from "chai";
 import { parseEther, formatEther } from "ethers/lib/utils";
 import { RiskFactorCalculator } from "../../typechain-types/contracts/libraries/RiskFactorCalculator";
-import { parseUSDC } from "../utils/usdc";
 
 const testRiskFactorCalculator: Function = (
   riskFactorCalculator: RiskFactorCalculator
