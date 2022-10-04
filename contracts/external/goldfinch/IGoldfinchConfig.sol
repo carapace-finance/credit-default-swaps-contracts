@@ -2,8 +2,6 @@
 
 pragma solidity ^0.8.13;
 
-import "./ConfigOptions.sol";
-
 /**
  * @notice Interface to interact with GoldfinchConfig contract.
  * Derived from Goldfinch's GoldfinchConfig.sol: https://github.com/goldfinch-eng/mono/blob/main/packages/protocol/contracts/protocol/core/GoldfinchConfig.sol

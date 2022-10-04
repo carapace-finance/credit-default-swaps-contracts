@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "hardhat/console.sol";
 import "@prb/math/contracts/PRBMathSD59x18.sol";
+
+import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
+import {IPool} from "../interfaces/IPool.sol";
+
 import "../libraries/Constants.sol";
-import "../interfaces/IPremiumCalculator.sol";
-import "../interfaces/IPool.sol";
 import "../libraries/RiskFactorCalculator.sol";
+
+import "hardhat/console.sol";
 
 contract PremiumCalculator is IPremiumCalculator {
   using PRBMathSD59x18 for int256;

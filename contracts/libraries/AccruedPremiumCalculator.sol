@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "hardhat/console.sol";
 import "@prb/math/contracts/PRBMathSD59x18.sol";
 import "./Constants.sol";
 import "./RiskFactorCalculator.sol";
+
+import "hardhat/console.sol";
 
 library AccruedPremiumCalculator {
   using PRBMathSD59x18 for int256;

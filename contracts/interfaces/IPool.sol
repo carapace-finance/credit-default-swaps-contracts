@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import "./IReferenceLendingPools.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {IReferenceLendingPools} from "./IReferenceLendingPools.sol";
 
 abstract contract IPool {
   /*** structs ***/
@@ -119,7 +119,7 @@ abstract contract IPool {
   event PoolInitialized(
     string name,
     string symbol,
-    IERC20 underlyingToken,
+    IERC20Metadata underlyingToken,
     IReferenceLendingPools referenceLendingPools
   );
 

@@ -2,9 +2,9 @@
 pragma solidity ^0.8.13;
 
 import "@openzeppelin/contracts/proxy/Clones.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-import "../interfaces/IReferenceLendingPools.sol";
+import {IReferenceLendingPools} from "../interfaces/IReferenceLendingPools.sol";
 
 /**
  * @notice This factory contract creates a new {IReferenceLendingPools} instances using minimal proxy pattern.

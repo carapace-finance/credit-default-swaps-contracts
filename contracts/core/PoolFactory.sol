@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
-import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Counters} from "@openzeppelin/contracts/utils/Counters.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
-import "./pool/Pool.sol";
-import "../interfaces/IPremiumCalculator.sol";
-import "../interfaces/IReferenceLendingPools.sol";
-import "./PoolCycleManager.sol";
+import {IPool} from "../interfaces/IPool.sol";
+import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
+import {IReferenceLendingPools} from "../interfaces/IReferenceLendingPools.sol";
+import {PoolCycleManager} from "./PoolCycleManager.sol";
+import {Pool} from "./pool/Pool.sol";
 
 /// @notice PoolFactory creates a new pool and keeps track of them.
 contract PoolFactory is Ownable {
