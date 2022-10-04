@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
-import {IReferenceLendingPools} from "../../interfaces/IReferenceLendingPools.sol";
+import {IReferenceLendingPools, LendingPoolStatus} from "../../interfaces/IReferenceLendingPools.sol";
 import {ILendingProtocolAdapter} from "../../interfaces/ILendingProtocolAdapter.sol";
 import {GoldfinchV2Adapter} from "../../adapters/GoldfinchV2Adapter.sol";
 import "../../libraries/Constants.sol";
@@ -102,6 +102,11 @@ contract ReferenceLendingPools is
   /** view functions */
 
   /// @inheritdoc IReferenceLendingPools
+  function getLendingPools() public view override returns (address[] memory) {
+    // TODO: use EnumerableSet
+  }
+
+  /// @inheritdoc IReferenceLendingPools
   function getLendingPoolStatus(address _lendingPoolAddress)
     public
     view
@@ -167,6 +172,24 @@ contract ReferenceLendingPools is
     return
       _getLendingProtocolAdapter(_lendingPoolAddress)
         .calculateProtectionBuyerAPR(_lendingPoolAddress);
+  }
+
+  function assessState()
+    external
+    view
+    override
+    returns (address[] memory pools, LendingPoolStatus[] memory statues)
+  {
+    // TODO: implement
+  }
+
+  function calculateCapitalToLock(address _lendingPool)
+    external
+    view
+    override
+    returns (uint256)
+  {
+    // TODO: implement
   }
 
   /** internal functions */

@@ -1,5 +1,15 @@
 // SPDX-License-Identifier: MIT
+
 pragma solidity ^0.8.13;
+
+enum LendingPoolStatus {
+  /// @notice This means the lending pool is not added to the basket
+  NotSupported,
+  Active,
+  Expired,
+  Late,
+  Defaulted
+}
 
 /**
  * @notice Interface to represent the basket of the Carapace eligible lending pools
@@ -8,14 +18,6 @@ pragma solidity ^0.8.13;
 abstract contract IReferenceLendingPools {
   enum LendingProtocol {
     GoldfinchV2
-  }
-
-  enum LendingPoolStatus {
-    /// @notice This means the lending pool is not added to the basket
-    NotSupported,
-    Active,
-    Expired,
-    Defaulted
   }
 
   /// @notice This struct represents the information of the reference lending pool for which buyers can purchase the protection
@@ -78,6 +80,11 @@ abstract contract IReferenceLendingPools {
   ) public virtual;
 
   /**
+   * @notice returns all lending pools which are added/available in this basket
+   */
+  function getLendingPools() public view virtual returns (address[] memory);
+
+  /**
    * @notice Provides the status of the specified lending pool.
    * @param _lendingPoolAddress address of the lending pool
    * @return the status of the lending pool
@@ -110,6 +117,26 @@ abstract contract IReferenceLendingPools {
    */
   function calculateProtectionBuyerAPR(address _lendingPoolAddress)
     public
+    view
+    virtual
+    returns (uint256);
+
+  /**
+   * @notice assess & return statuses of all lending pools in this basket
+   */
+  function assessState()
+    external
+    view
+    virtual
+    returns (address[] memory pools, LendingPoolStatus[] memory statues);
+
+  /**
+   * @notice Returns the capital amount that needs to be locked for the specified lending pool.
+   * @param _lendingPool address of the lending pool
+   * @return the capital to be locked
+   */
+  function calculateCapitalToLock(address _lendingPool)
+    external
     view
     virtual
     returns (uint256);

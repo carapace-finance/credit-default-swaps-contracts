@@ -223,4 +223,16 @@ abstract contract IPool {
    * @notice For example: 0.15 is returned as 0.15 x 10**18 = 15 * 10**16
    */
   function calculateLeverageRatio() public view virtual returns (uint256);
+
+  function lockCapital(uint256 _lockedAmount)
+    external
+    virtual
+    returns (uint256 _snapshotId);
+
+  function unlockCapital(uint256 _unlockedAmount) external virtual;
+
+  /**
+   * @notice claim the total unlocked capital from a given protection pool for a msg.sender
+   */
+  function claimUnlockedCapital(address _receiver) external virtual;
 }

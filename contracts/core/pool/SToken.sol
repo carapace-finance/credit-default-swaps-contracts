@@ -5,13 +5,17 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Pausable} from "@openzeppelin/contracts/security/Pausable.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-/// @notice Implementation of the interest bearing token for the Carapace protocol. SToken is an EIP-20 compliant representation of balance supplied  in a junior tranche or senior tranche of a protection pool. Yields distribution such as premium and interest from rehypothecation are calculated based on this token.
+/**
+ * @notice Implementation of the interest bearing token for the Carapace protocol.
+ * SToken is an EIP-20 compliant representation of balance supplied in the protection pool.
+ * Yields distribution such as premium and interest from rehypothecation are calculated based on this token.
+ * Each protection pool will have a corresponding SToken.
+ */
 contract SToken is ERC20, Pausable, Ownable {
   /*** events ***/
   event STokenCreated(string name, string symbol);
   event Minted(address indexed owner, uint256 amount);
 
-  /*** variables ***/
   /*** constructor ***/
   constructor(string memory _name, string memory _symbol)
     ERC20(_name, _symbol)

@@ -8,7 +8,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.
 import {Counters} from "@openzeppelin/contracts/utils/Counters.sol";
 import {SToken} from "./SToken.sol";
 import {IPremiumCalculator} from "../../interfaces/IPremiumCalculator.sol";
-import {IReferenceLendingPools} from "../../interfaces/IReferenceLendingPools.sol";
+import {IReferenceLendingPools, LendingPoolStatus} from "../../interfaces/IReferenceLendingPools.sol";
 import {IPoolCycleManager} from "../../interfaces/IPoolCycleManager.sol";
 import {IPool} from "../../interfaces/IPool.sol";
 import "../../libraries/AccruedPremiumCalculator.sol";
@@ -84,19 +84,19 @@ contract Pool is IPool, SToken, ReentrancyGuard {
    * @param _lendingPoolAddress The address of the underlying lending pool.
    */
   modifier whenLendingPoolIsActive(address _lendingPoolAddress) {
-    IReferenceLendingPools.LendingPoolStatus poolStatus = poolInfo
+    LendingPoolStatus poolStatus = poolInfo
       .referenceLendingPools
       .getLendingPoolStatus(_lendingPoolAddress);
 
-    if (poolStatus == IReferenceLendingPools.LendingPoolStatus.NotSupported) {
+    if (poolStatus == LendingPoolStatus.NotSupported) {
       revert LendingPoolNotSupported(_lendingPoolAddress);
     }
 
-    if (poolStatus == IReferenceLendingPools.LendingPoolStatus.Expired) {
+    if (poolStatus == LendingPoolStatus.Expired) {
       revert LendingPoolExpired(_lendingPoolAddress);
     }
 
-    if (poolStatus == IReferenceLendingPools.LendingPoolStatus.Defaulted) {
+    if (poolStatus == LendingPoolStatus.Defaulted) {
       revert LendingPoolDefaulted(_lendingPoolAddress);
     }
 
@@ -531,6 +531,31 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
     lastPremiumAccrualTimestamp = block.timestamp;
     emit PremiumAccrued(lastPremiumAccrualTimestamp, totalPremiumAccrued);
+  }
+
+  function lockCapital(uint256 _lockedCapitalAmount)
+    external
+    override
+    returns (uint256 _snapshotId)
+  {
+    // TODO: add logic to lock capital
+    // only from DefaultStateManager
+    // update SToken to derive from ERC20Snapshot
+    /// step 1: Capture protection pool's current investors by creating a snapshot of the token balance by using ERC20Snapshot in SToken
+    /// step 2: Update total locked capital in Pool
+  }
+
+  function unlockCapital(uint256 _unlockedAmount) external override {
+    // TODO: add logic to unlock capital
+    // only from DefaultStateManager
+    /// update the total locked capital in Pool
+  }
+
+  function claimUnlockedCapital(address _receiver) external override {
+    // TODO: add logic to claim unlocked capital
+    // only from PoolStateManager
+    /// Investors can claim their total share of released/unlocked capital across all lending pools
+    /// Pool should transfer the released capital to the receiver
   }
 
   /** view functions */
