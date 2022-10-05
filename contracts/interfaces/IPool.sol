@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import {IReferenceLendingPools} from "./IReferenceLendingPools.sol";
+import {IReferenceLendingPools, ProtectionPurchaseParams} from "./IReferenceLendingPools.sol";
 
 abstract contract IPool {
   /*** structs ***/
@@ -89,9 +89,7 @@ abstract contract IPool {
   error LendingPoolNotSupported(address lendingPoolAddress);
   error LendingPoolExpired(address lendingPoolAddress);
   error LendingPoolDefaulted(address lendingPoolAddress);
-  error ProtectionPurchaseNotAllowed(
-    IReferenceLendingPools.ProtectionPurchaseParams params
-  );
+  error ProtectionPurchaseNotAllowed(ProtectionPurchaseParams params);
   error ExpirationTimeTooShort(uint256 expirationTime);
   error BuyerAccountExists(address msgSender);
   error PoolIsNotOpen(uint256 poolId);
@@ -162,8 +160,7 @@ abstract contract IPool {
    * @param _protectionPurchaseParams The protection purchase parameters.
    */
   function buyProtection(
-    IReferenceLendingPools.ProtectionPurchaseParams
-      calldata _protectionPurchaseParams
+    ProtectionPurchaseParams calldata _protectionPurchaseParams
   ) external virtual;
 
   /**
@@ -224,10 +221,10 @@ abstract contract IPool {
    */
   function calculateLeverageRatio() public view virtual returns (uint256);
 
-  function lockCapital(uint256 _lockedAmount)
+  function lockCapital(address _lendingPoolAddress)
     external
     virtual
-    returns (uint256 _snapshotId);
+    returns (uint256 _lockedAmount, uint256 _snapshotId);
 
   function unlockCapital(uint256 _unlockedAmount) external virtual;
 

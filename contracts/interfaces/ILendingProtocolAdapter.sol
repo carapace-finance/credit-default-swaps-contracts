@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {IReferenceLendingPools} from "./IReferenceLendingPools.sol";
+import {IReferenceLendingPools, ProtectionPurchaseParams} from "./IReferenceLendingPools.sol";
 
 abstract contract ILendingProtocolAdapter {
   /**
@@ -25,13 +25,23 @@ abstract contract ILendingProtocolAdapter {
     returns (bool);
 
   /**
+   * @notice Determines whether the lending pool is late for payment.
+   * @param _lendingPoolAddress the address of the lending pool
+   */
+  function isLendingPoolLate(address _lendingPoolAddress)
+    external
+    view
+    virtual
+    returns (bool);
+
+  /**
    * @notice Determines whether protection amount is less than or equal to the amount lent to the underlying lending pool by the specified buyer.
    * @param _buyer the address of the buyer
    * @param _purchaseParams the protection purchase params
    */
   function isProtectionAmountValid(
     address _buyer,
-    IReferenceLendingPools.ProtectionPurchaseParams memory _purchaseParams
+    ProtectionPurchaseParams memory _purchaseParams
   ) external view virtual returns (bool);
 
   /**
@@ -52,6 +62,18 @@ abstract contract ILendingProtocolAdapter {
    */
   function calculateProtectionBuyerAPR(address _lendingPoolAddress)
     external
+    view
+    virtual
+    returns (uint256);
+
+  /**
+   * @notice Returns the principal amount that is remaining in the specified lending pool for the specified lender for the specified token id.
+   * @param _lender address of the lender
+   * @param _nftLpTokenId the id of NFT token representing the lending position of the specified lender
+   * @return the remaining principal amount
+   */
+  function calculateRemainingPrincipal(address _lender, uint256 _nftLpTokenId)
+    public
     view
     virtual
     returns (uint256);

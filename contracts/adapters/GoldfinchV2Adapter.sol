@@ -12,7 +12,7 @@ import {ISeniorPoolStrategy} from "../external/goldfinch/ISeniorPoolStrategy.sol
 import {ISeniorPool} from "../external/goldfinch/ISeniorPool.sol";
 
 import {ILendingProtocolAdapter} from "../interfaces/ILendingProtocolAdapter.sol";
-import {IReferenceLendingPools} from "../interfaces/IReferenceLendingPools.sol";
+import {IReferenceLendingPools, ProtectionPurchaseParams} from "../interfaces/IReferenceLendingPools.sol";
 import "../libraries/Constants.sol";
 
 /**
@@ -67,9 +67,20 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
   }
 
   /// @inheritdoc ILendingProtocolAdapter
+  function isLendingPoolLate(address _lendingPoolAddress)
+    external
+    view
+    override
+    returns (bool)
+  {
+    ICreditLine _creditLine = ITranchedPool(_lendingPoolAddress).creditLine();
+    return _creditLine.isLate();
+  }
+
+  /// @inheritdoc ILendingProtocolAdapter
   function isProtectionAmountValid(
     address _buyer,
-    IReferenceLendingPools.ProtectionPurchaseParams memory _purchaseParams
+    ProtectionPurchaseParams memory _purchaseParams
   ) external view override returns (bool _isValid) {
     // Verify that buyer owns the specified token
     IPoolTokens _poolTokens = _getPoolTokens();
@@ -134,6 +145,27 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
         _protocolFeePercent +
         _leverageRatio.mul(_juniorReallocationPercent)
     );
+  }
+
+  /// @inheritdoc ILendingProtocolAdapter
+  function calculateRemainingPrincipal(address _lender, uint256 _nftLpTokenId)
+    public
+    view
+    override
+    returns (uint256 _principalRemaining)
+  {
+    IPoolTokens _poolTokens = _getPoolTokens();
+
+    /// If lender owns the NFT, then calculate the remaining principal
+    /// otherwise, the remaining principal is zero
+    if (_poolTokens.ownerOf(_nftLpTokenId) == _lender) {
+      IPoolTokens.TokenInfo memory _tokenInfo = _poolTokens.getTokenInfo(
+        _nftLpTokenId
+      );
+      _principalRemaining =
+        _tokenInfo.principalAmount -
+        _tokenInfo.principalRedeemed;
+    }
   }
 
   /** internal functions */

@@ -9,6 +9,10 @@ import {IPool} from "../interfaces/IPool.sol";
 import {IDefaultStateManager, PoolState, LockedCapital} from "../interfaces/IDefaultStateManager.sol";
 
 contract DefaultStateManager is IDefaultStateManager {
+  /* state variables */
+  PoolState[] public poolStates;
+  mapping(address => uint256) public poolStateIndex;
+
   /// @inheritdoc IDefaultStateManager
   function registerPool(IPool _protectionPool) public override {
     // TODO: only from PoolFactory or Pool
@@ -17,6 +21,8 @@ contract DefaultStateManager is IDefaultStateManager {
     poolStates[newIndex].protectionPool = _protectionPool;
 
     poolStateIndex[address(_protectionPool)] = newIndex;
+
+    emit PoolRegistered(address(_protectionPool));
   }
 
   /// @inheritdoc IDefaultStateManager
@@ -40,12 +46,11 @@ contract DefaultStateManager is IDefaultStateManager {
     _assessState(poolStates[poolStateIndex[address(_pool)]]);
   }
 
-  /**
-   * @notice Return the total claimable amount from all locked capital instances in a given protection pool for a seller address.
-   */
+  /// @inheritdoc IDefaultStateManager
   function getClaimableUnlockedCapital(IPool _protectionPool, address _seller)
     public
     view
+    override
     returns (uint256 _claimableUnlockedCapital)
   {
     PoolState storage poolState = poolStates[
@@ -137,25 +142,28 @@ contract DefaultStateManager is IDefaultStateManager {
     PoolState storage poolState,
     address _lendingPool
   ) internal {
+    IPool _protectionPool = poolState.protectionPool;
     /// Step 1: Update the status of the lending pool in the storage
     poolState.lendingPoolStatuses[_lendingPool] = LendingPoolStatus.Late;
 
     /// step 2: calculate the capital amount to be locked
-    uint256 _capitalToLock = poolState
-      .protectionPool
-      .getPoolInfo()
-      .referenceLendingPools
-      .calculateCapitalToLock(_lendingPool);
+    (uint256 _capitalToLock, uint256 _snapshotId) = _protectionPool.lockCapital(
+      _lendingPool
+    );
 
-    /// step 3: lock the capital in the protection pool
-    uint256 _snapshotId = poolState.protectionPool.lockCapital(_capitalToLock);
-
-    /// step 4: create and store an instance of locked capital
+    /// step 3: create and store an instance of locked capital
     poolState.lockedCapitals[_lendingPool] = LockedCapital({
       snapshotId: _snapshotId,
       amount: _capitalToLock,
       locked: true
     });
+
+    emit LendingPoolLocked(
+      _lendingPool,
+      address(_protectionPool),
+      _snapshotId,
+      _capitalToLock
+    );
   }
 
   function _moveFromLockedToActiveState(
@@ -225,13 +233,19 @@ contract DefaultStateManager is IDefaultStateManager {
    */
   function _unlock(PoolState storage poolState, address _lendingPool)
     internal
-    returns (uint256)
+    returns (uint256 _unlockedAmount)
   {
     LockedCapital storage lockedCapital = poolState.lockedCapitals[
       _lendingPool
     ];
     lockedCapital.locked = false;
-    return lockedCapital.amount;
+    _unlockedAmount = lockedCapital.amount;
+
+    emit LendingPoolUnlocked(
+      _lendingPool,
+      address(poolState.protectionPool),
+      _unlockedAmount
+    );
   }
 
   /// Calculates the claimable amount for specified locked capital instance for the given seller address.

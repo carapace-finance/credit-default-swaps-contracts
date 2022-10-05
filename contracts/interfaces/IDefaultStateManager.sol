@@ -31,8 +31,21 @@ struct PoolState {
  * @author Carapace Finance
  */
 abstract contract IDefaultStateManager {
-  PoolState[] public poolStates;
-  mapping(address => uint256) public poolStateIndex;
+  /** events */
+  event PoolRegistered(address indexed protectionPool);
+
+  event LendingPoolLocked(
+    address indexed lendingPool,
+    address indexed protectionPool,
+    uint256 protectionPoolSnapshotId,
+    uint256 amount
+  );
+
+  event LendingPoolUnlocked(
+    address indexed lendingPool,
+    address indexed protectionPool,
+    uint256 amount
+  );
 
   /**
    * @notice register a protection pool
@@ -48,4 +61,16 @@ abstract contract IDefaultStateManager {
    * @notice assess state of specified registered pool and initiate state changes & related actions as needed.
    */
   function assessState(IPool _pool) external virtual;
+
+  /**
+   * @notice Return the total claimable amount from all locked capital instances in a given protection pool for a seller address.
+   * @param _protectionPool protection pool
+   * @param _seller seller address
+   * @return _claimableUnlockedCapital the unlocked capital that seller can claim from the protection pool.
+   */
+  function getClaimableUnlockedCapital(IPool _protectionPool, address _seller)
+    public
+    view
+    virtual
+    returns (uint256 _claimableUnlockedCapital);
 }

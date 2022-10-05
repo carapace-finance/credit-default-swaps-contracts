@@ -8,7 +8,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.
 import {Counters} from "@openzeppelin/contracts/utils/Counters.sol";
 import {SToken} from "./SToken.sol";
 import {IPremiumCalculator} from "../../interfaces/IPremiumCalculator.sol";
-import {IReferenceLendingPools, LendingPoolStatus} from "../../interfaces/IReferenceLendingPools.sol";
+import {IReferenceLendingPools, LendingPoolStatus, ProtectionPurchaseParams} from "../../interfaces/IReferenceLendingPools.sol";
 import {IPoolCycleManager} from "../../interfaces/IPoolCycleManager.sol";
 import {IPool} from "../../interfaces/IPool.sol";
 import "../../libraries/AccruedPremiumCalculator.sol";
@@ -153,8 +153,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /// @inheritdoc IPool
   function buyProtection(
-    IReferenceLendingPools.ProtectionPurchaseParams
-      calldata _protectionPurchaseParams
+    ProtectionPurchaseParams calldata _protectionPurchaseParams
   )
     external
     override
@@ -268,6 +267,9 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         lambda: _lambda
       })
     );
+
+    // TODO: we have to track all NFT ids per the lending pool address to be able to calculate
+    // the total locked amount for the lending pool, if pool is late for payment
 
     emit ProtectionBought(
       msg.sender,
@@ -533,15 +535,18 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     emit PremiumAccrued(lastPremiumAccrualTimestamp, totalPremiumAccrued);
   }
 
-  function lockCapital(uint256 _lockedCapitalAmount)
+  function lockCapital(address _lendingPoolAddress)
     external
     override
-    returns (uint256 _snapshotId)
+    returns (uint256 _lockedAmount, uint256 _snapshotId)
   {
     // TODO: add logic to lock capital
     // only from DefaultStateManager
     // update SToken to derive from ERC20Snapshot
     /// step 1: Capture protection pool's current investors by creating a snapshot of the token balance by using ERC20Snapshot in SToken
+    /// step 2: calculate total capital to be locked:
+    /// need to calculate remaining principal amount for each buyer in the lending pool
+    /// for each buyer, lockAmt = min(protectionAmt, remainingPrincipal)
     /// step 2: Update total locked capital in Pool
   }
 

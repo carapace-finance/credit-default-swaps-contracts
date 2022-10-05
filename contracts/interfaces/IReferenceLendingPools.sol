@@ -2,6 +2,7 @@
 
 pragma solidity ^0.8.13;
 
+/// @notice Enum to represent the status of the lending pool
 enum LendingPoolStatus {
   /// @notice This means the lending pool is not added to the basket
   NotSupported,
@@ -11,38 +12,38 @@ enum LendingPoolStatus {
   Defaulted
 }
 
+enum LendingProtocol {
+  GoldfinchV2
+}
+
+/// @notice This struct represents the information of the reference lending pool for which buyers can purchase the protection
+struct ReferenceLendingPoolInfo {
+  /// @notice the protocol of the lending pool
+  LendingProtocol protocol;
+  /// @notice the timestamp at which the lending pool is added to the basket of pools
+  uint256 addedTimestamp;
+  /// @notice the timestamp at which the protection purchase limit expires,
+  /// meaning the protection can NOT be purchased after this timestamp
+  uint256 protectionPurchaseLimitTimestamp;
+}
+
+struct ProtectionPurchaseParams {
+  /// @notice address of the lending pool where the buyer has lent
+  address lendingPoolAddress;
+  /// @notice Id of ERC721 LP token received by the buyer to represent the deposit in the lending pool
+  /// Buyer has to specify `nftTokenId` when underlying protocol provides ERC721 LP token, i.e. Goldfinch
+  uint256 nftLpTokenId;
+  /// @notice the protection amount in underlying tokens
+  uint256 protectionAmount;
+  /// @notice the protection's expiration timestamp in unix epoch seconds
+  uint256 protectionExpirationTimestamp;
+}
+
 /**
  * @notice Interface to represent the basket of the Carapace eligible lending pools
- *         for which the protocol can provide the protection.
+ * for which the protocol can provide the protection.
  */
 abstract contract IReferenceLendingPools {
-  enum LendingProtocol {
-    GoldfinchV2
-  }
-
-  /// @notice This struct represents the information of the reference lending pool for which buyers can purchase the protection
-  struct ReferenceLendingPoolInfo {
-    /// @notice the protocol of the lending pool
-    LendingProtocol protocol;
-    /// @notice the timestamp at which the lending pool is added to the basket of pools
-    uint256 addedTimestamp;
-    /// @notice the timestamp at which the protection purchase limit expires,
-    /// meaning the protection can NOT be purchased after this timestamp
-    uint256 protectionPurchaseLimitTimestamp;
-  }
-
-  struct ProtectionPurchaseParams {
-    /// @notice address of the lending pool where the buyer has lent
-    address lendingPoolAddress;
-    /// @notice Id of ERC721 LP token received by the buyer to represent the deposit in the lending pool
-    ///         Buyer has to specify `nftTokenId` when underlying protocol provides ERC721 LP token, i.e. Goldfinch
-    uint256 nftLpTokenId;
-    /// @notice the protection amount in underlying tokens
-    uint256 protectionAmount;
-    /// @notice the protection's expiration timestamp in unix epoch seconds
-    uint256 protectionExpirationTimestamp;
-  }
-
   /*** events ***/
 
   /// @notice emitted when a new reference lending pool is added to the basket
@@ -55,9 +56,7 @@ abstract contract IReferenceLendingPools {
 
   /** errors */
   error ReferenceLendingPoolsConstructionError(string error);
-  error LendingProtocolNotSupported(
-    IReferenceLendingPools.LendingProtocol protocol
-  );
+  error LendingProtocolNotSupported(LendingProtocol protocol);
   error ReferenceLendingPoolNotSupported(address lendingPoolAddress);
   error ReferenceLendingPoolAlreadyAdded(address lendingPoolAddress);
   error ReferenceLendingPoolIsNotActive(address lendingPoolAddress);
@@ -90,7 +89,7 @@ abstract contract IReferenceLendingPools {
    * @return the status of the lending pool
    */
   function getLendingPoolStatus(address _lendingPoolAddress)
-    external
+    public
     view
     virtual
     returns (LendingPoolStatus);
@@ -125,19 +124,26 @@ abstract contract IReferenceLendingPools {
    * @notice assess & return statuses of all lending pools in this basket
    */
   function assessState()
-    external
+    public
     view
     virtual
-    returns (address[] memory pools, LendingPoolStatus[] memory statues);
+    returns (
+      address[] memory _lendingPools,
+      LendingPoolStatus[] memory _statues
+    );
 
   /**
-   * @notice Returns the capital amount that needs to be locked for the specified lending pool.
+   * @notice Returns the principal amount that is remaining in the specified lending pool
+   * for the specified lender for the specified token id.
+   * If lender does not own the specified token id, then it returns 0.
    * @param _lendingPool address of the lending pool
-   * @return the capital to be locked
+   * @param _lender address of the lender
+   * @param _nftLpTokenId the id of NFT token representing the lending position of the specified lender
+   * @return the remaining principal amount
    */
-  function calculateCapitalToLock(address _lendingPool)
-    external
-    view
-    virtual
-    returns (uint256);
+  function calculateRemainingPrincipal(
+    address _lendingPool,
+    address _lender,
+    uint256 _nftLpTokenId
+  ) public view virtual returns (uint256);
 }
