@@ -9,6 +9,7 @@ import {IPool} from "../interfaces/IPool.sol";
 import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools} from "../interfaces/IReferenceLendingPools.sol";
 import {PoolCycleManager} from "./PoolCycleManager.sol";
+import {DefaultStateManager} from "./DefaultStateManager.sol";
 import {Pool} from "./pool/Pool.sol";
 
 /// @notice PoolFactory creates a new pool and keeps track of them.
@@ -30,15 +31,19 @@ contract PoolFactory is Ownable {
     IPremiumCalculator premiumCalculator
   );
 
-  /*** variables ***/
-  /// @notice reference to the pool cycle manager
-  PoolCycleManager public poolCycleManager;
+  /*** state variables ***/
 
   /// @notice pool id counter
   Counters.Counter public poolIdCounter;
 
   /// @notice a pool id for each pool address
   mapping(uint256 => address) public poolIdToPoolAddress;
+
+  /// @notice reference to the pool cycle manager
+  PoolCycleManager public immutable poolCycleManager;
+
+  /// @notice reference to the default state manager
+  DefaultStateManager public immutable defaultStateManager;
 
   /*** constructor ***/
   /**
@@ -48,6 +53,7 @@ contract PoolFactory is Ownable {
     poolIdCounter.increment();
 
     poolCycleManager = new PoolCycleManager();
+    defaultStateManager = new DefaultStateManager();
   }
 
   /*** state-changing functions ***/
@@ -79,6 +85,7 @@ contract PoolFactory is Ownable {
       }),
       _premiumCalculator,
       poolCycleManager,
+      defaultStateManager,
       _name,
       _symbol
     );
@@ -93,6 +100,9 @@ contract PoolFactory is Ownable {
       _poolParameters.poolCycleParams.openCycleDuration,
       _poolParameters.poolCycleParams.cycleDuration
     );
+
+    /// register newly created pool to the default state manager
+    defaultStateManager.registerPool(pool);
 
     emit PoolCreated(
       _poolId,

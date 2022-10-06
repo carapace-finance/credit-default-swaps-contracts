@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Pausable} from "@openzeppelin/contracts/security/Pausable.sol";
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ERC20Snapshot, ERC20} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Snapshot.sol";
 
 /**
  * @notice Implementation of the interest bearing token for the Carapace protocol.
@@ -11,7 +11,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
  * Yields distribution such as premium and interest from rehypothecation are calculated based on this token.
  * Each protection pool will have a corresponding SToken.
  */
-contract SToken is ERC20, Pausable, Ownable {
+contract SToken is ERC20Snapshot, Pausable, Ownable {
   /*** events ***/
   event STokenCreated(string name, string symbol);
   event Minted(address indexed owner, uint256 amount);

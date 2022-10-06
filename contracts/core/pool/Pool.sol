@@ -11,6 +11,7 @@ import {IPremiumCalculator} from "../../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools, LendingPoolStatus, ProtectionPurchaseParams} from "../../interfaces/IReferenceLendingPools.sol";
 import {IPoolCycleManager} from "../../interfaces/IPoolCycleManager.sol";
 import {IPool} from "../../interfaces/IPool.sol";
+import {IDefaultStateManager} from "../../interfaces/IDefaultStateManager.sol";
 import "../../libraries/AccruedPremiumCalculator.sol";
 import "../../libraries/Constants.sol";
 
@@ -30,12 +31,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /// @notice information about this pool
   PoolInfo public poolInfo;
-
-  /// @notice Reference to the PremiumPricing contract
-  IPremiumCalculator public immutable premiumCalculator;
-
-  /// @notice Reference to the PoolCycleManager contract
-  IPoolCycleManager public immutable poolCycleManager;
 
   /// @notice The total underlying amount of premium from protection buyers accumulated in the pool
   uint256 public totalPremium;
@@ -61,20 +56,30 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /// @notice a buyer account id for each address
   mapping(address => uint256) public ownerAddressToBuyerAccountId;
 
-  // TODO: why do we need this?
   /// @notice The premium amount for each lending pool for each account id
   /// @dev a buyer account id to a lending pool id to the premium amount
   mapping(uint256 => mapping(address => uint256)) public buyerAccounts;
 
-  // TODO: why do we need this?
   /// @notice The total amount of premium for each lending pool
   mapping(address => uint256) public lendingPoolIdToPremiumTotal;
 
   /// @notice The array to track the loan protection info for all protection bought.
   LoanProtectionInfo[] public loanProtectionInfos;
 
+  /// @notice The mapping to track the all loan protection bought for specific lending pool.
+  mapping(address => uint256[]) public lendingPoolToLoanProtectionInfoIndex;
+
   /// @notice The mapping to track pool cycle index at which actual withdrawal will happen to withdrawal details
   mapping(uint256 => WithdrawalCycleDetail) public withdrawalCycleDetails;
+
+  /// @notice Reference to the PremiumPricing contract
+  IPremiumCalculator public immutable premiumCalculator;
+
+  /// @notice Reference to the PoolCycleManager contract
+  IPoolCycleManager public immutable poolCycleManager;
+
+  /// @notice Reference to default state manager contract
+  IDefaultStateManager public immutable defaultStateManager;
 
   /*** modifiers ***/
 
@@ -122,11 +127,18 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     _;
   }
 
+  modifier onlyDefaultStateManager() {
+    if (msg.sender != address(defaultStateManager))
+      revert OnlyDefaultStateManager(msg.sender);
+    _;
+  }
+
   /*** constructor ***/
   /**
    * @param _poolInfo The information about this pool.
    * @param _premiumCalculator an address of a premium calculator contract
    * @param _poolCycleManager an address of a pool cycle manager contract
+   * @param _defaultStateManager an address of a default state manager contract
    * @param _name a name of the sToken
    * @param _symbol a symbol of the sToken
    */
@@ -134,13 +146,17 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     PoolInfo memory _poolInfo,
     IPremiumCalculator _premiumCalculator,
     IPoolCycleManager _poolCycleManager,
+    IDefaultStateManager _defaultStateManager,
     string memory _name,
     string memory _symbol
   ) SToken(_name, _symbol) {
     poolInfo = _poolInfo;
     premiumCalculator = _premiumCalculator;
     poolCycleManager = _poolCycleManager;
+    defaultStateManager = _defaultStateManager;
+
     buyerAccountIdCounter.increment();
+
     emit PoolInitialized(
       _name,
       _symbol,
@@ -258,22 +274,28 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     /// Step 9: Add protection to the pool & emit an event
     loanProtectionInfos.push(
       LoanProtectionInfo({
+        buyer: msg.sender,
         protectionAmount: _protectionPurchaseParams.protectionAmount,
         protectionPremium: _premiumAmount,
         startTimestamp: block.timestamp,
         expirationTimestamp: _protectionPurchaseParams
           .protectionExpirationTimestamp,
         K: _k,
-        lambda: _lambda
+        lambda: _lambda,
+        nftLpTokenId: _protectionPurchaseParams.nftLpTokenId
       })
     );
 
-    // TODO: we have to track all NFT ids per the lending pool address to be able to calculate
-    // the total locked amount for the lending pool, if pool is late for payment
+    /// Track all loan protections for a lending pool to calculate
+    // the total locked amount for the lending pool, when/if pool is late for payment
+    lendingPoolToLoanProtectionInfoIndex[
+      _protectionPurchaseParams.lendingPoolAddress
+    ].push(loanProtectionInfos.length - 1);
 
     emit ProtectionBought(
       msg.sender,
       _protectionPurchaseParams.lendingPoolAddress,
+      _protectionPurchaseParams.protectionAmount,
       _premiumAmount
     );
   }
@@ -535,32 +557,62 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     emit PremiumAccrued(lastPremiumAccrualTimestamp, totalPremiumAccrued);
   }
 
+  /// @inheritdoc IPool
   function lockCapital(address _lendingPoolAddress)
     external
     override
+    onlyDefaultStateManager
     returns (uint256 _lockedAmount, uint256 _snapshotId)
   {
-    // TODO: add logic to lock capital
-    // only from DefaultStateManager
-    // update SToken to derive from ERC20Snapshot
     /// step 1: Capture protection pool's current investors by creating a snapshot of the token balance by using ERC20Snapshot in SToken
+    _snapshotId = _snapshot();
+
     /// step 2: calculate total capital to be locked:
-    /// need to calculate remaining principal amount for each buyer in the lending pool
-    /// for each buyer, lockAmt = min(protectionAmt, remainingPrincipal)
-    /// step 2: Update total locked capital in Pool
+    /// calculate remaining principal amount for each loan protection in the lending pool.
+    /// for each loan protection, lockedAmt = min(protectionAmt, remainingPrincipal)
+    /// total locked amount = sum of lockedAmt for all loan protections
+    uint256[] storage _protectionIndexes = lendingPoolToLoanProtectionInfoIndex[
+      _lendingPoolAddress
+    ];
+    IReferenceLendingPools _referenceLendingPools = poolInfo
+      .referenceLendingPools;
+
+    uint256 length = _protectionIndexes.length;
+    for (uint256 i; i < length; ) {
+      LoanProtectionInfo storage _loanProtectionInfo = loanProtectionInfos[
+        _protectionIndexes[i]
+      ];
+      uint256 _remainingPrincipal = _referenceLendingPools
+        .calculateRemainingPrincipal(
+          _lendingPoolAddress,
+          _loanProtectionInfo.buyer,
+          _loanProtectionInfo.nftLpTokenId
+        );
+      uint256 _protectionAmount = _loanProtectionInfo.protectionAmount;
+      uint256 _lockedAmountPerLoan = _protectionAmount < _remainingPrincipal
+        ? _protectionAmount
+        : _remainingPrincipal;
+      _lockedAmount += _lockedAmountPerLoan;
+
+      unchecked {
+        ++i;
+      }
+    }
+
+    /// step 3: Update total locked & available capital in Pool
+    totalSTokenUnderlying -= _lockedAmount;
   }
 
-  function unlockCapital(uint256 _unlockedAmount) external override {
-    // TODO: add logic to unlock capital
-    // only from DefaultStateManager
-    /// update the total locked capital in Pool
-  }
-
+  /// @inheritdoc IPool
   function claimUnlockedCapital(address _receiver) external override {
-    // TODO: add logic to claim unlocked capital
-    // only from PoolStateManager
     /// Investors can claim their total share of released/unlocked capital across all lending pools
-    /// Pool should transfer the released capital to the receiver
+    uint256 _claimableAmount = defaultStateManager
+      .calculateAndClaimUnlockedCapital(msg.sender);
+
+    if (_claimableAmount > 0) {
+      /// transfer the share of unlocked capital to the receiver
+      poolInfo.underlyingToken.safeTransfer(_receiver, _claimableAmount);
+    }
   }
 
   /** view functions */

@@ -56,6 +56,8 @@ abstract contract IPool {
   }
 
   struct LoanProtectionInfo {
+    /// @notice the address of a protection buyer
+    address buyer;
     /// @notice The amount of protection purchased.
     uint256 protectionAmount;
     /// @notice The amount of premium paid in underlying token
@@ -71,6 +73,9 @@ abstract contract IPool {
     /// @notice Lambda is calculated & captured at the time of loan protection purchase
     /// @notice It is used in accrued premium calculation
     int256 lambda;
+    /// @notice The id of NFT token representing the loan in the lending pool
+    /// This is only relevant for lending protocols which provide NFT token to represent the loan
+    uint256 nftLpTokenId;
   }
 
   /// @notice A struct to store the details of a withdrawal cycle.
@@ -110,6 +115,7 @@ abstract contract IPool {
     uint256 sTokenWithdrawalAmount,
     uint256 sTokenAllowedWithdrawalAmount
   );
+  error OnlyDefaultStateManager(address msgSender);
 
   /*** events ***/
 
@@ -128,8 +134,9 @@ abstract contract IPool {
 
   /// @notice Emitted when a new protection is bought.
   event ProtectionBought(
-    address buyer,
+    address indexed buyer,
     address lendingPoolAddress,
+    uint256 protectionAmount,
     uint256 premium
   );
 
@@ -219,14 +226,12 @@ abstract contract IPool {
    * @notice Calculates and returns leverage ratio scaled to 18 decimals.
    * @notice For example: 0.15 is returned as 0.15 x 10**18 = 15 * 10**16
    */
-  function calculateLeverageRatio() public view virtual returns (uint256);
+  function calculateLeverageRatio() external view virtual returns (uint256);
 
   function lockCapital(address _lendingPoolAddress)
     external
     virtual
     returns (uint256 _lockedAmount, uint256 _snapshotId);
-
-  function unlockCapital(uint256 _unlockedAmount) external virtual;
 
   /**
    * @notice claim the total unlocked capital from a given protection pool for a msg.sender

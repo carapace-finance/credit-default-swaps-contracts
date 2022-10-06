@@ -14,13 +14,13 @@ contract DefaultStateManager is IDefaultStateManager {
   mapping(address => uint256) public poolStateIndex;
 
   /// @inheritdoc IDefaultStateManager
-  function registerPool(IPool _protectionPool) public override {
+  function registerPool(IPool _protectionPool) external override {
     // TODO: only from PoolFactory or Pool
     uint256 newIndex = poolStates.length;
-
     poolStates[newIndex].protectionPool = _protectionPool;
-
     poolStateIndex[address(_protectionPool)] = newIndex;
+
+    _assessState(poolStates[newIndex]);
 
     emit PoolRegistered(address(_protectionPool));
   }
@@ -42,21 +42,57 @@ contract DefaultStateManager is IDefaultStateManager {
   }
 
   /// @inheritdoc IDefaultStateManager
-  function assessState(IPool _pool) external override {
-    _assessState(poolStates[poolStateIndex[address(_pool)]]);
+  function assessState(address _pool) external override {
+    _assessState(poolStates[poolStateIndex[_pool]]);
   }
 
   /// @inheritdoc IDefaultStateManager
-  function getClaimableUnlockedCapital(IPool _protectionPool, address _seller)
-    public
-    view
+  function calculateClaimableUnlockedAmount(
+    address _protectionPool,
+    address _seller
+  ) public view override returns (uint256 _claimableUnlockedCapital) {
+    PoolState storage poolState = poolStates[poolStateIndex[_protectionPool]];
+    if (poolState.updatedTimestamp > 0) {
+      address[] memory _lendingPools = poolState
+        .protectionPool
+        .getPoolInfo()
+        .referenceLendingPools
+        .getLendingPools();
+
+      /// go through locked capital instances for all lending pools in a given protection pool
+      /// and calculate the claimable amount for the seller
+      uint256 _length = _lendingPools.length;
+      for (uint256 _lendingPoolIndex; _lendingPoolIndex < _length; ) {
+        address _lendingPool = _lendingPools[_lendingPoolIndex];
+        (uint256 _unlockedCapitalPerLendingPool, ) = _calculateClaimableAmount(
+          poolState,
+          _lendingPool,
+          _seller
+        );
+        _claimableUnlockedCapital += _unlockedCapitalPerLendingPool;
+
+        unchecked {
+          ++_lendingPoolIndex;
+        }
+      }
+    }
+  }
+
+  /// @inheritdoc IDefaultStateManager
+  function calculateAndClaimUnlockedCapital(address _seller)
+    external
     override
-    returns (uint256 _claimableUnlockedCapital)
+    returns (uint256 _claimedUnlockedCapital)
   {
-    PoolState storage poolState = poolStates[
-      poolStateIndex[address(_protectionPool)]
-    ];
-    address[] memory _lendingPools = _protectionPool
+    PoolState storage poolState = poolStates[poolStateIndex[msg.sender]];
+    if (poolState.updatedTimestamp > 0) {
+      revert PoolNotRegistered(
+        "Only registered pools can claim unlocked capital"
+      );
+    }
+
+    address[] memory _lendingPools = poolState
+      .protectionPool
       .getPoolInfo()
       .referenceLendingPools
       .getLendingPools();
@@ -65,14 +101,15 @@ contract DefaultStateManager is IDefaultStateManager {
     /// and calculate the claimable amount for the seller
     uint256 _length = _lendingPools.length;
     for (uint256 _lendingPoolIndex; _lendingPoolIndex < _length; ) {
-      LockedCapital storage lockedCapital = poolState.lockedCapitals[
-        _lendingPools[_lendingPoolIndex]
-      ];
-      _claimableUnlockedCapital += _getClaimableAmount(
-        address(_protectionPool),
-        lockedCapital,
-        _seller
-      );
+      address _lendingPool = _lendingPools[_lendingPoolIndex];
+      (
+        uint256 _unlockedCapitalPerLendingPool,
+        uint256 _snapshotId
+      ) = _calculateClaimableAmount(poolState, _lendingPool, _seller);
+      _claimedUnlockedCapital += _unlockedCapitalPerLendingPool;
+
+      /// update the last claimed snapshot id for the seller
+      poolState.lastClaimedSnapshotIds[_lendingPool][_seller] = _snapshotId;
 
       unchecked {
         ++_lendingPoolIndex;
@@ -174,10 +211,7 @@ contract DefaultStateManager is IDefaultStateManager {
     poolState.lendingPoolStatuses[_lendingPool] = LendingPoolStatus.Active;
 
     /// step 2: release the locked capital
-    uint256 _unlockedAmount = _unlock(poolState, _lendingPool);
-
-    /// step 2: unlock the capital in the protection pool
-    poolState.protectionPool.unlockCapital(_unlockedAmount);
+    _unlock(poolState, _lendingPool);
 
     // TODO: can we transfer unlocked capital to all users who have locked capital in this pool?
     // If we can do this, then we can delete the locked capital instance from mapping
@@ -231,42 +265,53 @@ contract DefaultStateManager is IDefaultStateManager {
   /**
    * @dev Release the locked capital, so investors can claim their share of the capital
    */
-  function _unlock(PoolState storage poolState, address _lendingPool)
-    internal
-    returns (uint256 _unlockedAmount)
-  {
+  function _unlock(PoolState storage poolState, address _lendingPool) internal {
     LockedCapital storage lockedCapital = poolState.lockedCapitals[
       _lendingPool
     ];
     lockedCapital.locked = false;
-    _unlockedAmount = lockedCapital.amount;
 
     emit LendingPoolUnlocked(
       _lendingPool,
       address(poolState.protectionPool),
-      _unlockedAmount
+      lockedCapital.amount
     );
   }
 
   /// Calculates the claimable amount for specified locked capital instance for the given seller address.
   /// locked capital can be only claimed when it is released,
   /// so 0 is returned if it is not released yet
-  function _getClaimableAmount(
-    address _protectionPool,
-    LockedCapital storage lockedCapital,
+  function _calculateClaimableAmount(
+    PoolState storage poolState,
+    address _lendingPool,
     address _seller
-  ) internal view returns (uint256) {
+  )
+    internal
+    view
+    returns (uint256 _claimableUnlockedCapital, uint256 _snapshotId)
+  {
+    LockedCapital storage lockedCapital = poolState.lockedCapitals[
+      _lendingPool
+    ];
     if (lockedCapital.locked) {
-      return 0;
+      return (0, 0);
     }
 
-    /// gas optimization
-    ERC20Snapshot _poolToken = ERC20Snapshot(_protectionPool);
-    uint256 _snapshotId = lockedCapital.snapshotId;
+    /// Verify that the seller does not claim the same snapshot twice
+    uint256 _lastClaimedSnapshotId = poolState.lastClaimedSnapshotIds[
+      _lendingPool
+    ][_seller];
 
-    /// calculate the claimable amount for the given seller address using the snapshot balance of the seller
-    return
-      (_poolToken.balanceOfAt(_seller, _snapshotId) * lockedCapital.amount) /
-      _poolToken.totalSupplyAt(_snapshotId);
+    _snapshotId = lockedCapital.snapshotId;
+    if (_snapshotId > _lastClaimedSnapshotId) {
+      ERC20Snapshot _poolToken = ERC20Snapshot(
+        address(poolState.protectionPool)
+      );
+
+      /// calculate the claimable amount for the given seller address using the snapshot balance of the seller
+      _claimableUnlockedCapital =
+        (_poolToken.balanceOfAt(_seller, _snapshotId) * lockedCapital.amount) /
+        _poolToken.totalSupplyAt(_snapshotId);
+    }
   }
 }
