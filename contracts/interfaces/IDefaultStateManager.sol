@@ -13,23 +13,26 @@ struct LockedCapital {
 }
 
 struct PoolState {
+  /// @notice the protection pool for which state is being tracked
   IPool protectionPool;
+  /// @notice the timestamp at which the last time pool state was updated
   uint256 updatedTimestamp;
-  /// lending pool to its status (Active, Expired, Late, Defaulted)
+  /// @notice the mapping to track all lending pools referenced by the protection pool to its current status (Active, Expired, Late, Defaulted)
+  /// @dev this is used to track state transitions: active -> late, late -> active, late -> defaulted
   mapping(address => LendingPoolStatus) lendingPoolStatuses;
-  // TODO: we still need an array as some users may not have claimed their locked capital and another state change(active -> late) may occur
+  /// We need an array as some users may not have claimed their locked capital and another state change(active -> late) may occur.
   /// For each lending pool, every active -> late state change creates a new instance of the locked capital.
   /// Last item in the array represents the latest state change.
-  /// So the locked capital is released from last item when the lending pool is moved from late -> active state,
+  /// The locked capital is released/unlocked from last item when the lending pool is moved from late -> active state,
   /// or locked capital is moved to default payout when the lending pool is moved from late -> defaulted state.
   /// @notice lock capital instances by a lending pool
-  mapping(address => LockedCapital) lockedCapitals;
-  /// @notice the mapping of lending pool to seller's last claimed snapshot id
+  mapping(address => LockedCapital[]) lockedCapitals;
+  /// @notice the mapping to track seller's last claimed snapshot id for each lending pool
   mapping(address => mapping(address => uint256)) lastClaimedSnapshotIds;
 }
 
 /**
- * @notice Contract to track/manage default related state changes of various pools.
+ * @notice Contract to track/manage state transitions of all pools within the protocol.
  * @author Carapace Finance
  */
 abstract contract IDefaultStateManager {
@@ -50,7 +53,9 @@ abstract contract IDefaultStateManager {
   );
 
   /** errors */
+  error NotPoolFactory(address msgSender);
   error PoolNotRegistered(string error);
+  error PoolAlreadyRegistered(address pool);
 
   /**
    * @notice register a protection pool
@@ -69,6 +74,17 @@ abstract contract IDefaultStateManager {
 
   /**
    * @notice Return the total claimable amount from all locked capital instances in a given protection pool for a seller address.
+   * This function must be called by the pool contract.
+   * @param _seller seller address
+   * @return _claimedUnlockedCapital the unlocked capital that seller can claim from the protection pool.
+   */
+  function calculateAndClaimUnlockedCapital(address _seller)
+    external
+    virtual
+    returns (uint256 _claimedUnlockedCapital);
+
+  /**
+   * @notice Return the total claimable amount from all locked capital instances in a given protection pool for a seller address.
    * @param _protectionPool protection pool
    * @param _seller seller address
    * @return _claimableUnlockedCapital the unlocked capital that seller can claim from the protection pool.
@@ -77,10 +93,4 @@ abstract contract IDefaultStateManager {
     address _protectionPool,
     address _seller
   ) external view virtual returns (uint256 _claimableUnlockedCapital);
-
-  /// only callable by registered pools
-  function calculateAndClaimUnlockedCapital(address _seller)
-    external
-    virtual
-    returns (uint256 _claimedUnlockedCapital);
 }

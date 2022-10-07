@@ -10,7 +10,7 @@ import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
  */
 contract PoolCycleManager is IPoolCycleManager {
   /*** state variables ***/
-  address public poolFactoryAddress;
+  address public immutable poolFactoryAddress;
 
   /// @notice tracks the current cycle of all pools in the system.
   mapping(uint256 => PoolCycle) public poolCycles;
