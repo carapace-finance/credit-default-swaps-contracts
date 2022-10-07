@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
@@ -12,6 +11,7 @@ import {IReferenceLendingPools, LendingPoolStatus, ProtectionPurchaseParams} fro
 import {IPoolCycleManager} from "../../interfaces/IPoolCycleManager.sol";
 import {IPool} from "../../interfaces/IPool.sol";
 import {IDefaultStateManager} from "../../interfaces/IDefaultStateManager.sol";
+
 import "../../libraries/AccruedPremiumCalculator.sol";
 import "../../libraries/Constants.sol";
 
@@ -30,7 +30,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /*** state variables ***/
 
   /// @notice information about this pool
-  PoolInfo public poolInfo;
+  PoolInfo private poolInfo;
 
   /// @notice The total underlying amount of premium from protection buyers accumulated in the pool
   uint256 public totalPremium;
@@ -64,45 +64,59 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   mapping(address => uint256) public lendingPoolIdToPremiumTotal;
 
   /// @notice The array to track the loan protection info for all protection bought.
-  LoanProtectionInfo[] public loanProtectionInfos;
+  LoanProtectionInfo[] private loanProtectionInfos;
 
   /// @notice The mapping to track the all loan protection bought for specific lending pool.
-  mapping(address => uint256[]) public lendingPoolToLoanProtectionInfoIndex;
+  mapping(address => uint256[]) private lendingPoolToLoanProtectionInfoIndex;
 
   /// @notice The mapping to track pool cycle index at which actual withdrawal will happen to withdrawal details
   mapping(uint256 => WithdrawalCycleDetail) public withdrawalCycleDetails;
 
   /// @notice Reference to the PremiumPricing contract
-  IPremiumCalculator public immutable premiumCalculator;
+  IPremiumCalculator private immutable premiumCalculator;
 
   /// @notice Reference to the PoolCycleManager contract
-  IPoolCycleManager public immutable poolCycleManager;
+  IPoolCycleManager private immutable poolCycleManager;
 
   /// @notice Reference to default state manager contract
-  IDefaultStateManager public immutable defaultStateManager;
+  IDefaultStateManager private immutable defaultStateManager;
 
   /*** modifiers ***/
 
   /**
-   * @notice Verifies that the status of the lending pool is ACTIVE,
+   * @notice Verifies that the status of the lending pool is ACTIVE and protection can be bought,
    *         otherwise reverts with the appropriate error message.
-   * @param _lendingPoolAddress The address of the underlying lending pool.
+   * @param _protectionPurchaseParams The protection purchase params such as lending pool address, protection amount, duration etc
    */
-  modifier whenLendingPoolIsActive(address _lendingPoolAddress) {
+  modifier canBuyProtection(
+    ProtectionPurchaseParams calldata _protectionPurchaseParams
+  ) {
     LendingPoolStatus poolStatus = poolInfo
       .referenceLendingPools
-      .getLendingPoolStatus(_lendingPoolAddress);
+      .getLendingPoolStatus(_protectionPurchaseParams.lendingPoolAddress);
 
     if (poolStatus == LendingPoolStatus.NotSupported) {
-      revert LendingPoolNotSupported(_lendingPoolAddress);
+      revert LendingPoolNotSupported(
+        _protectionPurchaseParams.lendingPoolAddress
+      );
     }
 
     if (poolStatus == LendingPoolStatus.Expired) {
-      revert LendingPoolExpired(_lendingPoolAddress);
+      revert LendingPoolExpired(_protectionPurchaseParams.lendingPoolAddress);
     }
 
     if (poolStatus == LendingPoolStatus.Defaulted) {
-      revert LendingPoolDefaulted(_lendingPoolAddress);
+      revert LendingPoolDefaulted(_protectionPurchaseParams.lendingPoolAddress);
+    }
+
+    /// Verify that buyer can buy the protection
+    if (
+      !poolInfo.referenceLendingPools.canBuyProtection(
+        msg.sender,
+        _protectionPurchaseParams
+      )
+    ) {
+      revert ProtectionPurchaseNotAllowed(_protectionPurchaseParams);
     }
 
     _;
@@ -174,19 +188,10 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     external
     override
     whenNotPaused
-    whenLendingPoolIsActive(_protectionPurchaseParams.lendingPoolAddress)
+    canBuyProtection(_protectionPurchaseParams)
     nonReentrant
   {
-    /// Step 1: Verify that buyer can buy the protection
-    if (
-      !poolInfo.referenceLendingPools.canBuyProtection(
-        msg.sender,
-        _protectionPurchaseParams
-      )
-    ) {
-      revert ProtectionPurchaseNotAllowed(_protectionPurchaseParams);
-    }
-
+    /// Step 1: Create a buyer account if not exists
     if (_noBuyerAccountExist() == true) {
       _createBuyerAccount();
     }

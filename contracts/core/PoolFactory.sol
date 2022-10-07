@@ -40,10 +40,10 @@ contract PoolFactory is Ownable {
   mapping(uint256 => address) public poolIdToPoolAddress;
 
   /// @notice reference to the pool cycle manager
-  PoolCycleManager public immutable poolCycleManager;
+  PoolCycleManager private immutable poolCycleManager;
 
   /// @notice reference to the default state manager
-  DefaultStateManager public immutable defaultStateManager;
+  DefaultStateManager private immutable defaultStateManager;
 
   /*** constructor ***/
   /**
@@ -68,13 +68,13 @@ contract PoolFactory is Ownable {
    */
   function createPool(
     bytes32 _salt,
-    IPool.PoolParams memory _poolParameters,
+    IPool.PoolParams calldata _poolParameters,
     IERC20Metadata _underlyingToken,
     IReferenceLendingPools _referenceLendingPools,
     IPremiumCalculator _premiumCalculator,
-    string memory _name,
-    string memory _symbol
-  ) public onlyOwner returns (address) {
+    string calldata _name,
+    string calldata _symbol
+  ) external onlyOwner returns (address) {
     uint256 _poolId = poolIdCounter.current();
     Pool pool = new Pool{salt: _salt}(
       IPool.PoolInfo({
