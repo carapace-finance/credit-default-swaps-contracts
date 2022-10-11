@@ -2,12 +2,13 @@ import { expect } from "chai";
 import { parseEther } from "ethers/lib/utils";
 
 import { GoldfinchV2Adapter } from "../../typechain-types/contracts/adapters/GoldfinchV2Adapter";
-import {
-  IReferenceLendingPools,
-  ProtectionPurchaseParamsStruct
-} from "../../typechain-types/contracts/interfaces/IReferenceLendingPools";
+import { ProtectionPurchaseParamsStruct } from "../../typechain-types/contracts/interfaces/IReferenceLendingPools";
 import { parseUSDC } from "../utils/usdc";
-import { ISeniorPool } from "../../typechain-types/contracts/external/goldfinch/ISeniorPool";
+import { ITranchedPool } from "../../typechain-types/contracts/external/goldfinch/ITranchedPool";
+import { ethers } from "hardhat";
+import { BigNumber } from "@ethersproject/bignumber";
+import { getLatestBlockTimestamp } from "../utils/time";
+import { toBytes32, setStorageAt, getStorageAt } from "../utils/storage";
 
 const GOLDFINCH_ALMAVEST_BASKET_6_ADDRESS =
   "0x418749e294cabce5a714efccc22a8aade6f9db57";
@@ -24,11 +25,6 @@ const testGoldfinchV2Adapter: Function = (
         expect(await goldfinchV2Adapter.goldfinchConfig()).to.equal(
           await goldfinchV2Adapter.GOLDFINCH_CONFIG_ADDRESS()
         );
-
-        // const seniorPool = (await ethers.getContractAt(
-        //   "ISeniorPool",
-        //   "0x8481a6EbAf5c7DABc3F7e09e44A89531fd31F822"
-        // )) as ISeniorPool;
       });
     });
 
@@ -47,9 +43,28 @@ const testGoldfinchV2Adapter: Function = (
       });
     });
 
+    describe("isLendingPoolLate", () => {
+      it("...should return false for a pool current payment", async () => {
+        expect(
+          await goldfinchV2Adapter.isLendingPoolLate(
+            GOLDFINCH_ALMAVEST_BASKET_6_ADDRESS
+          )
+        ).to.be.false;
+      });
+
+      it("...should return true for a pool with late payment", async () => {
+        // see: https://app.goldfinch.finance/pools/0x00c27fc71b159a346e179b4a1608a0865e8a7470
+        expect(
+          await goldfinchV2Adapter.isLendingPoolLate(
+            "0x00c27fc71b159a346e179b4a1608a0865e8a7470"
+          )
+        ).to.be.true;
+      });
+    });
+
     describe("isLendingPoolExpired", () => {
       it("...should return true for a pool with balance = 0", async () => {
-        // se: https://app.goldfinch.finance/pools/0xf74ea34ac88862b7ff419e60e476be2651433e68
+        // see: https://app.goldfinch.finance/pools/0xf74ea34ac88862b7ff419e60e476be2651433e68
         expect(
           await goldfinchV2Adapter.isLendingPoolExpired(
             "0xf74ea34ac88862b7ff419e60e476be2651433e68"
@@ -57,9 +72,36 @@ const testGoldfinchV2Adapter: Function = (
         ).to.be.true;
       });
 
-      // Could not find a pool with term ended
-      xit("...should return true for a pool with term ended", async () => {
-        expect(await goldfinchV2Adapter.isLendingPoolExpired("")).to.be.true;
+      it("...should return true for a pool with term ended", async () => {
+        /// slot 460 represents the termEnd
+        // pool: 0xc9bdd0d3b80cc6efe79a82d850f44ec9b55387ae;
+        // creditline: https://etherscan.io/address/0x7666dE84357dB649D973232834d6456AF3fA61BC#readContract
+        const termEndSlot = 460;
+        const lendingPool = "0xc9bdd0d3b80cc6efe79a82d850f44ec9b55387ae";
+        const tranchedPool = (await ethers.getContractAt(
+          "ITranchedPool",
+          lendingPool
+        )) as ITranchedPool;
+        const creditLine = await tranchedPool.creditLine();
+
+        expect(creditLine).to.equal(
+          "0x7666dE84357dB649D973232834d6456AF3fA61BC"
+        );
+        expect(await getStorageAt(creditLine, termEndSlot)).to.eq(
+          "0x00000000000000000000000000000000000000000000000000000000673127ab"
+        );
+
+        const termEndInPast = (await getLatestBlockTimestamp()) - 2;
+        await setStorageAt(
+          creditLine,
+          termEndSlot,
+          toBytes32(BigNumber.from(termEndInPast)).toString()
+        );
+        expect(await getStorageAt(creditLine, termEndSlot)).to.eq(
+          "0x00000000000000000000000000000000000000000000000000000000632e2b5f"
+        );
+        expect(await goldfinchV2Adapter.isLendingPoolExpired(lendingPool)).to.be
+          .true;
       });
     });
 
@@ -144,6 +186,29 @@ const testGoldfinchV2Adapter: Function = (
             _purchaseParams
           )
         ).to.be.false;
+      });
+    });
+
+    describe("calculateRemainingPrincipal", () => {
+      it("...should return the correct remaining principal", async () => {
+        // token info: pool,                           tranche, principal,    principalRedeemed, interestRedeemed
+        // 0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf, 2,       420000000000, 223154992,         35191845008
+        expect(
+          await goldfinchV2Adapter.calculateRemainingPrincipal(
+            "0x008c84421da5527f462886cec43d2717b686a7e4",
+            590
+          )
+        ).to.eq(parseUSDC("419776.845008"));
+      });
+
+      it("...should return the 0 remaining principal for non-owner", async () => {
+        // lender doesn't own the NFT
+        expect(
+          await goldfinchV2Adapter.calculateRemainingPrincipal(
+            "0x008c84421da5527f462886cec43d2717b686a7e4",
+            591
+          )
+        ).to.eq(0);
       });
     });
   });

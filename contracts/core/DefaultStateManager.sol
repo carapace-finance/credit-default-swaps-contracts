@@ -204,7 +204,7 @@ contract DefaultStateManager is IDefaultStateManager {
         _previousStatus == LendingPoolStatus.Late &&
         _currentStatus == LendingPoolStatus.Defaulted
       ) {
-        _moveFromLockedToDefaultedState(poolState, _lendingPool);
+        // _moveFromLockedToDefaultedState(poolState, _lendingPool);
       }
 
       unchecked {
@@ -254,49 +254,50 @@ contract DefaultStateManager is IDefaultStateManager {
     _unlock(poolState, _lendingPool);
   }
 
-  function _moveFromLockedToDefaultedState(
-    PoolState storage poolState,
-    address _lendingPool
-  ) internal {
-    /// calculate the lending pool's remaining capital (unpaid principal)
+  /// TODO: move comments to a issue in linear
+  // function _moveFromLockedToDefaultedState(
+  //   PoolState storage poolState,
+  //   address _lendingPool
+  // ) internal {
+  //   /// calculate the lending pool's remaining capital (unpaid principal)
 
-    /// IPool.updateDefaultPayout(_unpaidPrincipalAmount);
-    {
-      /// update the total default payout capital in Pool
-    }
+  //   /// IPool.updateDefaultPayout(_unpaidPrincipalAmount);
+  //   {
+  //     /// update the total default payout capital in Pool
+  //   }
 
-    /// Step 1: Verify the buyer's protection purchase
-    /// Step 2: Calculate the buyer's claim amount
-    /// Buyer's claimable amount is MIN(protectionAmount, unpaidPrincipalAmount)
-    /// Step 3: Take a pool/sToken snapshot to capture the share of each investor at the time of default
+  //   /// Step 1: Verify the buyer's protection purchase
+  //   /// Step 2: Calculate the buyer's claim amount
+  //   /// Buyer's claimable amount is MIN(protectionAmount, unpaidPrincipalAmount)
+  //   /// Step 3: Take a pool/sToken snapshot to capture the share of each investor at the time of default
 
-    /// There will be 2 Claim payout functions based on buyer's lending position token type:
-    /// for ERC721 & ERC20
+  //   /// There will be 2 Claim payout functions based on buyer's lending position token type:
+  //   /// for ERC721 & ERC20
 
-    /// IPool.claimDefaultPayoutForERC721(nftLpTokenId, _claimAmt)
-    /// Step 4: Create a new Vault contract per NFT or NFTVaultManager to manage all NFTS in one contract?
-    {
-      /// Step 4.1: Create a new Vault instance for NFT
-      /// Step 4.2: Transfer the NFT to the Vault
-      /// Step 4.3: Calculate & capture the buyer's share of fractionalized NFT based on lending principal & claim amounts
-    }
+  //   /// IPool.claimDefaultPayoutForERC721(nftLpTokenId, _claimAmt)
+  //   /// Step 4: Create a new Vault contract per NFT or NFTVaultManager to manage all NFTS in one contract?
+  //   {
+  //     /// Step 4.1: Create a new Vault instance for NFT
+  //     /// Step 4.2: Transfer the NFT to the Vault
+  //     /// Step 4.3: Calculate & capture the buyer's share of fractionalized NFT based on lending principal & claim amounts
+  //   }
 
-    /// Step 4: IPool.claimDefaultPayoutForERC20(_claimAmt)
-    {
-      /// Buyer needs to approve the Pool contract to transfer the ERC20 tokens representing the lending position
-    }
+  //   /// Step 4: IPool.claimDefaultPayoutForERC20(_claimAmt)
+  //   {
+  //     /// Buyer needs to approve the Pool contract to transfer the ERC20 tokens representing the lending position
+  //   }
 
-    /// Step 5: Transfer the buyer's claimable amount to the buyer
-    {
-      /// fund sources in the order of:
-      /// 1. non-accrued premium from the defaulted lending pool
-      /// 2. sTokenTotalUnderlying (total available capital)
-      /// 3. backstop treasury funds
-      /// 4. sell of CARA tokens
-    }
-    /// Step 6: Update the storage to save buyer's claim
-    /// Step 7: Update the total default payout capital in Pool
-  }
+  //   /// Step 5: Transfer the buyer's claimable amount to the buyer
+  //   {
+  //     /// fund sources in the order of:
+  //     /// 1. non-accrued premium from the defaulted lending pool
+  //     /// 2. sTokenTotalUnderlying (total available capital)
+  //     /// 3. backstop treasury funds
+  //     /// 4. sell of CARA tokens
+  //   }
+  //   /// Step 6: Update the storage to save buyer's claim
+  //   /// Step 7: Update the total default payout capital in Pool
+  // }
 
   /**
    * @dev Release the locked capital, so investors can claim their share of the capital
