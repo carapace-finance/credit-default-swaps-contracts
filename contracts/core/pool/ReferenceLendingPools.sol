@@ -50,10 +50,10 @@ contract ReferenceLendingPools is
   /// @inheritdoc IReferenceLendingPools
   function initialize(
     address _owner,
-    address[] memory _lendingPools,
-    LendingProtocol[] memory _lendingPoolProtocols,
-    uint256[] memory _protectionPurchaseLimitsInDays
-  ) public override initializer {
+    address[] calldata _lendingPools,
+    LendingProtocol[] calldata _lendingPoolProtocols,
+    uint256[] calldata _protectionPurchaseLimitsInDays
+  ) external override initializer {
     if (
       _lendingPools.length != _lendingPoolProtocols.length ||
       _lendingPools.length != _protectionPurchaseLimitsInDays.length
@@ -146,9 +146,9 @@ contract ReferenceLendingPools is
   /// @inheritdoc IReferenceLendingPools
   function canBuyProtection(
     address _buyer,
-    ProtectionPurchaseParams memory _purchaseParams
+    ProtectionPurchaseParams calldata _purchaseParams
   )
-    public
+    external
     view
     override
     whenLendingPoolSupported(_purchaseParams.lendingPoolAddress)

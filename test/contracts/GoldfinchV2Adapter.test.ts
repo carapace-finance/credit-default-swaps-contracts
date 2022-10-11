@@ -47,7 +47,7 @@ const testGoldfinchV2Adapter: Function = (
       it("...should return false for a pool current payment", async () => {
         expect(
           await goldfinchV2Adapter.isLendingPoolLate(
-            GOLDFINCH_ALMAVEST_BASKET_6_ADDRESS
+            "0x759f097f3153f5d62ff1c2d82ba78b6350f223e3"
           )
         ).to.be.false;
       });

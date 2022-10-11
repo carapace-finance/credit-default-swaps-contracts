@@ -33,9 +33,9 @@ contract ReferenceLendingPoolsFactory is Ownable {
    * @return _referenceLendingPools the address of the newly created {IReferenceLendingPools} instance
    */
   function createReferenceLendingPools(
-    address[] memory _lendingPools,
-    LendingProtocol[] memory _lendingPoolProtocols,
-    uint256[] memory _protectionPurchaseLimitsInDays
+    address[] calldata _lendingPools,
+    LendingProtocol[] calldata _lendingPoolProtocols,
+    uint256[] calldata _protectionPurchaseLimitsInDays
   ) external onlyOwner returns (IReferenceLendingPools _referenceLendingPools) {
     /// create a clone of the reference lending pools implementation
     /// see https://docs.openzeppelin.com/contracts/4.x/api/proxy#Clones

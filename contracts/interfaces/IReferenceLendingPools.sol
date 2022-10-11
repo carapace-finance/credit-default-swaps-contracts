@@ -73,10 +73,10 @@ abstract contract IReferenceLendingPools {
    */
   function initialize(
     address _owner,
-    address[] memory _lendingPools,
-    LendingProtocol[] memory _lendingPoolProtocols,
-    uint256[] memory _protectionPurchaseLimitsInDays
-  ) public virtual;
+    address[] calldata _lendingPools,
+    LendingProtocol[] calldata _lendingPoolProtocols,
+    uint256[] calldata _protectionPurchaseLimitsInDays
+  ) external virtual;
 
   /**
    * @notice returns all lending pools which are added/available in this basket
@@ -106,8 +106,8 @@ abstract contract IReferenceLendingPools {
    */
   function canBuyProtection(
     address _buyer,
-    ProtectionPurchaseParams memory _purchaseParams
-  ) public view virtual returns (bool);
+    ProtectionPurchaseParams calldata _purchaseParams
+  ) external view virtual returns (bool);
 
   /**
    * @notice Calculates the protection buyer's annual interest rate for the specified underlying lending pool.
