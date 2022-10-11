@@ -25,7 +25,7 @@ const testPoolFactory: Function = (
     before(async () => {
       poolCycleManager = (await ethers.getContractAt(
         "PoolCycleManager",
-        await poolFactory.poolCycleManager()
+        await ethers.provider.getStorageAt(poolFactory.address, 0)
       )) as PoolCycleManager;
     });
     describe("createPool", async () => {

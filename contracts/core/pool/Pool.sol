@@ -28,6 +28,14 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   using SafeERC20 for IERC20Metadata;
 
   /*** state variables ***/
+  /// @notice Reference to the PremiumPricing contract
+  IPremiumCalculator private immutable premiumCalculator;
+
+  /// @notice Reference to the PoolCycleManager contract
+  IPoolCycleManager private immutable poolCycleManager;
+
+  /// @notice Reference to default state manager contract
+  IDefaultStateManager private immutable defaultStateManager;
 
   /// @notice information about this pool
   PoolInfo private poolInfo;
@@ -71,15 +79,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /// @notice The mapping to track pool cycle index at which actual withdrawal will happen to withdrawal details
   mapping(uint256 => WithdrawalCycleDetail) public withdrawalCycleDetails;
-
-  /// @notice Reference to the PremiumPricing contract
-  IPremiumCalculator private immutable premiumCalculator;
-
-  /// @notice Reference to the PoolCycleManager contract
-  IPoolCycleManager private immutable poolCycleManager;
-
-  /// @notice Reference to default state manager contract
-  IDefaultStateManager private immutable defaultStateManager;
 
   /*** modifiers ***/
 

@@ -181,6 +181,7 @@ const deployContracts: Function = async () => {
     const _firstPoolFirstTrancheSalt: string = "0x".concat(
       process.env.FIRST_POOL_SALT
     );
+
     const tx = await poolFactoryInstance.createPool(
       _firstPoolFirstTrancheSalt,
       _poolParams,
@@ -190,13 +191,7 @@ const deployContracts: Function = async () => {
       "sToken11",
       "sT11"
     );
-
-    const receipt: any = await tx.wait();
-    poolInstance = (await ethers.getContractAt(
-      "Pool",
-      receipt.events[4].args.poolAddress
-    )) as Pool;
-    console.log("Pool created at: ", poolInstance.address);
+    poolInstance = await getPoolInstanceFromTx(tx);
   } catch (e) {
     console.log(e);
   }
@@ -222,6 +217,23 @@ async function getReferenceLendingPoolsInstanceFromTx(
   );
 
   return newReferenceLendingPoolsInstance;
+}
+
+async function getPoolInstanceFromTx(tx: any): Promise<Pool> {
+  const receipt: any = await tx.wait();
+
+  const poolCreatedEvent = receipt.events.find(
+    (eventInfo: any) => eventInfo.event === "PoolCreated"
+  );
+
+  const newPoolInstance = (await ethers.getContractAt(
+    "Pool",
+    poolCreatedEvent.args.poolAddress
+  )) as Pool;
+
+  console.log("Pool instance created at: ", newPoolInstance.address);
+
+  return newPoolInstance;
 }
 
 export {

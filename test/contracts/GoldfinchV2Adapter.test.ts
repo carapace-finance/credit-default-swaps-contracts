@@ -2,7 +2,10 @@ import { expect } from "chai";
 import { parseEther } from "ethers/lib/utils";
 
 import { GoldfinchV2Adapter } from "../../typechain-types/contracts/adapters/GoldfinchV2Adapter";
-import { IReferenceLendingPools } from "../../typechain-types/contracts/interfaces/IReferenceLendingPools";
+import {
+  IReferenceLendingPools,
+  ProtectionPurchaseParamsStruct
+} from "../../typechain-types/contracts/interfaces/IReferenceLendingPools";
 import { parseUSDC } from "../utils/usdc";
 import { ISeniorPool } from "../../typechain-types/contracts/external/goldfinch/ISeniorPool";
 
@@ -90,7 +93,7 @@ const testGoldfinchV2Adapter: Function = (
     });
 
     describe("isProtectionAmountValid", () => {
-      let _purchaseParams: IReferenceLendingPools.ProtectionPurchaseParamsStruct;
+      let _purchaseParams: ProtectionPurchaseParamsStruct;
       before("set up", async () => {
         _purchaseParams = {
           lendingPoolAddress: GOLDFINCH_ALMAVEST_BASKET_6_ADDRESS,

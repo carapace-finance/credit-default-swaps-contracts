@@ -33,17 +33,17 @@ contract PoolFactory is Ownable {
 
   /*** state variables ***/
 
-  /// @notice pool id counter
-  Counters.Counter public poolIdCounter;
-
-  /// @notice a pool id for each pool address
-  mapping(uint256 => address) public poolIdToPoolAddress;
-
   /// @notice reference to the pool cycle manager
   PoolCycleManager private immutable poolCycleManager;
 
   /// @notice reference to the default state manager
   DefaultStateManager private immutable defaultStateManager;
+
+  /// @notice pool id counter
+  Counters.Counter public poolIdCounter;
+
+  /// @notice a pool id for each pool address
+  mapping(uint256 => address) public poolIdToPoolAddress;
 
   /*** constructor ***/
   /**

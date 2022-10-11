@@ -80,6 +80,7 @@ describe("start testing", () => {
         account3,
         account4,
         poolInstance,
+        referenceLendingPoolsInstance,
         GOLDFINCH_LENDING_POOLS
       );
     });

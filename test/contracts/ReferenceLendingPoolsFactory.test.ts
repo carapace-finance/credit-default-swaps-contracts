@@ -1,12 +1,7 @@
 import { expect } from "chai";
 import { Signer } from "ethers/lib/ethers";
-import { parseEther } from "ethers/lib/utils";
-import { ethers } from "hardhat";
 import { ZERO_ADDRESS } from "../../test/utils/constants";
-import {
-  IReferenceLendingPools,
-  ReferenceLendingPools
-} from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
+import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { ReferenceLendingPoolsFactory } from "../../typechain-types/contracts/core/ReferenceLendingPoolsFactory";
 import { getDaysInSeconds, getLatestBlockTimestamp } from "../utils/time";
 
@@ -69,8 +64,9 @@ const testReferenceLendingPoolsFactory: Function = (
 
       it("...should create an instance of ReferenceLendingPools successfully", async () => {
         const _purchaseLimitInDays = 30;
-        const tx =
-          await referenceLendingPoolsFactory.createReferenceLendingPools(
+        const tx = await referenceLendingPoolsFactory
+          .connect(deployer)
+          .createReferenceLendingPools(
             [LENDING_POOL_1],
             [0],
             [_purchaseLimitInDays]

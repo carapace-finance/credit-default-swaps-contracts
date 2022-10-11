@@ -44,12 +44,17 @@ contract DefaultStateManager is IDefaultStateManager {
     onlyPoolFactory
   {
     address poolAddress = address(_protectionPool);
-    PoolState storage poolState = poolStates[poolStateIndex[poolAddress]];
-    if (poolState.updatedTimestamp > 0) {
-      revert PoolAlreadyRegistered(poolAddress);
+    uint256 newIndex = poolStates.length;
+
+    /// Only check whether the pool is already registered when the poolStates array is not empty.
+    if (newIndex > 0) {
+      PoolState storage poolState = poolStates[poolStateIndex[poolAddress]];
+      if (poolState.updatedTimestamp > 0) {
+        revert PoolAlreadyRegistered(poolAddress);
+      }
     }
 
-    uint256 newIndex = poolStates.length;
+    poolStates.push();
     poolStates[newIndex].protectionPool = _protectionPool;
     poolStateIndex[poolAddress] = newIndex;
 

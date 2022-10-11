@@ -25,7 +25,7 @@ contract ReferenceLendingPools is
   mapping(address => ReferenceLendingPoolInfo) public referenceLendingPools;
 
   /// @notice an array of all the added/supported lending pools in this basket
-  address[] public lendingPools;
+  address[] private lendingPools;
 
   /// @notice the mapping of the lending pool protocol to the lending protocol adapter
   /// i.e GoldfinchV2 => GoldfinchV2Adapter
@@ -196,6 +196,8 @@ contract ReferenceLendingPools is
     )
   {
     uint256 length = lendingPools.length;
+    _lendingPools = new address[](length);
+    _statues = new LendingPoolStatus[](length);
     for (uint256 i; i < length; ) {
       _lendingPools[i] = lendingPools[i];
       _statues[i] = getLendingPoolStatus(lendingPools[i]);

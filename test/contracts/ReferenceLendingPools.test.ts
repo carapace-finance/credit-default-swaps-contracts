@@ -2,10 +2,8 @@ import { expect } from "chai";
 import { Signer } from "ethers/lib/ethers";
 import { parseEther } from "ethers/lib/utils";
 import { ZERO_ADDRESS } from "../../test/utils/constants";
-import {
-  IReferenceLendingPools,
-  ReferenceLendingPools
-} from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
+import { ProtectionPurchaseParamsStruct } from "../../typechain-types/contracts/interfaces/IReferenceLendingPools";
+import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { ReferenceLendingPoolsFactory } from "../../typechain-types/contracts/core/ReferenceLendingPoolsFactory";
 import {
   getDaysInSeconds,
@@ -224,7 +222,7 @@ const testReferenceLendingPools: Function = (
       });
 
       describe("canBuyProtection", async () => {
-        let _purchaseParams: IReferenceLendingPools.ProtectionPurchaseParamsStruct;
+        let _purchaseParams: ProtectionPurchaseParamsStruct;
         const BUYER1 = "0x12c2cfda0a51fe2a68e443868bcbf3d6f6e2dda2";
         const BUYER2 = "0x10a590f528eff3d5de18c90da6e03a4acdde3a7d";
 

@@ -10,10 +10,8 @@ import {
   USDC_ABI
 } from "../utils/constants";
 import { Pool, IPool } from "../../typechain-types/contracts/core/pool/Pool";
-import {
-  IReferenceLendingPools,
-  ReferenceLendingPools
-} from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
+import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
+import { ProtectionPurchaseParamsStruct } from "../../typechain-types/contracts/interfaces/IReferenceLendingPools";
 import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";
 import {
   PoolCycleManager,
@@ -34,6 +32,7 @@ const testPool: Function = (
   seller: Signer,
   account4: Signer,
   pool: Pool,
+  referenceLendingPools: ReferenceLendingPools,
   goldfinchLendingPools: string[] // these lending pools have been already added to referenceLendingPools instance
 ) => {
   describe("Pool", () => {
@@ -114,7 +113,7 @@ const testPool: Function = (
       buyerAddress = await buyer.getAddress();
       ownerAddress = await owner.getAddress();
       account4Address = await account4.getAddress();
-      poolInfo = await pool.poolInfo();
+      poolInfo = await pool.getPoolInfo();
       USDC = await new Contract(USDC_ADDRESS, USDC_ABI, deployer);
       // Impersonate CIRCLE account and transfer some USDC to test accounts
       circleAccount = await ethers.getImpersonatedSigner(
@@ -128,18 +127,16 @@ const testPool: Function = (
       USDC.connect(circleAccount).transfer(sellerAddress, parseUSDC("20000"));
       USDC.connect(circleAccount).transfer(account4Address, parseUSDC("20000"));
 
-      poolCycleManager = (await ethers.getContractAt(
-        "PoolCycleManager",
-        await pool.poolCycleManager()
-      )) as PoolCycleManager;
       premiumCalculator = (await ethers.getContractAt(
         "PremiumCalculator",
-        await pool.premiumCalculator()
+        await ethers.provider.getStorageAt(pool.address, 0)
       )) as PremiumCalculator;
-      referenceLendingPools = (await ethers.getContractAt(
-        "ReferenceLendingPools",
-        poolInfo.referenceLendingPools
-      )) as ReferenceLendingPools;
+
+      poolCycleManager = (await ethers.getContractAt(
+        "PoolCycleManager",
+        await ethers.provider.getStorageAt(pool.address, 1)
+      )) as PoolCycleManager;
+
       expect(
         (await poolCycleManager.getCurrentPoolCycle(poolInfo.poolId))
           .currentCycleIndex
@@ -205,11 +202,6 @@ const testPool: Function = (
           referenceLendingPools.address
         );
       });
-      it("...set the premium pricing contract address", async () => {
-        const _premiumCalculatorAddress: string =
-          await pool.premiumCalculator();
-        expect(_premiumCalculatorAddress).to.eq(premiumCalculator.address);
-      });
     });
 
     describe("updateFloor", () => {
@@ -236,7 +228,7 @@ const testPool: Function = (
 
     describe("...1st pool cycle", async () => {
       describe("buyProtection", () => {
-        let _purchaseParams: IReferenceLendingPools.ProtectionPurchaseParamsStruct;
+        let _purchaseParams: ProtectionPurchaseParamsStruct;
 
         it("...fails if the lending pool is not supported/added", async () => {
           const buyer = await ethers.getImpersonatedSigner(
