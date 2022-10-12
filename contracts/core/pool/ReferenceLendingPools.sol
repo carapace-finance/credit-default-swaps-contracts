@@ -128,16 +128,16 @@ contract ReferenceLendingPools is
       _lendingPoolAddress
     );
 
-    if (_adapter.isLendingPoolLate(_lendingPoolAddress)) {
-      return LendingPoolStatus.Late;
-    }
-
     if (_adapter.isLendingPoolDefaulted(_lendingPoolAddress)) {
       return LendingPoolStatus.Defaulted;
     }
 
     if (_adapter.isLendingPoolExpired(_lendingPoolAddress)) {
       return LendingPoolStatus.Expired;
+    }
+
+    if (_adapter.isLendingPoolLate(_lendingPoolAddress)) {
+      return LendingPoolStatus.Late;
     }
 
     return LendingPoolStatus.Active;

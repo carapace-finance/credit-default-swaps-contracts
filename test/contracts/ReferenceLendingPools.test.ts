@@ -23,11 +23,12 @@ const testReferenceLendingPools: Function = (
   addedLendingPools: string[]
 ) => {
   describe("ReferenceLendingPools", async () => {
-    let deployerAddress: string;
+    let _deployerAddress: string;
     let _implementationDeployerAddress: string;
+    let _expectedLendingPools: string[];
 
     before(async () => {
-      deployerAddress = await deployer.getAddress();
+      _deployerAddress = await deployer.getAddress();
       _implementationDeployerAddress =
         await implementationDeployer.getAddress();
     });
@@ -43,7 +44,7 @@ const testReferenceLendingPools: Function = (
         it("...should disable initialize after construction", async () => {
           await expect(
             referenceLendingPoolsImplementation.initialize(
-              deployerAddress,
+              _deployerAddress,
               [],
               [],
               []
@@ -77,13 +78,28 @@ const testReferenceLendingPools: Function = (
       describe("initialize", async () => {
         it("...should set the correct owner on construction", async () => {
           const owner: string = await referenceLendingPoolsInstance.owner();
-          expect(owner).to.equal(deployerAddress);
+          expect(owner).to.equal(_deployerAddress);
+
+          _expectedLendingPools =
+            await referenceLendingPoolsInstance.getLendingPools();
+        });
+
+        it("...should have added lending pools in the basket", async () => {
+          expect(_expectedLendingPools.length).to.equal(
+            addedLendingPools.length
+          );
+
+          for (let i = 0; i < _expectedLendingPools.length; i++) {
+            expect(_expectedLendingPools[i].toLowerCase()).to.equal(
+              addedLendingPools[i].toLowerCase()
+            );
+          }
         });
 
         it("...should disable initialize after creation", async () => {
           await expect(
             referenceLendingPoolsInstance.initialize(
-              deployerAddress,
+              _deployerAddress,
               [],
               [],
               []
@@ -130,7 +146,26 @@ const testReferenceLendingPools: Function = (
             )
           )
             .emit(referenceLendingPoolsInstance, "OwnershipTransferred")
-            .withArgs(_implementationDeployerAddress, deployerAddress);
+            .withArgs(_implementationDeployerAddress, _deployerAddress);
+        });
+      });
+
+      describe("assessState before adding a lending pool", async () => {
+        it("...should return 2 pools & statuses", async () => {
+          const lendingPoolsAndStatuses =
+            await referenceLendingPoolsInstance.assessState();
+          const lendingPools: string[] = lendingPoolsAndStatuses[0];
+          const statuses: number[] = lendingPoolsAndStatuses[1];
+
+          expect(lendingPools).to.have.length(2);
+          expect(statuses).to.have.length(2);
+
+          for (let i = 0; i < 2; i++) {
+            expect(lendingPools[i].toLowerCase()).to.be.eq(
+              addedLendingPools[i].toLowerCase()
+            );
+            expect(statuses[i]).to.be.eq(1); // Active
+          }
         });
       });
 
@@ -200,6 +235,26 @@ const testReferenceLendingPools: Function = (
               .connect(deployer)
               .addReferenceLendingPool(LENDING_POOL_3, 0, 10)
           ).to.emit(referenceLendingPoolsInstance, "ReferenceLendingPoolAdded");
+        });
+      });
+
+      describe("assessState after adding a lending pool", async () => {
+        it("...should return 3 pools & statuses", async () => {
+          const lendingPoolsAndStatuses =
+            await referenceLendingPoolsInstance.assessState();
+          const lendingPools: string[] = lendingPoolsAndStatuses[0];
+          const statuses: number[] = lendingPoolsAndStatuses[1];
+          const expectedLendingPools =
+            await referenceLendingPoolsInstance.getLendingPools();
+          expect(lendingPools).to.have.length(expectedLendingPools.length);
+          expect(statuses).to.have.length(expectedLendingPools.length);
+
+          for (let i = 0; i < expectedLendingPools.length; i++) {
+            expect(lendingPools[i].toLowerCase()).to.be.eq(
+              expectedLendingPools[i].toLowerCase()
+            );
+            expect(statuses[i]).to.be.eq(1); // Active
+          }
         });
       });
 
@@ -316,6 +371,31 @@ const testReferenceLendingPools: Function = (
               "0xaa2ccc5547f64c5dffd0a624eb4af2543a67ba65"
             )
           ).to.be.revertedWith("ReferenceLendingPoolNotSupported");
+        });
+      });
+
+      describe("calculateRemainingPrincipal", () => {
+        it("...should return the correct remaining principal", async () => {
+          // token info: pool,                           tranche, principal,    principalRedeemed, interestRedeemed
+          // 0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf, 2,       35000000000,  0,                 2400000000
+          expect(
+            await referenceLendingPoolsInstance.calculateRemainingPrincipal(
+              "0xd09a57127bc40d680be7cb061c2a6629fe71abef",
+              "0xcb726f13479963934e91b6f34b6e87ec69c21bb9",
+              615
+            )
+          ).to.eq(parseUSDC("35000"));
+        });
+
+        it("...should return the 0 remaining principal for non-owner", async () => {
+          // lender doesn't own the NFT
+          expect(
+            await referenceLendingPoolsInstance.calculateRemainingPrincipal(
+              "0xd09a57127bc40d680be7cb061c2a6629fe71abef",
+              "0xcb726f13479963934e91b6f34b6e87ec69c21bb9",
+              590
+            )
+          ).to.eq(0);
         });
       });
     });
