@@ -38,6 +38,7 @@ struct PoolState {
 abstract contract IDefaultStateManager {
   /** events */
   event PoolRegistered(address indexed protectionPool);
+  event PoolStatesAssessed(uint256 timestamp);
 
   event LendingPoolLocked(
     address indexed lendingPool,

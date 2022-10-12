@@ -11,6 +11,7 @@ import {
   moveForwardTime
 } from "../utils/time";
 import { parseUSDC } from "../utils/usdc";
+import { network } from "hardhat";
 
 const LENDING_POOL_3 = "0x89d7c618a4eef3065da8ad684859a547548e6169";
 
@@ -26,11 +27,20 @@ const testReferenceLendingPools: Function = (
     let _deployerAddress: string;
     let _implementationDeployerAddress: string;
     let _expectedLendingPools: string[];
+    let _snapshotId: string;
 
     before(async () => {
       _deployerAddress = await deployer.getAddress();
       _implementationDeployerAddress =
         await implementationDeployer.getAddress();
+      _snapshotId = await network.provider.send("evm_snapshot", []);
+    });
+
+    after(async () => {
+      // Some specs move time forward, revert the state to the snapshot
+      expect(await network.provider.send("evm_revert", [_snapshotId])).to.eq(
+        true
+      );
     });
 
     describe("Implementation", async () => {

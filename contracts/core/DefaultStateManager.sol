@@ -27,9 +27,15 @@ contract DefaultStateManager is IDefaultStateManager {
    */
   constructor() {
     poolFactoryAddress = msg.sender;
+
+    /// create a dummy pool state to reserve index 0.
+    /// this is to ensure that poolStateIndex[pool] is always greater than 0,
+    /// which is used to check if a pool is registered or not.
+    poolStates.push();
   }
 
   /*** modifiers ***/
+
   modifier onlyPoolFactory() {
     if (msg.sender != poolFactoryAddress) {
       revert NotPoolFactory(msg.sender);
@@ -46,12 +52,10 @@ contract DefaultStateManager is IDefaultStateManager {
     address poolAddress = address(_protectionPool);
     uint256 newIndex = poolStates.length;
 
-    /// Only check whether the pool is already registered when the poolStates array is not empty.
-    if (newIndex > 0) {
-      PoolState storage poolState = poolStates[poolStateIndex[poolAddress]];
-      if (poolState.updatedTimestamp > 0) {
-        revert PoolAlreadyRegistered(poolAddress);
-      }
+    /// Check whether the pool is already registered or not
+    PoolState storage poolState = poolStates[poolStateIndex[poolAddress]];
+    if (poolState.updatedTimestamp > 0) {
+      revert PoolAlreadyRegistered(poolAddress);
     }
 
     poolStates.push();
@@ -70,18 +74,27 @@ contract DefaultStateManager is IDefaultStateManager {
     /// 2. don't initialize pool index to 0
     /// 3. uncheck incrementing pool index
     uint256 length = poolStates.length;
-    /// assess the state of all registered protection pools
-    for (uint256 _poolIndex; _poolIndex < length; ) {
+    /// assess the state of all registered protection pools except the dummy pool at index 0
+    for (uint256 _poolIndex = 1; _poolIndex < length; ) {
       _assessState(poolStates[_poolIndex]);
       unchecked {
         ++_poolIndex;
       }
     }
+
+    emit PoolStatesAssessed(block.timestamp);
   }
 
   /// @inheritdoc IDefaultStateManager
   function assessState(address _pool) external override {
-    _assessState(poolStates[poolStateIndex[_pool]]);
+    PoolState storage poolState = poolStates[poolStateIndex[_pool]];
+    if (poolState.updatedTimestamp == 0) {
+      revert PoolNotRegistered(
+        "Pool is not registered in the default state manager"
+      );
+    }
+
+    _assessState(poolState);
   }
 
   /// @inheritdoc IDefaultStateManager
@@ -90,6 +103,8 @@ contract DefaultStateManager is IDefaultStateManager {
     address _seller
   ) public view override returns (uint256 _claimableUnlockedCapital) {
     PoolState storage poolState = poolStates[poolStateIndex[_protectionPool]];
+
+    /// Calculate the claimable amount only when the pool is registered
     if (poolState.updatedTimestamp > 0) {
       address[] memory _lendingPools = poolState
         .protectionPool

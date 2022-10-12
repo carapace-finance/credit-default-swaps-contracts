@@ -3,7 +3,7 @@ import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { parseEther } from "ethers/lib/utils";
 import { expect } from "chai";
 import { Signer } from "ethers";
-import { USDC_ADDRESS } from "../utils/constants";
+import { USDC_ADDRESS, ZERO_ADDRESS } from "../utils/constants";
 import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";
 import { PoolFactory } from "../../typechain-types/contracts/core/PoolFactory";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
@@ -25,13 +25,12 @@ const testPoolFactory: Function = (
     before(async () => {
       poolCycleManager = (await ethers.getContractAt(
         "PoolCycleManager",
-        await ethers.provider.getStorageAt(poolFactory.address, 0)
+        await poolFactory.getPoolCycleManager()
       )) as PoolCycleManager;
     });
+
     describe("createPool", async () => {
-      const _secondPoolFirstTrancheSalt: string = "0x".concat(
-        process.env.SECOND_POOL_SALT
-      );
+      const _secondPoolSalt: string = "0x".concat(process.env.SECOND_POOL_SALT);
       const poolCycleParams: IPool.PoolCycleParamsStruct = {
         openCycleDuration: BigNumber.from(10 * 86400), // 10 days
         cycleDuration: BigNumber.from(30 * 86400) // 30 days
@@ -57,7 +56,7 @@ const testPoolFactory: Function = (
           poolFactory
             .connect(account1)
             .createPool(
-              _secondPoolFirstTrancheSalt,
+              _secondPoolSalt,
               _poolParams,
               USDC_ADDRESS,
               referenceLendingPools.address,
@@ -70,9 +69,7 @@ const testPoolFactory: Function = (
       });
 
       it("...the poolId 0 should be empty", async () => {
-        expect(await poolFactory.poolIdToPoolAddress(0)).to.equal(
-          "0x0000000000000000000000000000000000000000"
-        );
+        expect(await poolFactory.poolIdToPoolAddress(0)).to.equal(ZERO_ADDRESS);
       });
 
       it("...should have correct pool id counter", async () => {
@@ -96,7 +93,7 @@ const testPoolFactory: Function = (
 
         await expect(
           poolFactory.createPool(
-            _secondPoolFirstTrancheSalt,
+            _secondPoolSalt,
             _poolParams,
             USDC_ADDRESS,
             referenceLendingPools.address,

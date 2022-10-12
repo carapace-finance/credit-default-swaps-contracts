@@ -29,6 +29,8 @@ import {
   GOLDFINCH_LENDING_POOLS,
   getReferenceLendingPoolsInstanceFromTx
 } from "../utils/deploy";
+import { ethers } from "hardhat";
+import { PoolCycleManager } from "../typechain-types/contracts/core/PoolCycleManager";
 
 describe("start testing", () => {
   before("deploy contracts", async () => {
@@ -72,25 +74,6 @@ describe("start testing", () => {
       );
     });
 
-    it("run the Pool test", async () => {
-      testPool(
-        deployer,
-        account1,
-        account2,
-        account3,
-        account4,
-        poolInstance,
-        referenceLendingPoolsInstance,
-        GOLDFINCH_LENDING_POOLS
-      );
-    });
-
-    // Run this spec last because it moves time forward a lot and that impacts the pool tests
-    it("run the PoolCycleManager test", async () => {
-      testPoolCycleManager(deployer, account1, poolCycleManagerInstance);
-    });
-
-    // This spec also moves time forward, so keep it last
     it("Run ReferenceLendingPools test", async () => {
       testReferenceLendingPools(
         deployer,
@@ -100,6 +83,29 @@ describe("start testing", () => {
         referenceLendingPoolsFactoryInstance,
         GOLDFINCH_LENDING_POOLS
       );
+    });
+
+    it("run the Pool test", async () => {
+      const poolCycleManager = (await ethers.getContractAt(
+        "PoolCycleManager",
+        await poolFactoryInstance.getPoolCycleManager()
+      )) as PoolCycleManager;
+
+      testPool(
+        deployer,
+        account1,
+        account2,
+        account3,
+        account4,
+        poolInstance,
+        referenceLendingPoolsInstance,
+        poolCycleManager
+      );
+    });
+
+    // Run this spec last because it moves time forward a lot and that impacts the pool tests
+    it("run the PoolCycleManager test", async () => {
+      testPoolCycleManager(deployer, account1, poolCycleManagerInstance);
     });
   });
 });
