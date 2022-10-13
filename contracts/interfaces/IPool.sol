@@ -73,6 +73,7 @@ abstract contract IPool {
     /// @notice Lambda is calculated & captured at the time of loan protection purchase
     /// @notice It is used in accrued premium calculation
     int256 lambda;
+    address lendingPool;
     /// @notice The id of NFT token representing the loan in the lending pool
     /// This is only relevant for lending protocols which provide NFT token to represent the loan
     uint256 nftLpTokenId;

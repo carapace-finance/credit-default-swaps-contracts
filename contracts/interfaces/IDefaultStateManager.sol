@@ -3,7 +3,6 @@
 pragma solidity ^0.8.13;
 
 import {IReferenceLendingPools, LendingPoolStatus} from "./IReferenceLendingPools.sol";
-import {ILendingProtocolAdapter} from "./ILendingProtocolAdapter.sol";
 import {IPool} from "./IPool.sol";
 
 struct LockedCapital {

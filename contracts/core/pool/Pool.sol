@@ -5,6 +5,7 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import {Counters} from "@openzeppelin/contracts/utils/Counters.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {SToken} from "./SToken.sol";
 import {IPremiumCalculator} from "../../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools, LendingPoolStatus, ProtectionPurchaseParams} from "../../interfaces/IReferenceLendingPools.sol";
@@ -26,6 +27,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /// @notice OpenZeppelin library for managing counters.
   using Counters for Counters.Counter;
   using SafeERC20 for IERC20Metadata;
+  using EnumerableSet for EnumerableSet.UintSet;
 
   /*** state variables ***/
   /// @notice Reference to the PremiumPricing contract
@@ -75,7 +77,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   LoanProtectionInfo[] private loanProtectionInfos;
 
   /// @notice The mapping to track the all loan protection bought for specific lending pool.
-  mapping(address => uint256[]) private lendingPoolToLoanProtectionInfoIndex;
+  mapping(address => EnumerableSet.UintSet)
+    private lendingPoolToLoanProtectionInfoIndexSet;
 
   /// @notice The mapping to track pool cycle index at which actual withdrawal will happen to withdrawal details
   mapping(uint256 => WithdrawalCycleDetail) public withdrawalCycleDetails;
@@ -286,15 +289,16 @@ contract Pool is IPool, SToken, ReentrancyGuard {
           .protectionExpirationTimestamp,
         K: _k,
         lambda: _lambda,
+        lendingPool: _protectionPurchaseParams.lendingPoolAddress,
         nftLpTokenId: _protectionPurchaseParams.nftLpTokenId
       })
     );
 
     /// Track all loan protections for a lending pool to calculate
     // the total locked amount for the lending pool, when/if pool is late for payment
-    lendingPoolToLoanProtectionInfoIndex[
+    lendingPoolToLoanProtectionInfoIndexSet[
       _protectionPurchaseParams.lendingPoolAddress
-    ].push(loanProtectionInfos.length - 1);
+    ].add(loanProtectionInfos.length - 1);
 
     emit ProtectionBought(
       msg.sender,
@@ -547,6 +551,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     /// Remove expired protections from the list
     for (uint256 i; i < _removalIndex; i++) {
       uint256 expiredProtectionIndex = _expiredProtections[i];
+      address _lendingPool = loanProtectionInfos[expiredProtectionIndex]
+        .lendingPool;
 
       /// move the last element to the expired protection index
       loanProtectionInfos[expiredProtectionIndex] = loanProtectionInfos[
@@ -555,6 +561,11 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
       /// remove the last element
       loanProtectionInfos.pop();
+
+      /// remove expired protection index from lendingPoolToLoanProtectionInfoIndexSet
+      lendingPoolToLoanProtectionInfoIndexSet[_lendingPool].remove(
+        expiredProtectionIndex
+      );
     }
 
     lastPremiumAccrualTimestamp = block.timestamp;
@@ -575,11 +586,14 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     /// calculate remaining principal amount for each loan protection in the lending pool.
     /// for each loan protection, lockedAmt = min(protectionAmt, remainingPrincipal)
     /// total locked amount = sum of lockedAmt for all loan protections
-    uint256[] storage _protectionIndexes = lendingPoolToLoanProtectionInfoIndex[
-      _lendingPoolAddress
-    ];
+    uint256[]
+      memory _protectionIndexes = lendingPoolToLoanProtectionInfoIndexSet[
+        _lendingPoolAddress
+      ].values();
+
     IReferenceLendingPools _referenceLendingPools = poolInfo
       .referenceLendingPools;
+    console.log("Protection count: %s", loanProtectionInfos.length);
 
     uint256 length = _protectionIndexes.length;
     for (uint256 i; i < length; ) {
@@ -592,10 +606,16 @@ contract Pool is IPool, SToken, ReentrancyGuard {
           _loanProtectionInfo.buyer,
           _loanProtectionInfo.nftLpTokenId
         );
+      console.log(
+        "protectionAmt: %s, remainingPrincipal: %s",
+        _loanProtectionInfo.protectionAmount,
+        _remainingPrincipal
+      );
       uint256 _protectionAmount = _loanProtectionInfo.protectionAmount;
       uint256 _lockedAmountPerLoan = _protectionAmount < _remainingPrincipal
         ? _protectionAmount
         : _remainingPrincipal;
+
       _lockedAmount += _lockedAmountPerLoan;
 
       unchecked {
@@ -604,6 +624,11 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     }
 
     /// step 3: Update total locked & available capital in Pool
+    console.log(
+      "totalSTokenUnderlying: %s, _lockedAmount: %s",
+      totalSTokenUnderlying,
+      _lockedAmount
+    );
     totalSTokenUnderlying -= _lockedAmount;
   }
 
