@@ -6,8 +6,7 @@ import { parseEther } from "ethers/lib/utils";
 import {
   CIRCLE_ACCOUNT_ADDRESS,
   USDC_ADDRESS,
-  USDC_DECIMALS,
-  USDC_ABI
+  USDC_DECIMALS
 } from "../utils/constants";
 import { Pool, IPool } from "../../typechain-types/contracts/core/pool/Pool";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
@@ -19,7 +18,7 @@ import {
   getLatestBlockTimestamp,
   moveForwardTime
 } from "../utils/time";
-import { parseUSDC } from "../utils/usdc";
+import { parseUSDC, getUsdcContract, impersonateCircle } from "../utils/usdc";
 
 const testPool: Function = (
   deployer: Signer,
@@ -45,6 +44,7 @@ const testPool: Function = (
     let USDC: Contract;
     let poolInfo: IPool.PoolInfoStructOutput;
     let before1stDepositSnapshotId: string;
+    let beforePoolCycleTestSnapshotId: string;
     let _protectionBuyer1: Signer;
     let circleAccount: Signer;
     let lendingPoolAddress: string;
@@ -104,11 +104,10 @@ const testPool: Function = (
       ownerAddress = await owner.getAddress();
       account4Address = await account4.getAddress();
       poolInfo = await pool.getPoolInfo();
-      USDC = await new Contract(USDC_ADDRESS, USDC_ABI, deployer);
+      USDC = getUsdcContract(deployer);
+
       // Impersonate CIRCLE account and transfer some USDC to test accounts
-      circleAccount = await ethers.getImpersonatedSigner(
-        CIRCLE_ACCOUNT_ADDRESS
-      );
+      circleAccount = await impersonateCircle();
       USDC.connect(circleAccount).transfer(
         deployerAddress,
         parseUSDC("1000000")
@@ -929,6 +928,11 @@ const testPool: Function = (
 
       describe("...before 1st pool cycle is locked", async () => {
         it("...can create withdrawal requests for next cycle", async () => {
+          beforePoolCycleTestSnapshotId = await network.provider.send(
+            "evm_snapshot",
+            []
+          );
+
           // create withdrawal requests before moving 1st cycle to locked state
           // Seller1: deposit 2000 USDC & request withdrawal of 1000 sTokens
           const _depositAmount1 = parseUSDC("2000");
@@ -1392,6 +1396,15 @@ const testPool: Function = (
           );
         });
       });
+    });
+
+    after(async () => {
+      // Revert the state of the pool before pool cycle tests
+      expect(
+        await network.provider.send("evm_revert", [
+          beforePoolCycleTestSnapshotId
+        ])
+      ).to.be.eq(true);
     });
   });
 };

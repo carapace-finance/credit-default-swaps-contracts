@@ -8,6 +8,7 @@ import { testRiskFactorCalculator } from "./contracts/RiskFactorCalculator.test"
 import { testGoldfinchV2Adapter } from "./contracts/GoldfinchV2Adapter.test";
 import { testReferenceLendingPools } from "./contracts/ReferenceLendingPools.test";
 import { testReferenceLendingPoolsFactory } from "./contracts/ReferenceLendingPoolsFactory.test";
+import { testDefaultStateManager } from "./contracts/DefaultStateManager.test";
 
 import {
   deployer,
@@ -26,8 +27,10 @@ import {
   goldfinchV2AdapterInstance,
   referenceLendingPoolsFactoryInstance,
   referenceLendingPoolsImplementation,
+  defaultStateManagerInstance,
   GOLDFINCH_LENDING_POOLS,
-  getReferenceLendingPoolsInstanceFromTx
+  getReferenceLendingPoolsInstanceFromTx,
+  getPoolInstanceFromTx
 } from "../utils/deploy";
 import { ethers } from "hardhat";
 import { PoolCycleManager } from "../typechain-types/contracts/core/PoolCycleManager";
@@ -100,6 +103,18 @@ describe("start testing", () => {
         poolInstance,
         referenceLendingPoolsInstance,
         poolCycleManager
+      );
+    });
+
+    it("run DefaultStateManager test", async () => {
+      testDefaultStateManager(
+        deployer,
+        account1,
+        account3,
+        defaultStateManagerInstance,
+        poolFactoryInstance,
+        poolInstance,
+        GOLDFINCH_LENDING_POOLS
       );
     });
 

@@ -97,9 +97,6 @@ const testGoldfinchV2Adapter: Function = (
           termEndSlot,
           toBytes32(BigNumber.from(termEndInPast)).toString()
         );
-        expect(await getStorageAt(creditLine, termEndSlot)).to.eq(
-          "0x00000000000000000000000000000000000000000000000000000000632e2b5f"
-        );
         expect(await goldfinchV2Adapter.isLendingPoolExpired(lendingPool)).to.be
           .true;
       });

@@ -11,14 +11,14 @@ import {IDefaultStateManager, PoolState, LockedCapital} from "../interfaces/IDef
 contract DefaultStateManager is IDefaultStateManager {
   /*** state variables ***/
 
-  address public immutable poolFactoryAddress;
+  address private immutable poolFactoryAddress;
 
   /// @notice stores the current state of all pools in the system.
   /// @dev Array is used for enumerating all pools during state assessment.
   PoolState[] public poolStates;
 
   /// @notice tracks an index of PoolState for each pool in poolStates array.
-  mapping(address => uint256) public poolStateIndex;
+  mapping(address => uint256) private poolStateIndex;
 
   /*** constructor ***/
 
@@ -71,8 +71,7 @@ contract DefaultStateManager is IDefaultStateManager {
   function assessStates() external override {
     /// gas optimizations:
     /// 1. capture length in memory & don't read from storage for each iteration
-    /// 2. don't initialize pool index to 0
-    /// 3. uncheck incrementing pool index
+    /// 2. uncheck incrementing pool index
     uint256 length = poolStates.length;
     /// assess the state of all registered protection pools except the dummy pool at index 0
     for (uint256 _poolIndex = 1; _poolIndex < length; ) {
@@ -95,40 +94,6 @@ contract DefaultStateManager is IDefaultStateManager {
     }
 
     _assessState(poolState);
-  }
-
-  /// @inheritdoc IDefaultStateManager
-  function calculateClaimableUnlockedAmount(
-    address _protectionPool,
-    address _seller
-  ) public view override returns (uint256 _claimableUnlockedCapital) {
-    PoolState storage poolState = poolStates[poolStateIndex[_protectionPool]];
-
-    /// Calculate the claimable amount only when the pool is registered
-    if (poolState.updatedTimestamp > 0) {
-      address[] memory _lendingPools = poolState
-        .protectionPool
-        .getPoolInfo()
-        .referenceLendingPools
-        .getLendingPools();
-
-      /// go through locked capital instances for all lending pools in a given protection pool
-      /// and calculate the claimable amount for the seller
-      uint256 _length = _lendingPools.length;
-      for (uint256 _lendingPoolIndex; _lendingPoolIndex < _length; ) {
-        address _lendingPool = _lendingPools[_lendingPoolIndex];
-        (uint256 _unlockedCapitalPerLendingPool, ) = _calculateClaimableAmount(
-          poolState,
-          _lendingPool,
-          _seller
-        );
-        _claimableUnlockedCapital += _unlockedCapitalPerLendingPool;
-
-        unchecked {
-          ++_lendingPoolIndex;
-        }
-      }
-    }
   }
 
   /// @inheritdoc IDefaultStateManager
@@ -170,6 +135,59 @@ contract DefaultStateManager is IDefaultStateManager {
     }
   }
 
+  /** view functions */
+
+  function getPoolStateUpdateTimestamp(address _pool)
+    external
+    view
+    returns (uint256)
+  {
+    return poolStates[poolStateIndex[_pool]].updatedTimestamp;
+  }
+
+  function getLockedCapitals(address _pool, address _lendingPool)
+    external
+    view
+    returns (LockedCapital[] memory _lockedCapitals)
+  {
+    PoolState storage poolState = poolStates[poolStateIndex[_pool]];
+    _lockedCapitals = poolState.lockedCapitals[_lendingPool];
+  }
+
+  /// @inheritdoc IDefaultStateManager
+  function calculateClaimableUnlockedAmount(
+    address _protectionPool,
+    address _seller
+  ) public view override returns (uint256 _claimableUnlockedCapital) {
+    PoolState storage poolState = poolStates[poolStateIndex[_protectionPool]];
+
+    /// Calculate the claimable amount only when the pool is registered
+    if (poolState.updatedTimestamp > 0) {
+      address[] memory _lendingPools = poolState
+        .protectionPool
+        .getPoolInfo()
+        .referenceLendingPools
+        .getLendingPools();
+
+      /// go through locked capital instances for all lending pools in a given protection pool
+      /// and calculate the claimable amount for the seller
+      uint256 _length = _lendingPools.length;
+      for (uint256 _lendingPoolIndex; _lendingPoolIndex < _length; ) {
+        address _lendingPool = _lendingPools[_lendingPoolIndex];
+        (uint256 _unlockedCapitalPerLendingPool, ) = _calculateClaimableAmount(
+          poolState,
+          _lendingPool,
+          _seller
+        );
+        _claimableUnlockedCapital += _unlockedCapitalPerLendingPool;
+
+        unchecked {
+          ++_lendingPoolIndex;
+        }
+      }
+    }
+  }
+
   /** internal functions */
 
   /**
@@ -198,7 +216,12 @@ contract DefaultStateManager is IDefaultStateManager {
       ];
       LendingPoolStatus _currentStatus = _currentStatuses[_lendingPoolIndex];
 
-      /// step 3: Initiate actions for pools when lending pool status changed from Active -> Late
+      /// step 1: update the status of the lending pool in the storage when it changes
+      if (_previousStatus != _currentStatus) {
+        poolState.lendingPoolStatuses[_lendingPool] = _currentStatus;
+      }
+
+      /// step 2: Initiate actions for pools when lending pool status changed from Active -> Late
       if (
         _previousStatus == LendingPoolStatus.Active &&
         _currentStatus == LendingPoolStatus.Late
@@ -206,7 +229,7 @@ contract DefaultStateManager is IDefaultStateManager {
         _moveFromActiveToLockedState(poolState, _lendingPool);
       }
 
-      /// step 4: Initiate actions for pools when lending pool status changed from Late -> Active (current)
+      /// step 3: Initiate actions for pools when lending pool status changed from Late -> Active (current)
       if (
         _previousStatus == LendingPoolStatus.Late &&
         _currentStatus == LendingPoolStatus.Active
@@ -214,7 +237,7 @@ contract DefaultStateManager is IDefaultStateManager {
         _moveFromLockedToActiveState(poolState, _lendingPool);
       }
 
-      /// step 5: Initiate actions for pools when lending pool status changed from Late -> Defaulted
+      /// step 4: Initiate actions for pools when lending pool status changed from Late -> Defaulted
       if (
         _previousStatus == LendingPoolStatus.Late &&
         _currentStatus == LendingPoolStatus.Defaulted
@@ -233,15 +256,13 @@ contract DefaultStateManager is IDefaultStateManager {
     address _lendingPool
   ) internal {
     IPool _protectionPool = poolState.protectionPool;
-    /// step 1: Update the status of the lending pool in the storage
-    poolState.lendingPoolStatuses[_lendingPool] = LendingPoolStatus.Late;
 
-    /// step 2: calculate the capital amount to be locked
+    /// step 1: calculate the capital amount to be locked
     (uint256 _capitalToLock, uint256 _snapshotId) = _protectionPool.lockCapital(
       _lendingPool
     );
 
-    /// step 3: create and store an instance of locked capital
+    /// step 2: create and store an instance of locked capital
     poolState.lockedCapitals[_lendingPool].push(
       LockedCapital({
         snapshotId: _snapshotId,
@@ -262,62 +283,7 @@ contract DefaultStateManager is IDefaultStateManager {
     PoolState storage poolState,
     address _lendingPool
   ) internal {
-    /// step 1: update the status of the lending pool in the storage
-    poolState.lendingPoolStatuses[_lendingPool] = LendingPoolStatus.Active;
-
-    /// step 2: release the locked capital
-    _unlock(poolState, _lendingPool);
-  }
-
-  /// TODO: move comments to a issue in linear
-  // function _moveFromLockedToDefaultedState(
-  //   PoolState storage poolState,
-  //   address _lendingPool
-  // ) internal {
-  //   /// calculate the lending pool's remaining capital (unpaid principal)
-
-  //   /// IPool.updateDefaultPayout(_unpaidPrincipalAmount);
-  //   {
-  //     /// update the total default payout capital in Pool
-  //   }
-
-  //   /// Step 1: Verify the buyer's protection purchase
-  //   /// Step 2: Calculate the buyer's claim amount
-  //   /// Buyer's claimable amount is MIN(protectionAmount, unpaidPrincipalAmount)
-  //   /// Step 3: Take a pool/sToken snapshot to capture the share of each investor at the time of default
-
-  //   /// There will be 2 Claim payout functions based on buyer's lending position token type:
-  //   /// for ERC721 & ERC20
-
-  //   /// IPool.claimDefaultPayoutForERC721(nftLpTokenId, _claimAmt)
-  //   /// Step 4: Create a new Vault contract per NFT or NFTVaultManager to manage all NFTS in one contract?
-  //   {
-  //     /// Step 4.1: Create a new Vault instance for NFT
-  //     /// Step 4.2: Transfer the NFT to the Vault
-  //     /// Step 4.3: Calculate & capture the buyer's share of fractionalized NFT based on lending principal & claim amounts
-  //   }
-
-  //   /// Step 4: IPool.claimDefaultPayoutForERC20(_claimAmt)
-  //   {
-  //     /// Buyer needs to approve the Pool contract to transfer the ERC20 tokens representing the lending position
-  //   }
-
-  //   /// Step 5: Transfer the buyer's claimable amount to the buyer
-  //   {
-  //     /// fund sources in the order of:
-  //     /// 1. non-accrued premium from the defaulted lending pool
-  //     /// 2. sTokenTotalUnderlying (total available capital)
-  //     /// 3. backstop treasury funds
-  //     /// 4. sell of CARA tokens
-  //   }
-  //   /// Step 6: Update the storage to save buyer's claim
-  //   /// Step 7: Update the total default payout capital in Pool
-  // }
-
-  /**
-   * @dev Release the locked capital, so investors can claim their share of the capital
-   */
-  function _unlock(PoolState storage poolState, address _lendingPool) internal {
+    /// Release the locked capital, so investors can claim their share of the capital
     /// The capital is released/unlocked from last locked capital instance.
     /// Because new lock capital instance can not be created until the latest one is active again.
     LockedCapital storage lockedCapital = _getLatestLockedCapital(
@@ -386,6 +352,9 @@ contract DefaultStateManager is IDefaultStateManager {
     }
   }
 
+  /**
+   * @dev Returns the latest locked capital instance for a given lending pool.
+   */
   function _getLatestLockedCapital(
     PoolState storage poolState,
     address _lendingPool

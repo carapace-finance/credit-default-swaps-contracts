@@ -593,7 +593,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
     IReferenceLendingPools _referenceLendingPools = poolInfo
       .referenceLendingPools;
-    console.log("Protection count: %s", loanProtectionInfos.length);
 
     uint256 length = _protectionIndexes.length;
     for (uint256 i; i < length; ) {
@@ -606,11 +605,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
           _loanProtectionInfo.buyer,
           _loanProtectionInfo.nftLpTokenId
         );
-      console.log(
-        "protectionAmt: %s, remainingPrincipal: %s",
-        _loanProtectionInfo.protectionAmount,
-        _remainingPrincipal
-      );
       uint256 _protectionAmount = _loanProtectionInfo.protectionAmount;
       uint256 _lockedAmountPerLoan = _protectionAmount < _remainingPrincipal
         ? _protectionAmount
@@ -624,12 +618,13 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     }
 
     /// step 3: Update total locked & available capital in Pool
-    console.log(
-      "totalSTokenUnderlying: %s, _lockedAmount: %s",
-      totalSTokenUnderlying,
-      _lockedAmount
-    );
-    totalSTokenUnderlying -= _lockedAmount;
+    if (totalSTokenUnderlying < _lockedAmount) {
+      /// TODO: what happens if totalSTokenUnderlying < _lockedAmount?
+      _lockedAmount = totalSTokenUnderlying;
+      totalSTokenUnderlying = 0;
+    } else {
+      totalSTokenUnderlying -= _lockedAmount;
+    }
   }
 
   /// @inheritdoc IPool

@@ -12,6 +12,8 @@ import { AccruedPremiumCalculator } from "../typechain-types/contracts/libraries
 import { RiskFactorCalculator } from "../typechain-types/contracts/libraries/RiskFactorCalculator";
 import { GoldfinchV2Adapter } from "../typechain-types/contracts/adapters/GoldfinchV2Adapter";
 import { ReferenceLendingPoolsFactory } from "../typechain-types/contracts/core/ReferenceLendingPoolsFactory";
+import { DefaultStateManager } from "../typechain-types/contracts/core/DefaultStateManager";
+
 import { parseUSDC } from "../test/utils/usdc";
 
 let deployer: Signer;
@@ -30,6 +32,7 @@ let riskFactorCalculatorInstance: RiskFactorCalculator;
 let goldfinchV2AdapterInstance: GoldfinchV2Adapter;
 let referenceLendingPoolsFactoryInstance: ReferenceLendingPoolsFactory;
 let referenceLendingPoolsImplementation: ReferenceLendingPools;
+let defaultStateManagerInstance: DefaultStateManager;
 
 const GOLDFINCH_LENDING_POOLS = [
   "0xb26b42dd5771689d0a7faeea32825ff9710b9c11",
@@ -160,6 +163,16 @@ const deployContracts: Function = async () => {
     await poolFactoryInstance.deployed();
     console.log("PoolFactory" + " deployed to:", poolFactoryInstance.address);
 
+    // Get DefaultStateManager instance from pool factory
+    defaultStateManagerInstance = (await ethers.getContractAt(
+      "DefaultStateManager",
+      await poolFactoryInstance.getDefaultStateManager()
+    )) as DefaultStateManager;
+    console.log(
+      "DefaultStateManager" + " is deployed at:",
+      defaultStateManagerInstance.address
+    );
+
     const _poolCycleParams: IPool.PoolCycleParamsStruct = {
       openCycleDuration: BigNumber.from(10 * 86400), // 10 days
       cycleDuration: BigNumber.from(30 * 86400) // 30 days
@@ -253,6 +266,8 @@ export {
   goldfinchV2AdapterInstance,
   referenceLendingPoolsImplementation, // implementation contract which is used to create proxy contract
   referenceLendingPoolsFactoryInstance,
+  defaultStateManagerInstance,
   GOLDFINCH_LENDING_POOLS,
-  getReferenceLendingPoolsInstanceFromTx
+  getReferenceLendingPoolsInstanceFromTx,
+  getPoolInstanceFromTx
 };

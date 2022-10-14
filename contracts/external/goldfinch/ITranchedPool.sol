@@ -26,4 +26,6 @@ abstract contract ITranchedPool {
    * This is added to access public variable "juniorFeePercent" from Goldfinch's TranchedPool contract.
    */
   function juniorFeePercent() external view virtual returns (uint256);
+
+  function assess() external virtual;
 }
