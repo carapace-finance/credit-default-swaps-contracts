@@ -230,13 +230,21 @@ abstract contract IPool {
    */
   function calculateLeverageRatio() external view virtual returns (uint256);
 
+  /**
+   * @notice Calculates & locks the required capital for specified lending pool in case late payment turns into default.
+   * This method can only be called by the default state manager.
+   * @param _lendingPoolAddress The address of the lending pool.
+   * @return _lockedAmount The amount of capital locked.
+   * @return _snapshotId The id of SToken snapshot to capture the seller's share of the locked amount.
+   */
   function lockCapital(address _lendingPoolAddress)
     external
     virtual
     returns (uint256 _lockedAmount, uint256 _snapshotId);
 
   /**
-   * @notice claim the total unlocked capital from a given protection pool for a msg.sender
+   * @notice Claims the total unlocked capital from this protection pool for a msg.sender
+   * @param _receiver The address to receive the underlying token amount.
    */
   function claimUnlockedCapital(address _receiver) external virtual;
 }

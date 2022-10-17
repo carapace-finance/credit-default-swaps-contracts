@@ -34,7 +34,7 @@ const testDefaultStateManager: Function = (
 
       usdcContract = getUsdcContract(deployer);
       pool1 = poolInstance.address;
-      pool2 = await poolFactory.poolIdToPoolAddress(2);
+      pool2 = await poolFactory.getPoolAddress(2);
       sellerAddress = await seller.getAddress();
     });
 
@@ -98,15 +98,15 @@ const testDefaultStateManager: Function = (
       });
     });
 
-    describe("assessState", async () => {
+    describe("assessStateBatch", async () => {
       it("...should update state for specified registered pool", async () => {
         const pool1UpdateTimestamp =
           await defaultStateManager.getPoolStateUpdateTimestamp(pool1);
         const pool2UpdateTimestamp =
           await defaultStateManager.getPoolStateUpdateTimestamp(pool2);
 
-        await defaultStateManager.assessState(pool1);
-        await defaultStateManager.assessState(pool2);
+        await defaultStateManager.assessStateBatch([pool1]);
+        await defaultStateManager.assessStateBatch([pool2]);
 
         expect(
           await defaultStateManager.getPoolStateUpdateTimestamp(pool1)
@@ -151,7 +151,9 @@ const testDefaultStateManager: Function = (
         // payment to lending pool
         await payToLendingPool(lendingPool2, "100000", usdcContract);
 
-        await defaultStateManager.assessStates();
+        await expect(defaultStateManager.assessStates())
+          .to.emit(defaultStateManager, "PoolStatesAssessed")
+          .to.emit(defaultStateManager, "LendingPoolUnlocked");
       });
 
       describe("calculateClaimableUnlockedAmount", async () => {
@@ -181,7 +183,7 @@ const testDefaultStateManager: Function = (
           await expect(
             defaultStateManager.calculateAndClaimUnlockedCapital(sellerAddress)
           ).to.be.revertedWith(
-            `PoolNotRegistered("Only registered pools can claim unlocked capital")`
+            `PoolNotRegistered("0x71b09d2eD6Bd3eC16e7a44c2afb1F111878Ea97E")`
           );
         });
       });

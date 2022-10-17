@@ -54,11 +54,12 @@ abstract contract IDefaultStateManager {
 
   /** errors */
   error NotPoolFactory(address msgSender);
-  error PoolNotRegistered(string error);
+  error PoolNotRegistered(address pool);
   error PoolAlreadyRegistered(address pool);
 
   /**
-   * @notice register a protection pool
+   * @notice register a protection pool. Only pool factory can call this function.
+   * @param _protectionPool the protection pool to register
    */
   function registerPool(IPool _protectionPool) external virtual;
 
@@ -68,9 +69,10 @@ abstract contract IDefaultStateManager {
   function assessStates() external virtual;
 
   /**
-   * @notice assess state of specified registered pool and initiate state changes & related actions as needed.
+   * @notice assess state of specified registered pools and initiate state changes & related actions as needed.
+   * @param _pools the protection pools to assess
    */
-  function assessState(address _pool) external virtual;
+  function assessStateBatch(address[] calldata _pools) external virtual;
 
   /**
    * @notice Return the total claimable amount from all locked capital instances in a given protection pool for a seller address.

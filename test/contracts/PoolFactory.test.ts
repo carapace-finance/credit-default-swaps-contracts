@@ -77,12 +77,13 @@ const testPoolFactory: Function = (
       });
 
       it("...the poolId 0 should be empty", async () => {
-        expect(await poolFactory.poolIdToPoolAddress(0)).to.equal(ZERO_ADDRESS);
+        expect(await poolFactory.getPoolAddress(0)).to.equal(ZERO_ADDRESS);
       });
 
       it("...should have correct pool id counter", async () => {
         // 1st pool is already created by deploy script
-        expect(await poolFactory.poolIdCounter()).equal(2);
+        expect(await poolFactory.getPoolAddress(1)).to.not.equal(ZERO_ADDRESS);
+        expect(await poolFactory.getPoolAddress(2)).to.equal(ZERO_ADDRESS);
       });
 
       it("...should have started a new pool cycle for 1st pool created", async () => {
@@ -146,7 +147,8 @@ const testPoolFactory: Function = (
       });
 
       it("...should increment the pool id counter", async () => {
-        expect(await poolFactory.poolIdCounter()).equal(3);
+        expect(await poolFactory.getPoolAddress(2)).to.not.equal(ZERO_ADDRESS);
+        expect(await poolFactory.getPoolAddress(3)).to.equal(ZERO_ADDRESS);
       });
 
       it("...should transfer pool's ownership to poolFactory's owner", async () => {
@@ -155,7 +157,7 @@ const testPoolFactory: Function = (
           .to.emit(poolFactory, "OwnershipTransferred")
           .withArgs(poolFactory.address, deployerAddress);
 
-        const secondPoolAddress: string = await poolFactory.poolIdToPoolAddress(
+        const secondPoolAddress: string = await poolFactory.getPoolAddress(
           _secondPoolId
         );
         const secondPool: Pool = (await ethers.getContractAt(

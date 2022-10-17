@@ -87,15 +87,20 @@ contract DefaultStateManager is IDefaultStateManager {
   }
 
   /// @inheritdoc IDefaultStateManager
-  function assessState(address _pool) external override {
-    PoolState storage poolState = poolStates[poolStateIndex[_pool]];
-    if (poolState.updatedTimestamp == 0) {
-      revert PoolNotRegistered(
-        "Pool is not registered in the default state manager"
-      );
-    }
+  function assessStateBatch(address[] calldata _pools) external override {
+    uint256 length = _pools.length;
+    for (uint256 _poolIndex; _poolIndex < length; ) {
+      PoolState storage poolState = poolStates[
+        poolStateIndex[_pools[_poolIndex]]
+      ];
+      if (poolState.updatedTimestamp > 0) {
+        _assessState(poolState);
+      }
 
-    _assessState(poolState);
+      unchecked {
+        ++_poolIndex;
+      }
+    }
   }
 
   /// @inheritdoc IDefaultStateManager
@@ -106,9 +111,7 @@ contract DefaultStateManager is IDefaultStateManager {
   {
     PoolState storage poolState = poolStates[poolStateIndex[msg.sender]];
     if (poolState.updatedTimestamp == 0) {
-      revert PoolNotRegistered(
-        "Only registered pools can claim unlocked capital"
-      );
+      revert PoolNotRegistered(msg.sender);
     }
 
     address[] memory _lendingPools = poolState
@@ -287,13 +290,15 @@ contract DefaultStateManager is IDefaultStateManager {
     );
   }
 
+  /**
+   * @dev Release the locked capital, so investors can claim their share of the capital
+   * The capital is released/unlocked from last locked capital instance.
+   * Because new lock capital instance can not be created until the latest one is active again.
+   */
   function _moveFromLockedToActiveState(
     PoolState storage poolState,
     address _lendingPool
   ) internal {
-    /// Release the locked capital, so investors can claim their share of the capital
-    /// The capital is released/unlocked from last locked capital instance.
-    /// Because new lock capital instance can not be created until the latest one is active again.
     LockedCapital storage lockedCapital = _getLatestLockedCapital(
       poolState,
       _lendingPool

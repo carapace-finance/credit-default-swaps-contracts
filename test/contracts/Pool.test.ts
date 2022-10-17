@@ -1480,7 +1480,9 @@ const testPool: Function = (
       it("...should have locked capital after missing a payment", async () => {
         // time has moved forward by more than 30 days, so lending pool is late for payment
         // and state should be transitioned to "Late" and capital should be locked
-        await defaultStateManager.assessStates();
+        await expect(defaultStateManager.assessStates())
+          .to.emit(defaultStateManager, "PoolStatesAssessed")
+          .to.emit(defaultStateManager, "LendingPoolLocked");
 
         // verify that lending pool capital is locked
         const _lockedCapital = await getLatestLockedCapital();
@@ -1496,7 +1498,9 @@ const testPool: Function = (
           "1000000",
           getUsdcContract(deployer)
         );
-        await defaultStateManager.assessStates();
+        await expect(defaultStateManager.assessStates())
+          .to.emit(defaultStateManager, "PoolStatesAssessed")
+          .to.emit(defaultStateManager, "LendingPoolUnlocked");
 
         // verify that lending pool capital is unlocked
         const _lockedCapital = await getLatestLockedCapital();

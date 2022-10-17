@@ -5,7 +5,7 @@ import {IReferenceLendingPools, ProtectionPurchaseParams} from "./IReferenceLend
 
 abstract contract ILendingProtocolAdapter {
   /**
-   * @notice Determines whether the lending pool is defaulted or not.
+   * @notice Determines whether the specified lending pool is defaulted or not.
    * @param _lendingPoolAddress the address of the lending pool
    */
   function isLendingPoolDefaulted(address _lendingPoolAddress)
@@ -15,7 +15,7 @@ abstract contract ILendingProtocolAdapter {
     returns (bool);
 
   /**
-   * @notice Determines whether the lending pool's term has ended or balance has been repaid.
+   * @notice Determines whether the specified lending pool's term has ended or balance has been repaid.
    * @param _lendingPoolAddress the address of the lending pool
    */
   function isLendingPoolExpired(address _lendingPoolAddress)
@@ -25,7 +25,7 @@ abstract contract ILendingProtocolAdapter {
     returns (bool);
 
   /**
-   * @notice Determines whether the lending pool is late for payment.
+   * @notice Determines whether the specified lending pool is late for payment.
    * @param _lendingPoolAddress the address of the lending pool
    */
   function isLendingPoolLate(address _lendingPoolAddress)

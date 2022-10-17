@@ -14,7 +14,10 @@ import {PoolCycleManager} from "./PoolCycleManager.sol";
 import {DefaultStateManager} from "./DefaultStateManager.sol";
 import {Pool} from "./pool/Pool.sol";
 
-/// @notice PoolFactory creates a new pool and keeps track of them.
+/**
+ * @notice PoolFactory creates a new pool and keeps track of them.
+ * @author Carapace Finance
+ */
 contract PoolFactory is Ownable {
   /*** libraries ***/
   /// @notice OpenZeppelin library for managing counters.
@@ -23,10 +26,10 @@ contract PoolFactory is Ownable {
   /*** state variables ***/
 
   /// @notice pool id counter
-  Counters.Counter public poolIdCounter;
+  Counters.Counter private poolIdCounter;
 
   /// @notice a pool id for each pool address
-  mapping(uint256 => address) public poolIdToPoolAddress;
+  mapping(uint256 => address) private poolIdToPoolAddress;
 
   /// @notice reference to the pool cycle manager
   IPoolCycleManager private immutable poolCycleManager;
@@ -134,5 +137,12 @@ contract PoolFactory is Ownable {
     returns (IDefaultStateManager)
   {
     return defaultStateManager;
+  }
+
+  /**
+   * @notice Returns the pool address for a given pool id.
+   */
+  function getPoolAddress(uint256 _poolId) external view returns (address) {
+    return poolIdToPoolAddress[_poolId];
   }
 }
