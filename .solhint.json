@@ -10,7 +10,7 @@
       }
     ],
     "private-vars-leading-underscore": [
-      "error",
+      "off",
       {
         "strict": false
       }

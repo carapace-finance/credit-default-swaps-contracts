@@ -4,12 +4,13 @@ import { parseEther } from "ethers/lib/utils";
 import { expect } from "chai";
 import { Signer } from "ethers";
 import { USDC_ADDRESS, ZERO_ADDRESS } from "../utils/constants";
-import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";
-import { PoolFactory } from "../../typechain-types/contracts/core/PoolFactory";
-import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { ethers } from "hardhat";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
 import { IPool, Pool } from "../../typechain-types/contracts/core/pool/Pool";
+import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";
+import { PoolFactory } from "../../typechain-types/contracts/core/PoolFactory";
+import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
+import { DefaultStateManager } from "../../typechain-types/contracts/core/DefaultStateManager";
 import { parseUSDC } from "../utils/usdc";
 import { getLatestBlockTimestamp } from "../utils/time";
 
@@ -22,11 +23,18 @@ const testPoolFactory: Function = (
 ) => {
   describe("PoolFactory", () => {
     let poolCycleManager: PoolCycleManager;
+    let defaultStateManager: DefaultStateManager;
+
     before(async () => {
       poolCycleManager = (await ethers.getContractAt(
         "PoolCycleManager",
         await poolFactory.getPoolCycleManager()
       )) as PoolCycleManager;
+
+      defaultStateManager = (await ethers.getContractAt(
+        "DefaultStateManager",
+        await poolFactory.getDefaultStateManager()
+      )) as DefaultStateManager;
     });
 
     describe("createPool", async () => {
@@ -120,7 +128,8 @@ const testPoolFactory: Function = (
             expectedCycleStartTimestamp,
             poolCycleParams.openCycleDuration,
             poolCycleParams.cycleDuration
-          );
+          )
+          .emit(defaultStateManager, "PoolRegistered");
       });
 
       it("...should start new pool cycle for the second pool", async () => {

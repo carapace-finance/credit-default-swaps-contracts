@@ -8,6 +8,8 @@ import {ILendingProtocolAdapter} from "../interfaces/ILendingProtocolAdapter.sol
 import {IPool} from "../interfaces/IPool.sol";
 import {IDefaultStateManager, PoolState, LockedCapital} from "../interfaces/IDefaultStateManager.sol";
 
+import "hardhat/console.sol";
+
 contract DefaultStateManager is IDefaultStateManager {
   /*** state variables ***/
 
@@ -218,6 +220,12 @@ contract DefaultStateManager is IDefaultStateManager {
 
       /// step 1: update the status of the lending pool in the storage when it changes
       if (_previousStatus != _currentStatus) {
+        console.log(
+          "Lending pool %s status changed from %s to  %s",
+          _lendingPool,
+          uint256(_previousStatus),
+          uint256(_currentStatus)
+        );
         poolState.lendingPoolStatuses[_lendingPool] = _currentStatus;
       }
 
@@ -332,18 +340,37 @@ contract DefaultStateManager is IDefaultStateManager {
     for (uint256 _index = 0; _index < _length; ) {
       LockedCapital storage lockedCapital = lockedCapitals[_index];
       uint256 _snapshotId = lockedCapital.snapshotId;
+
+      console.log(
+        "lockedCapital.locked: %s, amt: %s",
+        lockedCapital.locked,
+        lockedCapital.amount
+      );
+
       if (!lockedCapital.locked && _snapshotId > _lastClaimedSnapshotId) {
         ERC20Snapshot _poolToken = ERC20Snapshot(
           address(poolState.protectionPool)
         );
 
         /// calculate the claimable amount for the given seller address using the snapshot balance of the seller
+        console.log(
+          "balance of seller: %s, total supply: %s at snapshot: %s",
+          _poolToken.balanceOfAt(_seller, _snapshotId),
+          _poolToken.totalSupplyAt(_snapshotId),
+          _snapshotId
+        );
+
         _claimableUnlockedCapital =
           (_poolToken.balanceOfAt(_seller, _snapshotId) *
             lockedCapital.amount) /
           _poolToken.totalSupplyAt(_snapshotId);
 
         _latestClaimedSnapshotId = _snapshotId;
+        console.log(
+          "Claimable amount for seller %s is %s",
+          _seller,
+          _claimableUnlockedCapital
+        );
       }
 
       unchecked {

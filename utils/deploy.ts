@@ -125,7 +125,7 @@ const deployContracts: Function = async () => {
 
     // Create an instance of the ReferenceLendingPools
     const _lendingProtocols = [0, 0]; // 0 = Goldfinch
-    const _purchaseLimitsInDays = [90, 90];
+    const _purchaseLimitsInDays = [90, 25];
     const tx1 =
       await referenceLendingPoolsFactoryInstance.createReferenceLendingPools(
         GOLDFINCH_LENDING_POOLS,

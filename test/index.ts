@@ -102,7 +102,8 @@ describe("start testing", () => {
         account4,
         poolInstance,
         referenceLendingPoolsInstance,
-        poolCycleManager
+        poolCycleManager,
+        defaultStateManagerInstance
       );
     });
 

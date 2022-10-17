@@ -29,10 +29,10 @@ contract PoolFactory is Ownable {
   mapping(uint256 => address) public poolIdToPoolAddress;
 
   /// @notice reference to the pool cycle manager
-  IPoolCycleManager public immutable poolCycleManager;
+  IPoolCycleManager private immutable poolCycleManager;
 
   /// @notice reference to the default state manager
-  IDefaultStateManager public immutable defaultStateManager;
+  IDefaultStateManager private immutable defaultStateManager;
 
   /*** events ***/
 

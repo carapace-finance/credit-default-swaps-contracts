@@ -5,10 +5,10 @@ import { ZERO_ADDRESS } from "../utils/constants";
 import { Pool } from "../../typechain-types/contracts/core/pool/Pool";
 import { PoolFactory } from "../../typechain-types/contracts/core/PoolFactory";
 import { ethers } from "hardhat";
-import { parseUSDC, getUsdcContract, impersonateCircle } from "../utils/usdc";
-import { parseEther } from "ethers/lib/utils";
+import { parseUSDC, getUsdcContract } from "../utils/usdc";
 import { moveForwardTimeByDays } from "../utils/time";
 import { ITranchedPool } from "../../typechain-types/contracts/external/goldfinch/ITranchedPool";
+import { payToLendingPool } from "../utils/goldfinch";
 
 const testDefaultStateManager: Function = (
   deployer: Signer,
@@ -25,21 +25,6 @@ const testDefaultStateManager: Function = (
     let pool1: string;
     let pool2: string;
     let sellerAddress: string;
-
-    const payToLendingPool: Function = async (
-      tranchedPool: ITranchedPool,
-      amount: string
-    ) => {
-      const amountToPay = parseUSDC(amount);
-
-      // Transfer USDC to lending pool's credit line
-      await usdcContract
-        .connect(await impersonateCircle())
-        .transfer(await tranchedPool.creditLine(), amountToPay.toString());
-
-      // assess lending pool
-      await tranchedPool.assess();
-    };
 
     before(async () => {
       lendingPool2 = (await ethers.getContractAt(
@@ -164,16 +149,7 @@ const testDefaultStateManager: Function = (
     describe("state transition from late -> active", async () => {
       before(async () => {
         // payment to lending pool
-        await payToLendingPool(lendingPool2, "100000");
-
-        // deposit by account1
-        // const _underlyingAmount = parseUSDC("1500");
-        // await usdcContract
-        //   .connect(account1)
-        //   .approve(poolInstance.address, _underlyingAmount);
-        // await poolInstance
-        //   .connect(account1)
-        //   .deposit(_underlyingAmount, await account1.getAddress());
+        await payToLendingPool(lendingPool2, "100000", usdcContract);
 
         await defaultStateManager.assessStates();
       });
@@ -198,18 +174,6 @@ const testDefaultStateManager: Function = (
             .to.be.gt(parseUSDC("1000"))
             .and.to.be.lt(parseUSDC("1001"));
         });
-
-        // enable this test after anytime deposit is enabled
-        // it("...should return ~1500 claimable amount for account 1 from pool 1", async () => {
-        //   expect(
-        //     await defaultStateManager.calculateClaimableUnlockedAmount(
-        //       pool1,
-        //       await account1.getAddress()
-        //     )
-        //   )
-        //     .to.be.gt(parseUSDC("1500"))
-        //     .and.to.be.lt(parseUSDC("1501"));
-        // });
       });
 
       describe("calculateAndClaimUnlockedCapital", async () => {

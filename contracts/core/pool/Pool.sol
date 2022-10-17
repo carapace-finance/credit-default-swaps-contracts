@@ -55,8 +55,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   uint256 public totalPremiumAccrued;
 
   /**
-   * @notice the total underlying amount in the pool backing the value of STokens.
-   * @notice This is the total capital deposited by sellers + accrued premiums from buyers - default payouts.
+   * @notice The total underlying amount in the pool backing the value of STokens.
+   * @notice This is the total capital deposited by sellers + accrued premiums from buyers - locked capital - default payouts.
    */
   uint256 public totalSTokenUnderlying;
 
@@ -99,6 +99,12 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
     if (poolStatus == LendingPoolStatus.NotSupported) {
       revert LendingPoolNotSupported(
+        _protectionPurchaseParams.lendingPoolAddress
+      );
+    }
+
+    if (poolStatus == LendingPoolStatus.Late) {
+      revert LendingPoolHasLatePayment(
         _protectionPurchaseParams.lendingPoolAddress
       );
     }
