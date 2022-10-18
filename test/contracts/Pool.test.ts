@@ -942,10 +942,10 @@ const testPool: Function = (
             before1stDepositSnapshotId
           ]);
 
-          // Approve the pool to spend USDC & deposit 1K USDC
-          const _underlyingAmount = parseUSDC("1000");
-          await USDC.approve(pool.address, _underlyingAmount);
-          await pool.deposit(_underlyingAmount, sellerAddress);
+          // Approve the pool to spend USDC & deposit 5K USDC, min capital required is 5K
+          const _depositAmount = parseUSDC("5000");
+          transferAndApproveUsdc(deployer, _depositAmount);
+          await pool.connect(deployer).deposit(_depositAmount, deployerAddress);
 
           // Buyer 1 buys protection of 10K USDC, so approve premium to be paid
           transferAndApproveUsdc(_protectionBuyer1, parseUSDC("500"));
@@ -961,7 +961,7 @@ const testPool: Function = (
           expect(await pool.totalProtection()).to.eq(parseUSDC("110000")); // 100K + 10K
 
           // state is reverted to just before 1st deposit, so we can't count previous deposits
-          expect(await calculateTotalSellerDeposit()).to.eq(parseUSDC("1000"));
+          expect(await calculateTotalSellerDeposit()).to.eq(_depositAmount);
         });
       });
 
@@ -1014,10 +1014,15 @@ const testPool: Function = (
           ).to.eq(2); // 2 = Locked
         });
 
-        it("...deposit should fail", async () => {
+        it("...deposit should succeed", async () => {
+          const _underlyingAmount = parseUSDC("101");
+          await transferAndApproveUsdc(deployer, _underlyingAmount);
+
           await expect(
-            pool.deposit(parseUSDC("1"), deployerAddress)
-          ).to.be.revertedWith(`PoolIsNotOpen(${poolInfo.poolId})`);
+            pool.connect(deployer).deposit(_underlyingAmount, deployerAddress)
+          )
+            .to.emit(pool, "ProtectionSold")
+            .withArgs(deployerAddress, _underlyingAmount);
         });
 
         it("...withdraw should fail", async () => {
@@ -1223,10 +1228,15 @@ const testPool: Function = (
           ).to.eq(2); // 2 = Locked
         });
 
-        it("...deposit should fail", async () => {
+        it("...deposit should succeed", async () => {
+          const _underlyingAmount = parseUSDC("101");
+          await transferAndApproveUsdc(deployer, _underlyingAmount);
+
           await expect(
-            pool.deposit(parseUSDC("1"), deployerAddress)
-          ).to.be.revertedWith(`PoolIsNotOpen(${poolInfo.poolId})`);
+            pool.connect(deployer).deposit(_underlyingAmount, deployerAddress)
+          )
+            .to.emit(pool, "ProtectionSold")
+            .withArgs(deployerAddress, _underlyingAmount);
         });
 
         it("...withdraw should fail", async () => {

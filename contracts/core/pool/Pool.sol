@@ -330,7 +330,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   function deposit(uint256 _underlyingAmount, address _receiver)
     external
     override
-    whenPoolIsOpen
     whenNotPaused
     nonReentrant
   {
