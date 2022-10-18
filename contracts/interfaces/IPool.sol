@@ -102,6 +102,10 @@ abstract contract IPool {
   error PoolIsNotOpen(uint256 poolId);
   error PoolLeverageRatioTooHigh(uint256 poolId, uint256 leverageRatio);
   error PoolLeverageRatioTooLow(uint256 poolId, uint256 leverageRatio);
+  error PoolHasNoMinCapitalRequired(
+    uint256 poolId,
+    uint256 totalSTokenUnderlying
+  );
   error NoWithdrawalRequested(address msgSender, uint256 poolCycleIndex);
   error WithdrawalHigherThanRequested(
     address msgSender,

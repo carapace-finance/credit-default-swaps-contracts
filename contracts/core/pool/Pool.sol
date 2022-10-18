@@ -130,6 +130,17 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     _;
   }
 
+  modifier hasMinCapitalRequired() {
+    /// verify that pool has min capital required
+    if (!_hasMinRequiredCapital()) {
+      revert PoolHasNoMinCapitalRequired(
+        poolInfo.poolId,
+        totalSTokenUnderlying
+      );
+    }
+    _;
+  }
+
   modifier noBuyerAccountExist() {
     if (!(ownerAddressToBuyerAccountId[msg.sender] == 0))
       revert BuyerAccountExists(msg.sender);
@@ -197,6 +208,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     override
     whenNotPaused
     canBuyProtection(_protectionPurchaseParams)
+    hasMinCapitalRequired
     nonReentrant
   {
     /// Step 1: Create a buyer account if not exists
@@ -335,7 +347,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     );
 
     /// Verify leverage ratio only when total capital/sTokenUnderlying is higher than minimum capital requirement
-    if (totalSTokenUnderlying > poolInfo.params.minRequiredCapital) {
+    if (_hasMinRequiredCapital()) {
       /// calculate pool's current leverage ratio considering the new deposit
       uint256 _leverageRatio = calculateLeverageRatio();
 
@@ -742,6 +754,10 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     );
 
     return _exchangeRate;
+  }
+
+  function _hasMinRequiredCapital() internal view returns (bool) {
+    return totalSTokenUnderlying >= poolInfo.params.minRequiredCapital;
   }
 
   /*** private functions ***/

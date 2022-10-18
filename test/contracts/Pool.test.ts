@@ -17,6 +17,7 @@ import { ITranchedPool } from "../../typechain-types/contracts/external/goldfinc
 import { payToLendingPool } from "../utils/goldfinch";
 import { DefaultStateManager } from "../../typechain-types/contracts/core/DefaultStateManager";
 import { poolInstance } from "../../utils/deploy";
+import { ZERO_ADDRESS } from "../utils/constants";
 
 const testPool: Function = (
   deployer: Signer,
@@ -154,7 +155,7 @@ const testPool: Function = (
         expect(poolInfo.params.leverageRatioBuffer).to.eq(parseEther("0.05"));
       });
       it("...set the min required capital", async () => {
-        expect(poolInfo.params.minRequiredCapital).to.eq(parseUSDC("50000"));
+        expect(poolInfo.params.minRequiredCapital).to.eq(parseUSDC("5000"));
       });
       it("...set the min required protection", async () => {
         expect(poolInfo.params.minRequiredProtection).to.eq(
@@ -207,6 +208,165 @@ const testPool: Function = (
     });
 
     describe("...1st pool cycle", async () => {
+      describe("...deposit", async () => {
+        const _underlyingAmount: BigNumber = parseUSDC("3000");
+
+        it("...approve 0 USDC to be transferred by the Pool contract", async () => {
+          expect(await USDC.approve(pool.address, BigNumber.from(0)))
+            .to.emit(USDC, "Approval")
+            .withArgs(deployerAddress, pool.address, BigNumber.from(0));
+          const _allowanceAmount: number = await USDC.allowance(
+            deployerAddress,
+            pool.address
+          );
+          expect(_allowanceAmount.toString()).to.eq(
+            BigNumber.from(0).toString()
+          );
+        });
+
+        it("...fails if pool is paused", async () => {
+          before1stDepositSnapshotId = await network.provider.send(
+            "evm_snapshot",
+            []
+          );
+          expect(
+            await poolCycleManager.getCurrentCycleState(poolInfo.poolId)
+          ).to.equal(1); // 1 = Open
+
+          // pause the pool
+          await pool.connect(deployer).pause();
+          expect(await pool.paused()).to.be.true;
+          await expect(
+            pool.deposit(_underlyingAmount, deployerAddress)
+          ).to.be.revertedWith("Pausable: paused");
+        });
+
+        it("...unpause the Pool contract", async () => {
+          await pool.unpause();
+          expect(await pool.paused()).to.be.false;
+        });
+
+        it("...fail if USDC is not approved", async () => {
+          await expect(
+            pool.deposit(_underlyingAmount, deployerAddress)
+          ).to.be.revertedWith("ERC20: transfer amount exceeds allowance");
+        });
+
+        it("...approve 3K USDC to be transferred by deployer to the Pool contract", async () => {
+          const _approvalAmt = parseUSDC("3000"); // 1 million USDC
+          expect(await USDC.approve(pool.address, _approvalAmt))
+            .to.emit(USDC, "Approval")
+            .withArgs(deployerAddress, pool.address, _approvalAmt);
+          const _allowanceAmount: number = await USDC.allowance(
+            deployerAddress,
+            pool.address
+          );
+          expect(_allowanceAmount).to.eq(_approvalAmt);
+        });
+
+        it("...fail if an SToken receiver is a zero address", async () => {
+          await expect(
+            pool.deposit(_underlyingAmount, ZERO_ADDRESS)
+          ).to.be.revertedWith("ERC20: mint to the zero address");
+        });
+
+        it("...is successful", async () => {
+          await expect(pool.deposit(_underlyingAmount, deployerAddress))
+            .to.emit(pool, "PremiumAccrued")
+            .to.emit(pool, "ProtectionSold")
+            .withArgs(deployerAddress, _underlyingAmount);
+        });
+
+        it("...premium should not have accrued", async () => {
+          expect(await pool.lastPremiumAccrualTimestamp()).to.eq(
+            await getLatestBlockTimestamp()
+          );
+          expect(await pool.totalPremiumAccrued()).to.be.eq(0);
+        });
+
+        it("...deployer receives same sTokens as deposit", async () => {
+          // sTokens balance of seller should be same as underlying deposit amount
+          expect(await pool.balanceOf(deployerAddress)).to.eq(
+            parseEther("3000")
+          );
+        });
+
+        it("...should return 3000 USDC as total seller deposit", async () => {
+          expect(await calculateTotalSellerDeposit()).to.eq(_underlyingAmount);
+        });
+
+        // Pool have 3000 USDC from the deposit
+        it("...should return total underlying amount received as deposit", async () => {
+          const _totalUnderlying: BigNumber = await USDC.balanceOf(
+            pool.address
+          );
+          expect(_totalUnderlying).to.eq(_underlyingAmount);
+        });
+
+        it("...should convert sToken shares to correct underlying amount for deployer", async () => {
+          // Deployer should receive same USDC amt as deposited because no premium accrued
+          expect(
+            await pool.convertToUnderlying(
+              await pool.balanceOf(deployerAddress)
+            )
+          ).to.be.eq(_underlyingAmount);
+        });
+
+        it("...buyProtection should fail when pool does not have min capital required", async () => {
+          await expect(
+            pool.connect(_protectionBuyer1).buyProtection({
+              lendingPoolAddress: lendingPoolAddress,
+              nftLpTokenId: 590,
+              protectionAmount: parseUSDC("101"),
+              protectionExpirationTimestamp: await getUnixTimestampAheadByDays(
+                90
+              )
+            })
+          ).to.be.revertedWith(`PoolHasNoMinCapitalRequired`);
+        });
+
+        it("...2nd deposit by seller is successful", async () => {
+          await transferAndApproveUsdc(seller, _underlyingAmount);
+          await expect(
+            pool.connect(seller).deposit(_underlyingAmount, sellerAddress)
+          )
+            .to.emit(pool, "PremiumAccrued")
+            .to.emit(pool, "ProtectionSold")
+            .withArgs(sellerAddress, _underlyingAmount);
+
+          // 2nd deposit will receive same sTokens shares as the first deposit because of no premium accrued
+          expect(await pool.balanceOf(sellerAddress)).to.eq(parseEther("3000"));
+        });
+
+        it("...should return 6000 USDC as total seller deposit", async () => {
+          expect(await calculateTotalSellerDeposit()).to.eq(
+            _underlyingAmount.mul(2)
+          );
+        });
+
+        it("...should convert sToken shares to correct underlying amount for seller", async () => {
+          // Seller should receive same USDC amt as deposited because no premium accrued
+          expect(
+            await pool.convertToUnderlying(await pool.balanceOf(sellerAddress))
+          ).to.be.eq(_underlyingAmount);
+        });
+
+        // for some reason, this test fails without hardhat generating stacktrace
+        xit("...fail if deposit causes to breach leverage ratio ceiling", async () => {
+          expect(await pool.totalProtection()).to.eq(parseUSDC("100000"));
+          const depositAmt: BigNumber = parseUSDC("52000");
+          await expect(
+            pool.deposit(depositAmt, sellerAddress)
+          ).to.be.revertedWith("PoolLeverageRatioTooHigh");
+        });
+      });
+
+      describe("calculateLeverageRatio after deposits and no protection", () => {
+        it("...should return 0 when pool has no protection sellers", async () => {
+          expect(await pool.calculateLeverageRatio()).to.equal(0);
+        });
+      });
+
       describe("buyProtection", () => {
         let _purchaseParams: ProtectionPurchaseParamsStruct;
 
@@ -270,7 +430,7 @@ const testPool: Function = (
           ).to.be.revertedWith("ERC20: transfer amount exceeds allowance");
         });
 
-        it("...approve 2500 USDC to be transferred by the Pool contract", async () => {
+        it("...approve 2500 USDC to be transferred to the Pool contract", async () => {
           const _approvedAmt = parseUSDC("2500");
           expect(
             await USDC.connect(_protectionBuyer1).approve(
@@ -401,156 +561,14 @@ const testPool: Function = (
 
           await expect(
             pool.connect(_protectionBuyer1).buyProtection(_purchaseParams)
-          ).to.be.revertedWith("PoolLeverageRatioTooLow(1, 2990476190)");
+          ).to.be.revertedWith("PoolLeverageRatioTooLow");
         });
       });
 
-      describe("calculateLeverageRatio after 1st protection", () => {
-        it("...should return 0 when pool has no protection sellers", async () => {
-          expect(await pool.calculateLeverageRatio()).to.equal(0);
-        });
-      });
-
-      describe("...deposit", async () => {
-        const _underlyingAmount: BigNumber = parseUSDC("10");
-        const _zeroAddress: string =
-          "0x0000000000000000000000000000000000000000";
-
-        it("...approve 0 USDC to be transferred by the Pool contract", async () => {
-          expect(await USDC.approve(pool.address, BigNumber.from(0)))
-            .to.emit(USDC, "Approval")
-            .withArgs(deployerAddress, pool.address, BigNumber.from(0));
-          const _allowanceAmount: number = await USDC.allowance(
-            deployerAddress,
-            pool.address
-          );
-          expect(_allowanceAmount.toString()).to.eq(
-            BigNumber.from(0).toString()
-          );
-        });
-
-        it("...fails if pool is paused", async () => {
-          before1stDepositSnapshotId = await network.provider.send(
-            "evm_snapshot",
-            []
-          );
-          expect(
-            await poolCycleManager.getCurrentCycleState(poolInfo.poolId)
-          ).to.equal(1); // 1 = Open
-
-          // pause the pool
-          await pool.connect(deployer).pause();
-          expect(await pool.paused()).to.be.true;
-          await expect(
-            pool.deposit(_underlyingAmount, deployerAddress)
-          ).to.be.revertedWith("Pausable: paused");
-        });
-
-        it("...unpause the Pool contract", async () => {
-          await pool.unpause();
-          expect(await pool.paused()).to.be.false;
-        });
-
-        it("...fail if USDC is not approved", async () => {
-          await expect(
-            pool.deposit(_underlyingAmount, deployerAddress)
-          ).to.be.revertedWith("ERC20: transfer amount exceeds allowance");
-        });
-
-        it("...approve 100000000 USDC to be transferred by the Pool contract", async () => {
-          const _approvalAmt = parseUSDC("100000000");
-          expect(await USDC.approve(pool.address, _approvalAmt))
-            .to.emit(USDC, "Approval")
-            .withArgs(deployerAddress, pool.address, _approvalAmt);
-          const _allowanceAmount: number = await USDC.allowance(
-            deployerAddress,
-            pool.address
-          );
-          expect(_allowanceAmount).to.eq(_approvalAmt);
-        });
-
-        it("...fail if an SToken receiver is a zero address", async () => {
-          await expect(
-            pool.deposit(_underlyingAmount, _zeroAddress)
-          ).to.be.revertedWith("ERC20: mint to the zero address");
-        });
-
-        it("...reentrancy should fail", async () => {});
-
-        it("...is successful", async () => {
-          await expect(pool.deposit(_underlyingAmount, sellerAddress))
-            .to.emit(pool, "PremiumAccrued")
-            .to.emit(pool, "ProtectionSold")
-            .withArgs(sellerAddress, _underlyingAmount);
-        });
-
-        it("...premium accrued", async () => {
-          expect(await pool.lastPremiumAccrualTimestamp()).to.eq(
-            await getLatestBlockTimestamp()
-          );
-          expect(await pool.totalPremiumAccrued()).to.be.gt(0);
-        });
-
-        it("...receiver receives 10 sTokens", async () => {
-          // sTokens balance of seller should be same as underlying deposit amount
-          expect(await pool.balanceOf(sellerAddress)).to.eq(parseEther("10"));
-        });
-
-        it("...should return 10 USDC as total seller deposit", async () => {
-          expect(await calculateTotalSellerDeposit()).to.eq(_underlyingAmount);
-        });
-
-        // We have 2418.xx USDC premium from the protection buyer + 10 USDC from the deposit
-        it("...should return total underlying amount received as premium + deposit", async () => {
-          const _totalUnderlying: BigNumber = await USDC.balanceOf(
-            pool.address
-          );
-          expect(_totalUnderlying).to.eq(parseUSDC("2428.902585"));
-        });
-
-        // for some reason, this test fails without hardhat generating stacktrace
-        xit("...fail if deposit causes to breach leverage ratio ceiling", async () => {
-          expect(await pool.totalProtection()).to.eq(parseUSDC("100000"));
-          const depositAmt: BigNumber = parseUSDC("52000");
-          await expect(
-            pool.deposit(depositAmt, sellerAddress)
-          ).to.be.revertedWith("PoolLeverageRatioTooHigh");
-        });
-
-        it("...2nd deposit is successful", async () => {
-          await expect(pool.deposit(_underlyingAmount, sellerAddress))
-            .to.emit(pool, "PremiumAccrued")
-            .to.emit(pool, "ProtectionSold")
-            .withArgs(sellerAddress, _underlyingAmount);
-
-          // 2nd deposit will receive less sTokens shares than the first deposit because of the premium accrued
-          expect(await pool.balanceOf(sellerAddress))
-            .to.be.gt(parseEther("19.99"))
-            .and.lt(parseEther("20"));
-        });
-
-        it("...should return 20 USDC as total seller deposit", async () => {
-          expect(await calculateTotalSellerDeposit()).to.eq(
-            _underlyingAmount.mul(2)
-          );
-        });
-
-        it("...should convert sToken shares to correct underlying amount", async () => {
-          const convertedUnderlying = await pool.convertToUnderlying(
-            await pool.balanceOf(sellerAddress)
-          );
-          // Seller should receive little bit more USDC amt than deposited because of accrued premium
-          expect(convertedUnderlying)
-            .to.be.gt(parseUSDC("19.9877"))
-            .and.lt(parseUSDC("20.1"));
-        });
-      });
-
-      describe("calculateLeverageRatio after 1 protection & 2 deposits", () => {
+      describe("calculateLeverageRatio after 2 deposits & 1 protection", () => {
         it("...should return correct leverage ratio", async () => {
-          expect(await pool.calculateLeverageRatio())
-            .to.be.gt(parseEther("0.0002"))
-            .and.lt(parseEther("0.00021"));
+          // 6000 / 100000 = 0.06
+          expect(await pool.calculateLeverageRatio()).to.eq(parseEther("0.06"));
         });
       });
 
