@@ -226,6 +226,19 @@ contract ReferenceLendingPools is
       );
   }
 
+  /// @inheritdoc IReferenceLendingPools
+  function getLatestPaymentTimestamp(address _lendingPool)
+    public
+    view
+    override
+    returns (uint256)
+  {
+    return
+      _getLendingProtocolAdapter(_lendingPool).getLatestPaymentTimestamp(
+        _lendingPool
+      );
+  }
+
   /** internal functions */
 
   /**

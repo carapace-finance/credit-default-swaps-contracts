@@ -278,9 +278,6 @@ const testPool: Function = (
         });
 
         it("...premium should not have accrued", async () => {
-          expect(await pool.lastPremiumAccrualTimestamp()).to.eq(
-            await getLatestBlockTimestamp()
-          );
           expect(await pool.totalPremiumAccrued()).to.be.eq(0);
         });
 
@@ -492,8 +489,9 @@ const testPool: Function = (
         it("...create a new buyer account and buy protection", async () => {
           const _initialBuyerAccountId: BigNumber = BigNumber.from(1);
           const _initialPremiumAmountOfAccount: BigNumber = BigNumber.from(0);
-          const _premiumTotalOfLendingPoolIdBefore: BigNumber =
-            await pool.lendingPoolIdToPremiumTotal(lendingPoolAddress);
+          const _premiumTotalOfLendingPoolIdBefore: BigNumber = (
+            await pool.getLendingPoolDetail(lendingPoolAddress)
+          )[0];
           const _premiumTotalBefore: BigNumber = await pool.totalPremium();
           const _expectedPremiumAmount = parseUSDC("2418.902585");
 
@@ -523,8 +521,9 @@ const testPool: Function = (
               _initialBuyerAccountId,
               lendingPoolAddress
             );
-          const _premiumTotalOfLendingPoolIdAfter: BigNumber =
-            await pool.lendingPoolIdToPremiumTotal(lendingPoolAddress);
+          const _premiumTotalOfLendingPoolIdAfter: BigNumber = (
+            await pool.getLendingPoolDetail(lendingPoolAddress)
+          )[0];
           const _premiumTotalAfter: BigNumber = await pool.totalPremium();
           expect(
             _premiumAmountOfAccountAfter.sub(_initialPremiumAmountOfAccount)
@@ -586,6 +585,7 @@ const testPool: Function = (
             _expectedTotalWithdrawal
           );
         };
+
         it("...fail when pool is paused", async () => {
           await pool.connect(deployer).pause();
           expect(await pool.paused()).to.be.true;
@@ -594,10 +594,12 @@ const testPool: Function = (
             "Pausable: paused"
           );
         });
+
         it("...unpause the pool", async () => {
           await pool.connect(deployer).unpause();
           expect(await pool.paused()).to.be.false;
         });
+
         it("...fail when an user has zero balance", async () => {
           const _tokenAmt = parseEther("0.001");
           await expect(
@@ -606,6 +608,7 @@ const testPool: Function = (
             `InsufficientSTokenBalance("${buyerAddress}", 0)`
           );
         });
+
         it("...fail when withdrawal amount is higher than token balance", async () => {
           const _tokenAmt = parseEther("21");
           const _tokenBalance = await pool.balanceOf(sellerAddress);
@@ -615,6 +618,7 @@ const testPool: Function = (
             `InsufficientSTokenBalance("${sellerAddress}", ${_tokenBalance})`
           );
         });
+
         it("...1st request is successful", async () => {
           await expect(
             pool.connect(seller).requestWithdrawal(_requestedTokenAmt1)
@@ -667,6 +671,7 @@ const testPool: Function = (
           // withdrawal cycle's total sToken requested amount should be same as the new requested amount
           await verifyTotalRequestedWithdrawal(_requestedTokenAmt2);
         });
+
         it("...fail when amount in updating request is higher than token balance", async () => {
           const _tokenAmt = parseEther("21");
           const _tokenBalance = await pool.balanceOf(sellerAddress);
@@ -676,6 +681,7 @@ const testPool: Function = (
             `InsufficientSTokenBalance("${sellerAddress}", ${_tokenBalance})`
           );
         });
+
         it("...2nd request by another user is successful", async () => {
           const _underlyingAmount = parseUSDC("20");
           await USDC.connect(owner).approve(pool.address, _underlyingAmount);
@@ -743,15 +749,15 @@ const testPool: Function = (
         });
       });
 
-      describe("accruePremium", async () => {
+      describe("accruePremiumAndExpireProtections", async () => {
         it("...should accrue premium and update last accrual timestamp", async () => {
           const totalPremiumAccruedBefore = await pool.totalPremiumAccrued();
-          await expect(pool.accruePremium()).to.emit(pool, "PremiumAccrued");
+          await expect(pool.accruePremiumAndExpireProtections()).to.emit(
+            pool,
+            "PremiumAccrued"
+          );
           expect(await pool.totalPremiumAccrued()).to.be.gt(
             totalPremiumAccruedBefore
-          );
-          expect(await pool.lastPremiumAccrualTimestamp()).to.eq(
-            await getLatestBlockTimestamp()
           );
         });
 
@@ -779,7 +785,7 @@ const testPool: Function = (
 
           // 2nd protection should be expired and removed
           const _totalPremiumAccruedBefore = await pool.totalPremiumAccrued();
-          await pool.accruePremium();
+          await pool.accruePremiumAndExpireProtections();
 
           expect(await pool.getAllProtections()).to.have.lengthOf(1);
           expect(await pool.totalProtection()).to.eq(parseUSDC("100000"));
@@ -847,7 +853,7 @@ const testPool: Function = (
           await moveForwardTimeByDays(21);
 
           // 2nd & 3rd protections should be expired and removed
-          await pool.accruePremium();
+          await pool.accruePremiumAndExpireProtections();
 
           expect(await pool.getAllProtections()).to.have.lengthOf(2);
           expect(await pool.totalProtection()).to.eq(parseUSDC("140000")); // 140K USDC = 100K + 40K

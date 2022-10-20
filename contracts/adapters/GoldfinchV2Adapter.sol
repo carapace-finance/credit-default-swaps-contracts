@@ -44,7 +44,7 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
     override
     returns (bool)
   {
-    ICreditLine _creditLine = ITranchedPool(_lendingPoolAddress).creditLine();
+    ICreditLine _creditLine = _getCreditLine(_lendingPoolAddress);
     uint256 _termEndTimestamp = _creditLine.termEndTime();
 
     /// Repaid logic derived from Goldfinch frontend code:
@@ -73,8 +73,7 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
     override
     returns (bool)
   {
-    ICreditLine _creditLine = ITranchedPool(_lendingPoolAddress).creditLine();
-    return _creditLine.isLate();
+    return _getCreditLine(_lendingPoolAddress).isLate();
   }
 
   /// @inheritdoc ILendingProtocolAdapter
@@ -110,9 +109,7 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
     returns (uint256 _termEndTimestamp)
   {
     /// Term end time in goldfinch is timestamp of first drawdown + term length in seconds
-    _termEndTimestamp = ITranchedPool(_lendingPoolAddress)
-      .creditLine()
-      .termEndTime();
+    _termEndTimestamp = _getCreditLine(_lendingPoolAddress).termEndTime();
   }
 
   /// @inheritdoc ILendingProtocolAdapter
@@ -168,10 +165,20 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
     }
   }
 
+  /// @inheritdoc ILendingProtocolAdapter
+  function getLatestPaymentTimestamp(address _lendingPool)
+    public
+    view
+    override
+    returns (uint256)
+  {
+    return _getCreditLine(_lendingPool).lastFullPaymentTime();
+  }
+
   /** internal functions */
 
   /**
-   * @dev derived from TranchingLogic: https://github.com/goldfinch-eng/mono/blob/main/packages/protocol/contracts/protocol/core/TranchingLogic.sol#L419
+   * @dev copied from TranchingLogic: https://github.com/goldfinch-eng/mono/blob/main/packages/protocol/contracts/protocol/core/TranchingLogic.sol#L419
    */
   function _isJuniorTrancheId(uint256 trancheId) internal pure returns (bool) {
     return trancheId != 0 && (trancheId % NUM_TRANCHES_PER_SLICE) == 0;
@@ -225,5 +232,13 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
       ISeniorPool(
         goldfinchConfig.getAddress(uint256(ConfigOptions.Addresses.SeniorPool))
       );
+  }
+
+  function _getCreditLine(address _lendingPoolAddress)
+    internal
+    view
+    returns (ICreditLine)
+  {
+    return ITranchedPool(_lendingPoolAddress).creditLine();
   }
 }
