@@ -48,16 +48,6 @@ abstract contract IPool {
     IReferenceLendingPools referenceLendingPools;
   }
 
-  /// @notice A struct to store the details of a withdrawal request.
-  struct WithdrawalRequest {
-    /// @notice The requested amount of sTokens to withdraw in a cycle.
-    uint256 sTokenAmount;
-    /// @notice The remaining amount of sTokens to withdraw in phase 1 of withdrawal cycle.
-    uint256 remainingPhaseOneSTokenAmount;
-    /// @notice The flag to indicate whether allowed withdrawal amount for phase 1 is calculated or not
-    bool phaseOneSTokenAmountCalculated;
-  }
-
   struct LoanProtectionInfo {
     /// @notice the address of a protection buyer
     address buyer;
@@ -94,12 +84,8 @@ abstract contract IPool {
   struct WithdrawalCycleDetail {
     /// @notice total amount of sTokens requested to be withdrawn for this cycle
     uint256 totalSTokenRequested;
-    /// @notice Percent of requested sTokens that can be withdrawn for this cycle without breaching the leverage ratio floor
-    uint256 withdrawalPercent;
-    /// @notice The withdrawal phase 2 start timestamp after which withdrawal is allowed without restriction during the open period
-    uint256 withdrawalPhase2StartTimestamp;
-    /// @notice The mapping to track the withdrawal requests per protection seller for this withdrawal cycle.
-    mapping(address => WithdrawalRequest) withdrawalRequests;
+    /// @notice The mapping to track the requested amount of sTokens to withdraw per protection seller for this withdrawal cycle.
+    mapping(address => uint256) withdrawalRequests;
   }
 
   /*** errors ***/
@@ -123,15 +109,6 @@ abstract contract IPool {
     uint256 requestedSTokenAmount
   );
   error InsufficientSTokenBalance(address msgSender, uint256 sTokenBalance);
-  error WithdrawalNotAllowed(
-    uint256 totalSTokenUnderlying,
-    uint256 lowestSTokenUnderlyingAllowed
-  );
-  error WithdrawalHigherThanAllowed(
-    address msgSender,
-    uint256 sTokenWithdrawalAmount,
-    uint256 sTokenAllowedWithdrawalAmount
-  );
   error OnlyDefaultStateManager(address msgSender);
 
   /*** events ***/

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
+import {IPoolCycleManager, PoolCycle, CycleState} from "../interfaces/IPoolCycleManager.sol";
 
 /**
  * @title PoolCycleManager

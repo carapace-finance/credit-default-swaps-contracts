@@ -1,29 +1,29 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+/// @notice Represents various states of a pool cycle.
+enum CycleState {
+  None, // The cycle state for unregistered pools.
+  Open, // The cycle is open for deposit & withdraw
+  Locked // The cycle is in progress & locked for deposit & withdraw
+}
+
+/// @notice Contains the current pool cycle info.
+struct PoolCycle {
+  /// @notice The current cycle index of the pool.
+  uint256 currentCycleIndex;
+  /// @notice The start timestamp of the current cycle in seconds since unix epoch.
+  uint256 currentCycleStartTime;
+  /// @notice Time duration in seconds for which cycle is OPEN, meaning deposits & withdrawals are allowed.
+  uint256 openCycleDuration;
+  /// @notice Total time duration of a cycle  in seconds.
+  uint256 cycleDuration;
+  /// @notice Current state of the cycle.
+  CycleState currentCycleState;
+}
+
 /// @notice Contract to manage the current cycle of various pools.
 abstract contract IPoolCycleManager {
-  /// @notice Represents various states of a pool cycle.
-  enum CycleState {
-    None, // The cycle state for unregistered pools.
-    Open, // The cycle is open for deposit & withdraw
-    Locked // The cycle is in progress & locked for deposit & withdraw
-  }
-
-  /// @notice Contains the current pool cycle info.
-  struct PoolCycle {
-    /// @notice The current cycle index of the pool.
-    uint256 currentCycleIndex;
-    /// @notice The start timestamp of the current cycle in seconds since unix epoch.
-    uint256 currentCycleStartTime;
-    /// @notice Time duration in seconds for which cycle is OPEN, meaning deposits & withdrawals are allowed.
-    uint256 openCycleDuration;
-    /// @notice Total time duration of a cycle  in seconds.
-    uint256 cycleDuration;
-    /// @notice Current state of the cycle.
-    CycleState currentCycleState;
-  }
-
   /*** events ***/
 
   /// @notice Emitted when a new pool cycle is created.
