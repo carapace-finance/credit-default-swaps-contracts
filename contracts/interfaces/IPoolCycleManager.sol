@@ -93,4 +93,13 @@ abstract contract IPoolCycleManager {
     view
     virtual
     returns (PoolCycle memory);
+
+  /**
+   * @notice Provides the timestamp of the end of the next cycle for the pool with specified id.
+   */
+  function getNextCycleEndTimestamp(uint256 _poolId)
+    public
+    view
+    virtual
+    returns (uint256 _nextCycleEndTimestamp);
 }

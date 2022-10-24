@@ -9,7 +9,7 @@ import {SToken} from "./SToken.sol";
 import {IPremiumCalculator} from "../../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools, LendingPoolStatus, ProtectionPurchaseParams} from "../../interfaces/IReferenceLendingPools.sol";
 import {IPoolCycleManager, CycleState} from "../../interfaces/IPoolCycleManager.sol";
-import {IPool, EnumerableSet} from "../../interfaces/IPool.sol";
+import {IPool, EnumerableSet, PoolParams, PoolCycleParams, PoolInfo, LoanProtectionInfo, LendingPoolDetail, WithdrawalCycleDetail} from "../../interfaces/IPool.sol";
 import {IDefaultStateManager} from "../../interfaces/IDefaultStateManager.sol";
 
 import "../../libraries/AccruedPremiumCalculator.sol";
@@ -84,6 +84,25 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   modifier canBuyProtection(
     ProtectionPurchaseParams calldata _protectionPurchaseParams
   ) {
+    /// a buyer needs to buy protection longer than 90 days
+    uint256 _protectionDurationInSeconds = _protectionPurchaseParams
+      .protectionExpirationTimestamp - block.timestamp;
+    if (_protectionDurationInSeconds < MIN_PROTECTION_DURATION) {
+      revert ProtectionDurationTooShort(_protectionDurationInSeconds);
+    }
+
+    /// allow buyers to buy protection only up to the next cycle end
+    uint256 _nextCycleEndTimestamp = poolCycleManager.getNextCycleEndTimestamp(
+      poolInfo.poolId
+    );
+    if (
+      _protectionPurchaseParams.protectionExpirationTimestamp >
+      _nextCycleEndTimestamp
+    ) {
+      revert ProtectionDurationTooLong(_protectionDurationInSeconds);
+    }
+
+    /// Verify that the lending pool is active
     LendingPoolStatus poolStatus = poolInfo
       .referenceLendingPools
       .getLendingPoolStatus(_protectionPurchaseParams.lendingPoolAddress);
@@ -219,49 +238,29 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       }
     }
 
-    /// Step 3: Calculate the buyer's APR scaled to 18 decimals
-    uint256 _protectionBuyerApr = poolInfo
-      .referenceLendingPools
-      .calculateProtectionBuyerAPR(
-        _protectionPurchaseParams.lendingPoolAddress
-      );
-
-    /// Step 4: Calculate the protection premium amount scaled to 18 decimals and scale it to the underlying token decimals.
-    (uint256 _premiumAmountIn18Decimals, bool _isMinPremium) = premiumCalculator
-      .calculatePremium(
-        _protectionPurchaseParams.protectionExpirationTimestamp,
-        _scaleUnderlyingAmtTo18Decimals(
-          _protectionPurchaseParams.protectionAmount
-        ),
-        _protectionBuyerApr,
-        _leverageRatio,
-        totalSTokenUnderlying,
-        totalProtection,
-        poolInfo.params
-      );
-
-    uint256 _premiumAmount = _scale18DecimalsAmtToUnderlyingDecimals(
-      _premiumAmountIn18Decimals
-    );
-
-    uint256 _accountId = ownerAddressToBuyerAccountId[msg.sender];
-    buyerAccounts[_accountId][
+    LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
       _protectionPurchaseParams.lendingPoolAddress
-    ] += _premiumAmount;
+    ];
 
-    /// Step 5: transfer premium amount from buyer to pool & track the premium amount
+    //// Step 3: Calculate the protection premium amount scaled to 18 decimals and scale it to the underlying token decimals.
+    (
+      uint256 _premiumAmountIn18Decimals,
+      uint256 _premiumAmount,
+      bool _isMinPremium
+    ) = _calculateAndTrackPremium(
+        lendingPoolDetail,
+        _protectionPurchaseParams,
+        _leverageRatio
+      );
+
+    /// Step 4: transfer premium amount from buyer to pool & track the premium amount
     poolInfo.underlyingToken.safeTransferFrom(
       msg.sender,
       address(this),
       _premiumAmount
     );
-    totalPremium += _premiumAmount;
-    LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
-      _protectionPurchaseParams.lendingPoolAddress
-    ];
-    lendingPoolDetail.totalPremium += _premiumAmount;
 
-    /// Step 6: Calculate protection in days and scale it to 18 decimals.
+    /// Step 5: Calculate protection in days and scale it to 18 decimals.
     uint256 _protectionDurationInDaysScaled = ((_protectionPurchaseParams
       .protectionExpirationTimestamp - block.timestamp) *
       Constants.SCALE_18_DECIMALS) / uint256(Constants.SECONDS_IN_DAY);
@@ -273,7 +272,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _leverageRatio
     );
 
-    /// Step 7: Capture loan protection data for premium accrual calculation
+    /// Step 6: Capture loan protection data for premium accrual calculation
     // solhint-disable-next-line
     (int256 _k, int256 _lambda) = AccruedPremiumCalculator.calculateKAndLambda(
       _premiumAmountIn18Decimals,
@@ -286,7 +285,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _isMinPremium ? poolInfo.params.minCarapaceRiskPremiumPercent : 0
     );
 
-    /// Step 8: Add protection to the pool & emit an event
+    /// Step 7: Add protection to the pool & emit an event
     loanProtectionInfos.push(
       LoanProtectionInfo({
         buyer: msg.sender,
@@ -302,7 +301,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       })
     );
 
-    /// Step 9: Track all loan protections for a lending pool to calculate
+    /// Step 8: Track all loan protections for a lending pool to calculate
     // the total locked amount for the lending pool, when/if pool is late for payment
     lendingPoolDetail.loanProtectionInfoIndexSet.add(
       loanProtectionInfos.length - 1
@@ -860,5 +859,52 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     }
 
     return (_totalCapital * Constants.SCALE_18_DECIMALS) / totalProtection;
+  }
+
+  function _calculateAndTrackPremium(
+    LendingPoolDetail storage lendingPoolDetail,
+    ProtectionPurchaseParams calldata _protectionPurchaseParams,
+    uint256 _leverageRatio
+  )
+    internal
+    returns (
+      uint256 _premiumAmountIn18Decimals,
+      uint256 _premiumAmount,
+      bool _isMinPremium
+    )
+  {
+    /// Step 1: Calculate the buyer's APR scaled to 18 decimals
+    uint256 _protectionBuyerApr = poolInfo
+      .referenceLendingPools
+      .calculateProtectionBuyerAPR(
+        _protectionPurchaseParams.lendingPoolAddress
+      );
+
+    /// Step 2: Calculate the protection premium amount scaled to 18 decimals and scale it to the underlying token decimals.
+    (_premiumAmountIn18Decimals, _isMinPremium) = premiumCalculator
+      .calculatePremium(
+        _protectionPurchaseParams.protectionExpirationTimestamp,
+        _scaleUnderlyingAmtTo18Decimals(
+          _protectionPurchaseParams.protectionAmount
+        ),
+        _protectionBuyerApr,
+        _leverageRatio,
+        totalSTokenUnderlying,
+        totalProtection,
+        poolInfo.params
+      );
+
+    _premiumAmount = _scale18DecimalsAmtToUnderlyingDecimals(
+      _premiumAmountIn18Decimals
+    );
+
+    /// Step 3: Track the premium amount
+    uint256 _accountId = ownerAddressToBuyerAccountId[msg.sender];
+    buyerAccounts[_accountId][
+      _protectionPurchaseParams.lendingPoolAddress
+    ] += _premiumAmount;
+
+    totalPremium += _premiumAmount;
+    lendingPoolDetail.totalPremium += _premiumAmount;
   }
 }

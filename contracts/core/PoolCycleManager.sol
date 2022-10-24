@@ -126,6 +126,18 @@ contract PoolCycleManager is IPoolCycleManager {
     return poolCycles[_poolId];
   }
 
+  function getNextCycleEndTimestamp(uint256 _poolId)
+    public
+    view
+    override
+    returns (uint256 _nextCycleEndTimestamp)
+  {
+    PoolCycle storage poolCycle = poolCycles[_poolId];
+    _nextCycleEndTimestamp =
+      poolCycle.currentCycleStartTime +
+      (2 * poolCycle.cycleDuration);
+  }
+
   /*** internal/private functions ***/
 
   /// @dev Starts a new pool cycle using specified cycle index

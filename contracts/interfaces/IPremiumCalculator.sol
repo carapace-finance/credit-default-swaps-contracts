@@ -1,7 +1,7 @@
 // // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {IPool} from "./IPool.sol";
+import {IPool, PoolParams} from "./IPool.sol";
 
 abstract contract IPremiumCalculator {
   /**
@@ -23,6 +23,6 @@ abstract contract IPremiumCalculator {
     uint256 _leverageRatio,
     uint256 _totalCapital,
     uint256 _totalProtection,
-    IPool.PoolParams calldata _poolParameters
+    PoolParams calldata _poolParameters
   ) external view virtual returns (uint256 premiumAmount, bool isMinPremium);
 }

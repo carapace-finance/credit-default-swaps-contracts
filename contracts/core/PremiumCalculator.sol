@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import "@prb/math/contracts/PRBMathSD59x18.sol";
 
 import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
-import {IPool} from "../interfaces/IPool.sol";
+import {IPool, PoolParams} from "../interfaces/IPool.sol";
 
 import "../libraries/Constants.sol";
 import "../libraries/RiskFactorCalculator.sol";
@@ -22,7 +22,7 @@ contract PremiumCalculator is IPremiumCalculator {
     uint256 _leverageRatio,
     uint256 _totalCapital,
     uint256 _totalProtection,
-    IPool.PoolParams calldata _poolParameters
+    PoolParams calldata _poolParameters
   ) external view override returns (uint256 premiumAmount, bool isMinPremium) {
     console.log(
       "Calculating premium... expiration time: %s, protection amount: %s, leverage ratio: %s",

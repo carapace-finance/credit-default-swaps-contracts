@@ -5,7 +5,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Counters} from "@openzeppelin/contracts/utils/Counters.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
-import {IPool} from "../interfaces/IPool.sol";
+import {IPool, PoolParams, PoolInfo} from "../interfaces/IPool.sol";
 import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools} from "../interfaces/IReferenceLendingPools.sol";
 import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
@@ -73,7 +73,7 @@ contract PoolFactory is Ownable {
    */
   function createPool(
     bytes32 _salt,
-    IPool.PoolParams calldata _poolParameters,
+    PoolParams calldata _poolParameters,
     IERC20Metadata _underlyingToken,
     IReferenceLendingPools _referenceLendingPools,
     IPremiumCalculator _premiumCalculator,
@@ -82,7 +82,7 @@ contract PoolFactory is Ownable {
   ) external onlyOwner returns (address) {
     uint256 _poolId = poolIdCounter.current();
     Pool pool = new Pool{salt: _salt}(
-      IPool.PoolInfo({
+      PoolInfo({
         poolId: _poolId,
         params: _poolParameters,
         underlyingToken: _underlyingToken,
