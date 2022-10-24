@@ -9,7 +9,7 @@ import {SToken} from "./SToken.sol";
 import {IPremiumCalculator} from "../../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools, LendingPoolStatus, ProtectionPurchaseParams} from "../../interfaces/IReferenceLendingPools.sol";
 import {IPoolCycleManager, CycleState} from "../../interfaces/IPoolCycleManager.sol";
-import {IPool, EnumerableSet, PoolParams, PoolCycleParams, PoolInfo, LoanProtectionInfo, LendingPoolDetail, WithdrawalCycleDetail} from "../../interfaces/IPool.sol";
+import {IPool, EnumerableSet, PoolParams, PoolCycleParams, PoolInfo, ProtectionInfo, LendingPoolDetail, WithdrawalCycleDetail} from "../../interfaces/IPool.sol";
 import {IDefaultStateManager} from "../../interfaces/IDefaultStateManager.sol";
 
 import "../../libraries/AccruedPremiumCalculator.sol";
@@ -66,8 +66,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /// @dev a buyer account id to a lending pool id to the premium amount
   mapping(uint256 => mapping(address => uint256)) public buyerAccounts;
 
-  /// @notice The array to track the loan protection info for all protection bought.
-  LoanProtectionInfo[] private loanProtectionInfos;
+  /// @notice The array to track the info for all protection bought.
+  ProtectionInfo[] private protectionInfos;
 
   /// @notice The mapping to track pool cycle index at which actual withdrawal will happen to withdrawal details
   mapping(uint256 => WithdrawalCycleDetail) private withdrawalCycleDetails;
@@ -286,8 +286,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     );
 
     /// Step 7: Add protection to the pool & emit an event
-    loanProtectionInfos.push(
-      LoanProtectionInfo({
+    protectionInfos.push(
+      ProtectionInfo({
         buyer: msg.sender,
         protectionAmount: _protectionPurchaseParams.protectionAmount,
         protectionPremium: _premiumAmount,
@@ -303,9 +303,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
     /// Step 8: Track all loan protections for a lending pool to calculate
     // the total locked amount for the lending pool, when/if pool is late for payment
-    lendingPoolDetail.loanProtectionInfoIndexSet.add(
-      loanProtectionInfos.length - 1
-    );
+    lendingPoolDetail.protectionInfoIndexSet.add(protectionInfos.length - 1);
 
     emit ProtectionBought(
       msg.sender,
@@ -436,7 +434,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   function accruePremiumAndExpireProtections() external override {
     uint256 _removalIndex = 0;
     uint256[] memory _expiredProtections = new uint256[](
-      loanProtectionInfos.length
+      protectionInfos.length
     );
 
     address[] memory _lendingPools = poolInfo
@@ -461,12 +459,12 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       if (_latestPaymentTimestamp > _lastPremiumAccrualTimestamp) {
         /// Step 2: go through all the loan protections for this lending pool and accrue premium for each
         uint256[] memory _protectionIndexes = lendingPoolDetail
-          .loanProtectionInfoIndexSet
+          .protectionInfoIndexSet
           .values();
 
         uint256 protectionLength = _protectionIndexes.length;
         for (uint256 _protectionIndex; _protectionIndex < protectionLength; ) {
-          LoanProtectionInfo storage loanProtectionInfo = loanProtectionInfos[
+          ProtectionInfo storage protectionInfo = protectionInfos[
             _protectionIndexes[_protectionIndex]
           ];
 
@@ -474,7 +472,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
           /// if loan protection is expired, add it to the list of expired protections
           if (
             _accruePremium(
-              loanProtectionInfo,
+              protectionInfo,
               _lastPremiumAccrualTimestamp,
               _latestPaymentTimestamp
             )
@@ -503,24 +501,22 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     /// Remove expired protections from the list
     for (uint256 i; i < _removalIndex; ) {
       uint256 expiredProtectionIndex = _expiredProtections[i];
-      address _lendingPool = loanProtectionInfos[expiredProtectionIndex]
+      address _lendingPool = protectionInfos[expiredProtectionIndex]
         .lendingPool;
 
       /// move the last element to the expired protection index
-      loanProtectionInfos[expiredProtectionIndex] = loanProtectionInfos[
-        loanProtectionInfos.length - 1
+      protectionInfos[expiredProtectionIndex] = protectionInfos[
+        protectionInfos.length - 1
       ];
 
       /// remove the last element
-      loanProtectionInfos.pop();
+      protectionInfos.pop();
 
-      /// remove expired protection index from lendingPool's loanProtectionInfoIndexSet
+      /// remove expired protection index from lendingPool's protectionInfoIndexSet
       LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
         _lendingPool
       ];
-      lendingPoolDetail.loanProtectionInfoIndexSet.remove(
-        expiredProtectionIndex
-      );
+      lendingPoolDetail.protectionInfoIndexSet.remove(expiredProtectionIndex);
 
       unchecked {
         ++i;
@@ -547,7 +543,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _lendingPoolAddress
     ];
     uint256[] memory _protectionIndexes = lendingPoolDetail
-      .loanProtectionInfoIndexSet
+      .protectionInfoIndexSet
       .values();
 
     IReferenceLendingPools _referenceLendingPools = poolInfo
@@ -555,21 +551,22 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
     uint256 length = _protectionIndexes.length;
     for (uint256 i; i < length; ) {
-      LoanProtectionInfo storage _loanProtectionInfo = loanProtectionInfos[
+      ProtectionInfo storage protectionInfo = protectionInfos[
         _protectionIndexes[i]
       ];
       uint256 _remainingPrincipal = _referenceLendingPools
         .calculateRemainingPrincipal(
           _lendingPoolAddress,
-          _loanProtectionInfo.buyer,
-          _loanProtectionInfo.nftLpTokenId
+          protectionInfo.buyer,
+          protectionInfo.nftLpTokenId
         );
-      uint256 _protectionAmount = _loanProtectionInfo.protectionAmount;
-      uint256 _lockedAmountPerLoan = _protectionAmount < _remainingPrincipal
+      uint256 _protectionAmount = protectionInfo.protectionAmount;
+      uint256 _lockedAmountPerProtection = _protectionAmount <
+        _remainingPrincipal
         ? _protectionAmount
         : _remainingPrincipal;
 
-      _lockedAmount += _lockedAmountPerLoan;
+      _lockedAmount += _lockedAmountPerProtection;
 
       unchecked {
         ++i;
@@ -578,7 +575,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
     /// step 3: Update total locked & available capital in Pool
     if (totalSTokenUnderlying < _lockedAmount) {
-      /// TODO: what happens if totalSTokenUnderlying < _lockedAmount?
+      /// If totalSTokenUnderlying < _lockedAmount, then lock all available capital
       _lockedAmount = totalSTokenUnderlying;
       totalSTokenUnderlying = 0;
     } else {
@@ -632,12 +629,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /**
    * @notice Returns all the protections bought from the pool.
    */
-  function getAllProtections()
-    external
-    view
-    returns (LoanProtectionInfo[] memory)
-  {
-    return loanProtectionInfos;
+  function getAllProtections() external view returns (ProtectionInfo[] memory) {
+    return protectionInfos;
   }
 
   /// @inheritdoc IPool
@@ -771,13 +764,13 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /**
    * @dev Accrues premium for given loan protection from last premium accrual to the latest payment timestamp.
-   * @param loanProtectionInfo The loan protection to accrue premium for.
+   * @param protectionInfo The loan protection to accrue premium for.
    * @param _lastPremiumAccrualTimestamp The timestamp of last premium accrual.
    * @param _latestPaymentTimestamp The timestamp of latest payment made to the underlying lending pool.
    * @return _expired Whether the loan protection has expired or not.
    */
   function _accruePremium(
-    LoanProtectionInfo storage loanProtectionInfo,
+    ProtectionInfo storage protectionInfo,
     uint256 _lastPremiumAccrualTimestamp,
     uint256 _latestPaymentTimestamp
   ) internal returns (bool _expired) {
@@ -787,15 +780,15 @@ contract Pool is IPool, SToken, ReentrancyGuard {
      * secondsUntilLastPremiumAccrual is the second elapsed since the last accrual timestamp.
      * secondsUntilLatestPayment is the second elapsed until latest payment is made.
      */
-    uint256 _startTimestamp = loanProtectionInfo.startTimestamp;
-    uint256 _expirationTimestamp = loanProtectionInfo.expirationTimestamp;
+    uint256 _startTimestamp = protectionInfo.startTimestamp;
+    uint256 _expirationTimestamp = protectionInfo.expirationTimestamp;
     uint256 _secondsUntilLastPremiumAccrual = _lastPremiumAccrualTimestamp -
       _startTimestamp;
 
     /// if loan protection is expired, then accrue interest till expiration and mark it for removal
     uint256 _secondsUntilLatestPayment;
     if (_latestPaymentTimestamp > _expirationTimestamp) {
-      totalProtection -= loanProtectionInfo.protectionAmount;
+      totalProtection -= protectionInfo.protectionAmount;
       _expired = true;
 
       _secondsUntilLatestPayment = _expirationTimestamp - _startTimestamp;
@@ -806,8 +799,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     uint256 _accruedPremium = AccruedPremiumCalculator.calculateAccruedPremium(
       _secondsUntilLastPremiumAccrual,
       _secondsUntilLatestPayment,
-      loanProtectionInfo.K,
-      loanProtectionInfo.lambda
+      protectionInfo.K,
+      protectionInfo.lambda
     );
 
     console.log(

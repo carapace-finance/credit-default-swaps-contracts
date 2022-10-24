@@ -43,7 +43,7 @@ struct PoolInfo {
   IReferenceLendingPools referenceLendingPools;
 }
 
-struct LoanProtectionInfo {
+struct ProtectionInfo {
   /// @notice the address of a protection buyer
   address buyer;
   /// @notice The amount of protection purchased.
@@ -71,8 +71,8 @@ struct LendingPoolDetail {
   uint256 lastPremiumAccrualTimestamp;
   /// @notice Track the total amount of premium for each lending pool
   uint256 totalPremium;
-  /// @notice Set to track all loan protection bought for specific lending pool.
-  EnumerableSet.UintSet loanProtectionInfoIndexSet;
+  /// @notice Set to track all protection bought for specific lending pool.
+  EnumerableSet.UintSet protectionInfoIndexSet;
 }
 
 /// @notice A struct to store the details of a withdrawal cycle.
