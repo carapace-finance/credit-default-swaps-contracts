@@ -36,7 +36,7 @@ library AccruedPremiumCalculator {
     uint256 _curvature,
     uint256 _minCarapaceRiskPremiumPercent
   )
-    public
+    external
     view
     returns (
       // solhint-disable-next-line var-name-mixedcase
@@ -100,7 +100,7 @@ library AccruedPremiumCalculator {
     uint256 _toSecond,
     int256 _k,
     int256 _lambda
-  ) public view returns (uint256) {
+  ) external view returns (uint256) {
     console.log(
       "Calculating accrued premium from: %s to %s",
       _fromSecond,

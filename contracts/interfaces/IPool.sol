@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import {IReferenceLendingPools} from "./IReferenceLendingPools.sol";
+import {IReferenceLendingPools, ProtectionPurchaseParams} from "./IReferenceLendingPools.sol";
 
 abstract contract IPool {
   /*** structs ***/
@@ -56,6 +56,8 @@ abstract contract IPool {
   }
 
   struct LoanProtectionInfo {
+    /// @notice the address of a protection buyer
+    address buyer;
     /// @notice The amount of protection purchased.
     uint256 protectionAmount;
     /// @notice The amount of premium paid in underlying token
@@ -71,6 +73,10 @@ abstract contract IPool {
     /// @notice Lambda is calculated & captured at the time of loan protection purchase
     /// @notice It is used in accrued premium calculation
     int256 lambda;
+    address lendingPool;
+    /// @notice The id of NFT token representing the loan in the lending pool
+    /// This is only relevant for lending protocols which provide NFT token to represent the loan
+    uint256 nftLpTokenId;
   }
 
   /// @notice A struct to store the details of a withdrawal cycle.
@@ -87,11 +93,10 @@ abstract contract IPool {
 
   /*** errors ***/
   error LendingPoolNotSupported(address lendingPoolAddress);
+  error LendingPoolHasLatePayment(address lendingPoolAddress);
   error LendingPoolExpired(address lendingPoolAddress);
   error LendingPoolDefaulted(address lendingPoolAddress);
-  error ProtectionPurchaseNotAllowed(
-    IReferenceLendingPools.ProtectionPurchaseParams params
-  );
+  error ProtectionPurchaseNotAllowed(ProtectionPurchaseParams params);
   error ExpirationTimeTooShort(uint256 expirationTime);
   error BuyerAccountExists(address msgSender);
   error PoolIsNotOpen(uint256 poolId);
@@ -112,6 +117,7 @@ abstract contract IPool {
     uint256 sTokenWithdrawalAmount,
     uint256 sTokenAllowedWithdrawalAmount
   );
+  error OnlyDefaultStateManager(address msgSender);
 
   /*** events ***/
 
@@ -130,8 +136,9 @@ abstract contract IPool {
 
   /// @notice Emitted when a new protection is bought.
   event ProtectionBought(
-    address buyer,
+    address indexed buyer,
     address lendingPoolAddress,
+    uint256 protectionAmount,
     uint256 premium
   );
 
@@ -162,8 +169,7 @@ abstract contract IPool {
    * @param _protectionPurchaseParams The protection purchase parameters.
    */
   function buyProtection(
-    IReferenceLendingPools.ProtectionPurchaseParams
-      calldata _protectionPurchaseParams
+    ProtectionPurchaseParams calldata _protectionPurchaseParams
   ) external virtual;
 
   /**
@@ -222,5 +228,23 @@ abstract contract IPool {
    * @notice Calculates and returns leverage ratio scaled to 18 decimals.
    * @notice For example: 0.15 is returned as 0.15 x 10**18 = 15 * 10**16
    */
-  function calculateLeverageRatio() public view virtual returns (uint256);
+  function calculateLeverageRatio() external view virtual returns (uint256);
+
+  /**
+   * @notice Calculates & locks the required capital for specified lending pool in case late payment turns into default.
+   * This method can only be called by the default state manager.
+   * @param _lendingPoolAddress The address of the lending pool.
+   * @return _lockedAmount The amount of capital locked.
+   * @return _snapshotId The id of SToken snapshot to capture the seller's share of the locked amount.
+   */
+  function lockCapital(address _lendingPoolAddress)
+    external
+    virtual
+    returns (uint256 _lockedAmount, uint256 _snapshotId);
+
+  /**
+   * @notice Claims the total unlocked capital from this protection pool for a msg.sender
+   * @param _receiver The address to receive the underlying token amount.
+   */
+  function claimUnlockedCapital(address _receiver) external virtual;
 }

@@ -35,6 +35,11 @@ abstract contract IPoolCycleManager {
     uint256 cycleDuration
   );
 
+  /*** errors ***/
+  error NotPoolFactory(address msgSender);
+  error PoolAlreadyRegistered(uint256 poolId);
+  error InvalidCycleDuration(uint256 cycleDuration);
+
   /**
    * @notice Registers the given pool and starts a new cycle for it in `Open` state.
    * @param _poolId The id of the pool.

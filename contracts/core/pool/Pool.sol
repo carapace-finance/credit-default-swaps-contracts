@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import {Counters} from "@openzeppelin/contracts/utils/Counters.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {SToken} from "./SToken.sol";
 import {IPremiumCalculator} from "../../interfaces/IPremiumCalculator.sol";
-import {IReferenceLendingPools} from "../../interfaces/IReferenceLendingPools.sol";
+import {IReferenceLendingPools, LendingPoolStatus, ProtectionPurchaseParams} from "../../interfaces/IReferenceLendingPools.sol";
 import {IPoolCycleManager} from "../../interfaces/IPoolCycleManager.sol";
 import {IPool} from "../../interfaces/IPool.sol";
+import {IDefaultStateManager} from "../../interfaces/IDefaultStateManager.sol";
+
 import "../../libraries/AccruedPremiumCalculator.sol";
 import "../../libraries/Constants.sol";
 
@@ -25,17 +27,20 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /// @notice OpenZeppelin library for managing counters.
   using Counters for Counters.Counter;
   using SafeERC20 for IERC20Metadata;
+  using EnumerableSet for EnumerableSet.UintSet;
 
   /*** state variables ***/
-
-  /// @notice information about this pool
-  PoolInfo public poolInfo;
-
   /// @notice Reference to the PremiumPricing contract
-  IPremiumCalculator public immutable premiumCalculator;
+  IPremiumCalculator private immutable premiumCalculator;
 
   /// @notice Reference to the PoolCycleManager contract
-  IPoolCycleManager public immutable poolCycleManager;
+  IPoolCycleManager private immutable poolCycleManager;
+
+  /// @notice Reference to default state manager contract
+  IDefaultStateManager private immutable defaultStateManager;
+
+  /// @notice information about this pool
+  PoolInfo private poolInfo;
 
   /// @notice The total underlying amount of premium from protection buyers accumulated in the pool
   uint256 public totalPremium;
@@ -50,8 +55,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   uint256 public totalPremiumAccrued;
 
   /**
-   * @notice the total underlying amount in the pool backing the value of STokens.
-   * @notice This is the total capital deposited by sellers + accrued premiums from buyers - default payouts.
+   * @notice The total underlying amount in the pool backing the value of STokens.
+   * @notice This is the total capital deposited by sellers + accrued premiums from buyers - locked capital - default payouts.
    */
   uint256 public totalSTokenUnderlying;
 
@@ -61,17 +66,19 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /// @notice a buyer account id for each address
   mapping(address => uint256) public ownerAddressToBuyerAccountId;
 
-  // TODO: why do we need this?
   /// @notice The premium amount for each lending pool for each account id
   /// @dev a buyer account id to a lending pool id to the premium amount
   mapping(uint256 => mapping(address => uint256)) public buyerAccounts;
 
-  // TODO: why do we need this?
   /// @notice The total amount of premium for each lending pool
   mapping(address => uint256) public lendingPoolIdToPremiumTotal;
 
   /// @notice The array to track the loan protection info for all protection bought.
-  LoanProtectionInfo[] public loanProtectionInfos;
+  LoanProtectionInfo[] private loanProtectionInfos;
+
+  /// @notice The mapping to track the all loan protection bought for specific lending pool.
+  mapping(address => EnumerableSet.UintSet)
+    private lendingPoolToLoanProtectionInfoIndexSet;
 
   /// @notice The mapping to track pool cycle index at which actual withdrawal will happen to withdrawal details
   mapping(uint256 => WithdrawalCycleDetail) public withdrawalCycleDetails;
@@ -79,25 +86,45 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /*** modifiers ***/
 
   /**
-   * @notice Verifies that the status of the lending pool is ACTIVE,
+   * @notice Verifies that the status of the lending pool is ACTIVE and protection can be bought,
    *         otherwise reverts with the appropriate error message.
-   * @param _lendingPoolAddress The address of the underlying lending pool.
+   * @param _protectionPurchaseParams The protection purchase params such as lending pool address, protection amount, duration etc
    */
-  modifier whenLendingPoolIsActive(address _lendingPoolAddress) {
-    IReferenceLendingPools.LendingPoolStatus poolStatus = poolInfo
+  modifier canBuyProtection(
+    ProtectionPurchaseParams calldata _protectionPurchaseParams
+  ) {
+    LendingPoolStatus poolStatus = poolInfo
       .referenceLendingPools
-      .getLendingPoolStatus(_lendingPoolAddress);
+      .getLendingPoolStatus(_protectionPurchaseParams.lendingPoolAddress);
 
-    if (poolStatus == IReferenceLendingPools.LendingPoolStatus.NotSupported) {
-      revert LendingPoolNotSupported(_lendingPoolAddress);
+    if (poolStatus == LendingPoolStatus.NotSupported) {
+      revert LendingPoolNotSupported(
+        _protectionPurchaseParams.lendingPoolAddress
+      );
     }
 
-    if (poolStatus == IReferenceLendingPools.LendingPoolStatus.Expired) {
-      revert LendingPoolExpired(_lendingPoolAddress);
+    if (poolStatus == LendingPoolStatus.Late) {
+      revert LendingPoolHasLatePayment(
+        _protectionPurchaseParams.lendingPoolAddress
+      );
     }
 
-    if (poolStatus == IReferenceLendingPools.LendingPoolStatus.Defaulted) {
-      revert LendingPoolDefaulted(_lendingPoolAddress);
+    if (poolStatus == LendingPoolStatus.Expired) {
+      revert LendingPoolExpired(_protectionPurchaseParams.lendingPoolAddress);
+    }
+
+    if (poolStatus == LendingPoolStatus.Defaulted) {
+      revert LendingPoolDefaulted(_protectionPurchaseParams.lendingPoolAddress);
+    }
+
+    /// Verify that buyer can buy the protection
+    if (
+      !poolInfo.referenceLendingPools.canBuyProtection(
+        msg.sender,
+        _protectionPurchaseParams
+      )
+    ) {
+      revert ProtectionPurchaseNotAllowed(_protectionPurchaseParams);
     }
 
     _;
@@ -122,11 +149,18 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     _;
   }
 
+  modifier onlyDefaultStateManager() {
+    if (msg.sender != address(defaultStateManager))
+      revert OnlyDefaultStateManager(msg.sender);
+    _;
+  }
+
   /*** constructor ***/
   /**
    * @param _poolInfo The information about this pool.
    * @param _premiumCalculator an address of a premium calculator contract
    * @param _poolCycleManager an address of a pool cycle manager contract
+   * @param _defaultStateManager an address of a default state manager contract
    * @param _name a name of the sToken
    * @param _symbol a symbol of the sToken
    */
@@ -134,13 +168,17 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     PoolInfo memory _poolInfo,
     IPremiumCalculator _premiumCalculator,
     IPoolCycleManager _poolCycleManager,
+    IDefaultStateManager _defaultStateManager,
     string memory _name,
     string memory _symbol
   ) SToken(_name, _symbol) {
     poolInfo = _poolInfo;
     premiumCalculator = _premiumCalculator;
     poolCycleManager = _poolCycleManager;
+    defaultStateManager = _defaultStateManager;
+
     buyerAccountIdCounter.increment();
+
     emit PoolInitialized(
       _name,
       _symbol,
@@ -153,25 +191,15 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /// @inheritdoc IPool
   function buyProtection(
-    IReferenceLendingPools.ProtectionPurchaseParams
-      calldata _protectionPurchaseParams
+    ProtectionPurchaseParams calldata _protectionPurchaseParams
   )
     external
     override
     whenNotPaused
-    whenLendingPoolIsActive(_protectionPurchaseParams.lendingPoolAddress)
+    canBuyProtection(_protectionPurchaseParams)
     nonReentrant
   {
-    /// Step 1: Verify that buyer can buy the protection
-    if (
-      !poolInfo.referenceLendingPools.canBuyProtection(
-        msg.sender,
-        _protectionPurchaseParams
-      )
-    ) {
-      revert ProtectionPurchaseNotAllowed(_protectionPurchaseParams);
-    }
-
+    /// Step 1: Create a buyer account if not exists
     if (_noBuyerAccountExist() == true) {
       _createBuyerAccount();
     }
@@ -259,19 +287,29 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     /// Step 9: Add protection to the pool & emit an event
     loanProtectionInfos.push(
       LoanProtectionInfo({
+        buyer: msg.sender,
         protectionAmount: _protectionPurchaseParams.protectionAmount,
         protectionPremium: _premiumAmount,
         startTimestamp: block.timestamp,
         expirationTimestamp: _protectionPurchaseParams
           .protectionExpirationTimestamp,
         K: _k,
-        lambda: _lambda
+        lambda: _lambda,
+        lendingPool: _protectionPurchaseParams.lendingPoolAddress,
+        nftLpTokenId: _protectionPurchaseParams.nftLpTokenId
       })
     );
+
+    /// Track all loan protections for a lending pool to calculate
+    // the total locked amount for the lending pool, when/if pool is late for payment
+    lendingPoolToLoanProtectionInfoIndexSet[
+      _protectionPurchaseParams.lendingPoolAddress
+    ].add(loanProtectionInfos.length - 1);
 
     emit ProtectionBought(
       msg.sender,
       _protectionPurchaseParams.lendingPoolAddress,
+      _protectionPurchaseParams.protectionAmount,
       _premiumAmount
     );
   }
@@ -519,6 +557,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     /// Remove expired protections from the list
     for (uint256 i; i < _removalIndex; i++) {
       uint256 expiredProtectionIndex = _expiredProtections[i];
+      address _lendingPool = loanProtectionInfos[expiredProtectionIndex]
+        .lendingPool;
 
       /// move the last element to the expired protection index
       loanProtectionInfos[expiredProtectionIndex] = loanProtectionInfos[
@@ -527,10 +567,82 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
       /// remove the last element
       loanProtectionInfos.pop();
+
+      /// remove expired protection index from lendingPoolToLoanProtectionInfoIndexSet
+      lendingPoolToLoanProtectionInfoIndexSet[_lendingPool].remove(
+        expiredProtectionIndex
+      );
     }
 
     lastPremiumAccrualTimestamp = block.timestamp;
     emit PremiumAccrued(lastPremiumAccrualTimestamp, totalPremiumAccrued);
+  }
+
+  /// @inheritdoc IPool
+  function lockCapital(address _lendingPoolAddress)
+    external
+    override
+    onlyDefaultStateManager
+    returns (uint256 _lockedAmount, uint256 _snapshotId)
+  {
+    /// step 1: Capture protection pool's current investors by creating a snapshot of the token balance by using ERC20Snapshot in SToken
+    _snapshotId = _snapshot();
+
+    /// step 2: calculate total capital to be locked:
+    /// calculate remaining principal amount for each loan protection in the lending pool.
+    /// for each loan protection, lockedAmt = min(protectionAmt, remainingPrincipal)
+    /// total locked amount = sum of lockedAmt for all loan protections
+    uint256[]
+      memory _protectionIndexes = lendingPoolToLoanProtectionInfoIndexSet[
+        _lendingPoolAddress
+      ].values();
+
+    IReferenceLendingPools _referenceLendingPools = poolInfo
+      .referenceLendingPools;
+
+    uint256 length = _protectionIndexes.length;
+    for (uint256 i; i < length; ) {
+      LoanProtectionInfo storage _loanProtectionInfo = loanProtectionInfos[
+        _protectionIndexes[i]
+      ];
+      uint256 _remainingPrincipal = _referenceLendingPools
+        .calculateRemainingPrincipal(
+          _lendingPoolAddress,
+          _loanProtectionInfo.buyer,
+          _loanProtectionInfo.nftLpTokenId
+        );
+      uint256 _protectionAmount = _loanProtectionInfo.protectionAmount;
+      uint256 _lockedAmountPerLoan = _protectionAmount < _remainingPrincipal
+        ? _protectionAmount
+        : _remainingPrincipal;
+
+      _lockedAmount += _lockedAmountPerLoan;
+
+      unchecked {
+        ++i;
+      }
+    }
+
+    /// step 3: Update total locked & available capital in Pool
+    if (totalSTokenUnderlying < _lockedAmount) {
+      /// TODO: what happens if totalSTokenUnderlying < _lockedAmount?
+      _lockedAmount = totalSTokenUnderlying;
+      totalSTokenUnderlying = 0;
+    } else {
+      totalSTokenUnderlying -= _lockedAmount;
+    }
+  }
+
+  /// @inheritdoc IPool
+  function claimUnlockedCapital(address _receiver) external override {
+    /// Investors can claim their total share of released/unlocked capital across all lending pools
+    uint256 _claimableAmount = defaultStateManager
+      .calculateAndClaimUnlockedCapital(msg.sender);
+
+    if (_claimableAmount > 0) {
+      /// transfer the share of unlocked capital to the receiver
+      poolInfo.underlyingToken.safeTransfer(_receiver, _claimableAmount);
+    }
   }
 
   /** view functions */

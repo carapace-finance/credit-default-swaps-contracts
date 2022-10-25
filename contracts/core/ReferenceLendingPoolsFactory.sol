@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import "@openzeppelin/contracts/proxy/Clones.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-import {IReferenceLendingPools} from "../interfaces/IReferenceLendingPools.sol";
+import {IReferenceLendingPools, LendingProtocol} from "../interfaces/IReferenceLendingPools.sol";
 
 /**
  * @notice This factory contract creates a new {IReferenceLendingPools} instances using minimal proxy pattern.
@@ -33,9 +33,9 @@ contract ReferenceLendingPoolsFactory is Ownable {
    * @return _referenceLendingPools the address of the newly created {IReferenceLendingPools} instance
    */
   function createReferenceLendingPools(
-    address[] memory _lendingPools,
-    IReferenceLendingPools.LendingProtocol[] memory _lendingPoolProtocols,
-    uint256[] memory _protectionPurchaseLimitsInDays
+    address[] calldata _lendingPools,
+    LendingProtocol[] calldata _lendingPoolProtocols,
+    uint256[] calldata _protectionPurchaseLimitsInDays
   ) external onlyOwner returns (IReferenceLendingPools _referenceLendingPools) {
     /// create a clone of the reference lending pools implementation
     /// see https://docs.openzeppelin.com/contracts/4.x/api/proxy#Clones

@@ -2,30 +2,21 @@ import { BigNumber } from "@ethersproject/bignumber";
 import { expect } from "chai";
 import { Contract, Signer } from "ethers";
 import { ethers, network } from "hardhat";
-import { parseEther, formatEther } from "ethers/lib/utils";
-import {
-  CIRCLE_ACCOUNT_ADDRESS,
-  USDC_ADDRESS,
-  USDC_DECIMALS,
-  USDC_ABI
-} from "../utils/constants";
+import { parseEther } from "ethers/lib/utils";
 import { Pool, IPool } from "../../typechain-types/contracts/core/pool/Pool";
-import {
-  IReferenceLendingPools,
-  ReferenceLendingPools
-} from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
-import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";
-import {
-  PoolCycleManager,
-  IPoolCycleManager
-} from "../../typechain-types/contracts/core/PoolCycleManager";
+import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
+import { ProtectionPurchaseParamsStruct } from "../../typechain-types/contracts/interfaces/IReferenceLendingPools";
+import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
 import {
   getUnixTimestampAheadByDays,
-  getDaysInSeconds,
   getLatestBlockTimestamp,
-  moveForwardTime
+  moveForwardTimeByDays
 } from "../utils/time";
-import { parseUSDC } from "../utils/usdc";
+import { parseUSDC, getUsdcContract, impersonateCircle } from "../utils/usdc";
+import { ITranchedPool } from "../../typechain-types/contracts/external/goldfinch/ITranchedPool";
+import { payToLendingPool } from "../utils/goldfinch";
+import { DefaultStateManager } from "../../typechain-types/contracts/core/DefaultStateManager";
+import { poolInstance } from "../../utils/deploy";
 
 const testPool: Function = (
   deployer: Signer,
@@ -34,15 +25,13 @@ const testPool: Function = (
   seller: Signer,
   account4: Signer,
   pool: Pool,
-  goldfinchLendingPools: string[] // these lending pools have been already added to referenceLendingPools instance
+  referenceLendingPools: ReferenceLendingPools,
+  poolCycleManager: PoolCycleManager,
+  defaultStateManager: DefaultStateManager
 ) => {
   describe("Pool", () => {
     const PROTECTION_BUYER1_ADDRESS =
       "0x008c84421da5527f462886cec43d2717b686a7e4";
-
-    // Lending pool details: https://app.goldfinch.finance/pools/0xd09a57127bc40d680be7cb061c2a6629fe71abef
-    // Lending pool tokens: https://lark.market/?attributes%5BPool+Address%5D=0xd09a57127bc40d680be7cb061c2a6629fe71abef
-    const LENDING_POOL_ADDRESS = goldfinchLendingPools[1];
 
     const _newFloor: BigNumber = BigNumber.from(100);
     const _newCeiling: BigNumber = BigNumber.from(500);
@@ -53,12 +42,11 @@ const testPool: Function = (
     let ownerAddress: string;
     let USDC: Contract;
     let poolInfo: IPool.PoolInfoStructOutput;
-    let poolCycleManager: PoolCycleManager;
-    let premiumCalculator: PremiumCalculator;
-    let referenceLendingPools: ReferenceLendingPools;
     let before1stDepositSnapshotId: string;
+    let beforePoolCycleTestSnapshotId: string;
     let _protectionBuyer1: Signer;
     let circleAccount: Signer;
+    let lendingPoolAddress: string;
 
     const calculateTotalSellerDeposit = async () => {
       // seller deposit should total sToken underlying - premium accrued
@@ -114,12 +102,11 @@ const testPool: Function = (
       buyerAddress = await buyer.getAddress();
       ownerAddress = await owner.getAddress();
       account4Address = await account4.getAddress();
-      poolInfo = await pool.poolInfo();
-      USDC = await new Contract(USDC_ADDRESS, USDC_ABI, deployer);
+      poolInfo = await pool.getPoolInfo();
+      USDC = getUsdcContract(deployer);
+
       // Impersonate CIRCLE account and transfer some USDC to test accounts
-      circleAccount = await ethers.getImpersonatedSigner(
-        CIRCLE_ACCOUNT_ADDRESS
-      );
+      circleAccount = await impersonateCircle();
       USDC.connect(circleAccount).transfer(
         deployerAddress,
         parseUSDC("1000000")
@@ -127,23 +114,6 @@ const testPool: Function = (
       USDC.connect(circleAccount).transfer(ownerAddress, parseUSDC("20000"));
       USDC.connect(circleAccount).transfer(sellerAddress, parseUSDC("20000"));
       USDC.connect(circleAccount).transfer(account4Address, parseUSDC("20000"));
-
-      poolCycleManager = (await ethers.getContractAt(
-        "PoolCycleManager",
-        await pool.poolCycleManager()
-      )) as PoolCycleManager;
-      premiumCalculator = (await ethers.getContractAt(
-        "PremiumCalculator",
-        await pool.premiumCalculator()
-      )) as PremiumCalculator;
-      referenceLendingPools = (await ethers.getContractAt(
-        "ReferenceLendingPools",
-        poolInfo.referenceLendingPools
-      )) as ReferenceLendingPools;
-      expect(
-        (await poolCycleManager.getCurrentPoolCycle(poolInfo.poolId))
-          .currentCycleIndex
-      ).to.equal(0);
 
       // 420K principal for token 590
       _protectionBuyer1 = await ethers.getImpersonatedSigner(
@@ -153,6 +123,13 @@ const testPool: Function = (
         PROTECTION_BUYER1_ADDRESS,
         parseUSDC("1000000")
       );
+
+      // these lending pools have been already added to referenceLendingPools instance
+      // Lending pool details: https://app.goldfinch.finance/pools/0xd09a57127bc40d680be7cb061c2a6629fe71abef
+      // Lending pool tokens: https://lark.market/?attributes%5BPool+Address%5D=0xd09a57127bc40d680be7cb061c2a6629fe71abef
+      let goldfinchLendingPools: string[] =
+        await referenceLendingPools.getLendingPools();
+      lendingPoolAddress = goldfinchLendingPools[1];
     });
 
     describe("constructor", () => {
@@ -198,17 +175,12 @@ const testPool: Function = (
         );
       });
       it("...set the underlying token", async () => {
-        expect(poolInfo.underlyingToken.toString()).to.eq(USDC_ADDRESS);
+        expect(poolInfo.underlyingToken.toString()).to.eq(USDC.address);
       });
       it("...set the reference loans", async () => {
         expect(poolInfo.referenceLendingPools.toString()).to.eq(
           referenceLendingPools.address
         );
-      });
-      it("...set the premium pricing contract address", async () => {
-        const _premiumCalculatorAddress: string =
-          await pool.premiumCalculator();
-        expect(_premiumCalculatorAddress).to.eq(premiumCalculator.address);
       });
     });
 
@@ -236,7 +208,7 @@ const testPool: Function = (
 
     describe("...1st pool cycle", async () => {
       describe("buyProtection", () => {
-        let _purchaseParams: IReferenceLendingPools.ProtectionPurchaseParamsStruct;
+        let _purchaseParams: ProtectionPurchaseParamsStruct;
 
         it("...fails if the lending pool is not supported/added", async () => {
           const buyer = await ethers.getImpersonatedSigner(
@@ -264,7 +236,7 @@ const testPool: Function = (
         it("...fails if the pool contract is paused", async () => {
           await expect(
             pool.connect(_protectionBuyer1).buyProtection({
-              lendingPoolAddress: LENDING_POOL_ADDRESS,
+              lendingPoolAddress: lendingPoolAddress,
               nftLpTokenId: 583,
               protectionAmount: parseUSDC("101"),
               protectionExpirationTimestamp: await getUnixTimestampAheadByDays(
@@ -288,7 +260,7 @@ const testPool: Function = (
         it("...fail if USDC is not approved", async () => {
           await expect(
             pool.connect(_protectionBuyer1).buyProtection({
-              lendingPoolAddress: LENDING_POOL_ADDRESS,
+              lendingPoolAddress: lendingPoolAddress,
               nftLpTokenId: 590,
               protectionAmount: parseUSDC("101"),
               protectionExpirationTimestamp: await getUnixTimestampAheadByDays(
@@ -316,17 +288,58 @@ const testPool: Function = (
           expect(_allowanceAmount).to.eq(_approvedAmt);
         });
 
+        it("...fails when lending pool is not supported", async () => {
+          await expect(
+            pool.connect(_protectionBuyer1).buyProtection({
+              lendingPoolAddress: "0x759f097f3153f5d62ff1c2d82ba78b6350f223e3",
+              nftLpTokenId: 590,
+              protectionAmount: parseUSDC("101"),
+              protectionExpirationTimestamp: await getUnixTimestampAheadByDays(
+                10
+              )
+            })
+          ).to.be.revertedWith(
+            `LendingPoolNotSupported("0x759f097f3153f5d62FF1C2D82bA78B6350F223e3")`
+          );
+        });
+
+        it("...fails when buyer doesn't own lending NFT", async () => {
+          await expect(
+            pool.connect(_protectionBuyer1).buyProtection({
+              lendingPoolAddress: lendingPoolAddress,
+              nftLpTokenId: 591,
+              protectionAmount: parseUSDC("101"),
+              protectionExpirationTimestamp: await getUnixTimestampAheadByDays(
+                10
+              )
+            })
+          ).to.be.revertedWith("ProtectionPurchaseNotAllowed");
+        });
+
+        it("...fails when protection amount is higher than buyer's loan principal", async () => {
+          await expect(
+            pool.connect(_protectionBuyer1).buyProtection({
+              lendingPoolAddress: lendingPoolAddress,
+              nftLpTokenId: 590,
+              protectionAmount: parseUSDC("500000"),
+              protectionExpirationTimestamp: await getUnixTimestampAheadByDays(
+                10
+              )
+            })
+          ).to.be.revertedWith("ProtectionPurchaseNotAllowed");
+        });
+
         it("...create a new buyer account and buy protection", async () => {
           const _initialBuyerAccountId: BigNumber = BigNumber.from(1);
           const _initialPremiumAmountOfAccount: BigNumber = BigNumber.from(0);
           const _premiumTotalOfLendingPoolIdBefore: BigNumber =
-            await pool.lendingPoolIdToPremiumTotal(LENDING_POOL_ADDRESS);
+            await pool.lendingPoolIdToPremiumTotal(lendingPoolAddress);
           const _premiumTotalBefore: BigNumber = await pool.totalPremium();
           const _expectedPremiumAmount = parseUSDC("2418.902585");
 
           const _protectionAmount = parseUSDC("100000"); // 100,000 USDC
           _purchaseParams = {
-            lendingPoolAddress: LENDING_POOL_ADDRESS,
+            lendingPoolAddress: lendingPoolAddress,
             nftLpTokenId: 590,
             protectionAmount: _protectionAmount,
             protectionExpirationTimestamp: await getUnixTimestampAheadByDays(90)
@@ -341,17 +354,17 @@ const testPool: Function = (
             .to.emit(pool, "CoverageBought")
             .withArgs(
               PROTECTION_BUYER1_ADDRESS,
-              LENDING_POOL_ADDRESS,
+              lendingPoolAddress,
               _protectionAmount
             );
 
           const _premiumAmountOfAccountAfter: BigNumber =
             await pool.buyerAccounts(
               _initialBuyerAccountId,
-              LENDING_POOL_ADDRESS
+              lendingPoolAddress
             );
           const _premiumTotalOfLendingPoolIdAfter: BigNumber =
-            await pool.lendingPoolIdToPremiumTotal(LENDING_POOL_ADDRESS);
+            await pool.lendingPoolIdToPremiumTotal(lendingPoolAddress);
           const _premiumTotalAfter: BigNumber = await pool.totalPremium();
           expect(
             _premiumAmountOfAccountAfter.sub(_initialPremiumAmountOfAccount)
@@ -380,7 +393,7 @@ const testPool: Function = (
             parseUSDC("2500")
           );
           _purchaseParams = {
-            lendingPoolAddress: LENDING_POOL_ADDRESS,
+            lendingPoolAddress: lendingPoolAddress,
             nftLpTokenId: 590,
             protectionAmount: _protectionAmount,
             protectionExpirationTimestamp: await getUnixTimestampAheadByDays(30)
@@ -404,24 +417,15 @@ const testPool: Function = (
           "0x0000000000000000000000000000000000000000";
 
         it("...approve 0 USDC to be transferred by the Pool contract", async () => {
-          expect(
-            await USDC.approve(
-              pool.address,
-              BigNumber.from(0).mul(USDC_DECIMALS)
-            )
-          )
+          expect(await USDC.approve(pool.address, BigNumber.from(0)))
             .to.emit(USDC, "Approval")
-            .withArgs(
-              deployerAddress,
-              pool.address,
-              BigNumber.from(0).mul(USDC_DECIMALS)
-            );
+            .withArgs(deployerAddress, pool.address, BigNumber.from(0));
           const _allowanceAmount: number = await USDC.allowance(
             deployerAddress,
             pool.address
           );
           expect(_allowanceAmount.toString()).to.eq(
-            BigNumber.from(0).mul(USDC_DECIMALS).toString()
+            BigNumber.from(0).toString()
           );
         });
 
@@ -454,25 +458,15 @@ const testPool: Function = (
         });
 
         it("...approve 100000000 USDC to be transferred by the Pool contract", async () => {
-          expect(
-            await USDC.approve(
-              pool.address,
-              BigNumber.from(100000000).mul(USDC_DECIMALS)
-            )
-          )
+          const _approvalAmt = parseUSDC("100000000");
+          expect(await USDC.approve(pool.address, _approvalAmt))
             .to.emit(USDC, "Approval")
-            .withArgs(
-              deployerAddress,
-              pool.address,
-              BigNumber.from(100000000).mul(USDC_DECIMALS)
-            );
+            .withArgs(deployerAddress, pool.address, _approvalAmt);
           const _allowanceAmount: number = await USDC.allowance(
             deployerAddress,
             pool.address
           );
-          expect(_allowanceAmount.toString()).to.eq(
-            BigNumber.from(100000000).mul(USDC_DECIMALS).toString()
-          );
+          expect(_allowanceAmount).to.eq(_approvalAmt);
         });
 
         it("...fail if an SToken receiver is a zero address", async () => {
@@ -750,10 +744,10 @@ const testPool: Function = (
 
           const _protectionAmount = parseUSDC("20000");
           const _purchaseParams = {
-            lendingPoolAddress: LENDING_POOL_ADDRESS,
+            lendingPoolAddress: lendingPoolAddress,
             nftLpTokenId: 590,
             protectionAmount: _protectionAmount,
-            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(30)
+            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(20)
           };
 
           const _premiumPaid = parseUSDC("427.926831");
@@ -762,8 +756,8 @@ const testPool: Function = (
           expect(await pool.totalProtection()).to.eq(parseUSDC("120000")); // 120K
           expect(await pool.getAllProtections()).to.have.lengthOf(2);
 
-          // move forward time by 31 days
-          await moveForwardTime(getDaysInSeconds(31));
+          // move forward time by 21 days
+          await moveForwardTimeByDays(21);
 
           // 2nd protection should be expired and removed
           const _totalPremiumAccruedBefore = await pool.totalPremiumAccrued();
@@ -805,7 +799,7 @@ const testPool: Function = (
           // Add bunch of protections
           // buyer 1 has principal of 35K USDC with token id: 615
           await pool.connect(_buyer1).buyProtection({
-            lendingPoolAddress: LENDING_POOL_ADDRESS,
+            lendingPoolAddress: lendingPoolAddress,
             nftLpTokenId: 615,
             protectionAmount: parseUSDC("20000"),
             protectionExpirationTimestamp: await getUnixTimestampAheadByDays(10)
@@ -813,7 +807,7 @@ const testPool: Function = (
 
           // buyer 2 has principal of 63K USDC with token id: 579
           await pool.connect(_buyer2).buyProtection({
-            lendingPoolAddress: LENDING_POOL_ADDRESS,
+            lendingPoolAddress: lendingPoolAddress,
             nftLpTokenId: 579,
             protectionAmount: parseUSDC("30000"),
             protectionExpirationTimestamp: await getUnixTimestampAheadByDays(20)
@@ -821,7 +815,7 @@ const testPool: Function = (
 
           // buyer 3 has principal of 60K USDC with token id: 620
           await pool.connect(_buyer3).buyProtection({
-            lendingPoolAddress: LENDING_POOL_ADDRESS,
+            lendingPoolAddress: lendingPoolAddress,
             nftLpTokenId: 620,
             protectionAmount: parseUSDC("40000"),
             protectionExpirationTimestamp: await getUnixTimestampAheadByDays(30)
@@ -832,7 +826,7 @@ const testPool: Function = (
           expect(await pool.getAllProtections()).to.have.lengthOf(4);
 
           // move forward time by 21 days
-          await moveForwardTime(BigNumber.from(21 * 24 * 60 * 60));
+          await moveForwardTimeByDays(21);
 
           // 2nd & 3rd protections should be expired and removed
           await pool.accruePremium();
@@ -853,7 +847,7 @@ const testPool: Function = (
           for (let index = 0; index < 151; index++) {
             const tx = await pool.connect(buyer1).buyProtection(
               {
-                lendingPoolAddress: LENDING_POOL_ADDRESS,
+                lendingPoolAddress: lendingPoolAddress,
                 nftLpTokenId: 575,
                 protectionAmount: parseUSDC("10000"),
                 protectionExpirationTimestamp:
@@ -898,7 +892,7 @@ const testPool: Function = (
           for (let index = 0; index < 150; index++) {
             await pool.connect(buyer1).buyProtection(
               {
-                lendingPoolAddress: LENDING_POOL_ADDRESS,
+                lendingPoolAddress: lendingPoolAddress,
                 nftLpTokenId: 575,
                 protectionAmount: parseUSDC("10000"),
                 protectionExpirationTimestamp:
@@ -938,7 +932,7 @@ const testPool: Function = (
           // Buyer 1 buys protection of 10K USDC, so approve premium to be paid
           transferAndApproveUsdc(_protectionBuyer1, parseUSDC("500"));
           await pool.connect(_protectionBuyer1).buyProtection({
-            lendingPoolAddress: LENDING_POOL_ADDRESS,
+            lendingPoolAddress: lendingPoolAddress,
             // see: https://lark.market/tokenDetail?tokenId=590
             nftLpTokenId: 590, // this token has 420K principal for buyer 1
             protectionAmount: parseUSDC("10000"),
@@ -955,6 +949,11 @@ const testPool: Function = (
 
       describe("...before 1st pool cycle is locked", async () => {
         it("...can create withdrawal requests for next cycle", async () => {
+          beforePoolCycleTestSnapshotId = await network.provider.send(
+            "evm_snapshot",
+            []
+          );
+
           // create withdrawal requests before moving 1st cycle to locked state
           // Seller1: deposit 2000 USDC & request withdrawal of 1000 sTokens
           const _depositAmount1 = parseUSDC("2000");
@@ -985,8 +984,8 @@ const testPool: Function = (
 
       describe("...1st pool cycle is locked", async () => {
         before(async () => {
-          // Move pool cycle(10 days open period, 30 days total duration) to locked state
-          await moveForwardTime(getDaysInSeconds(11));
+          // Move pool cycle past 30 days (10 days open period, 30 days total duration) to locked state
+          await moveForwardTimeByDays(11);
         });
 
         it("...pool cycle should be in locked state", async () => {
@@ -1016,7 +1015,7 @@ const testPool: Function = (
       describe("...withdraw with withdrawal percent 1 (more total sToken underlying available than requested)", async () => {
         before(async () => {
           // Move pool cycle(10 days open period, 30 days total duration) to open state (next pool cycle)
-          await moveForwardTime(getDaysInSeconds(20));
+          await moveForwardTimeByDays(20);
         });
 
         it("...pool cycle should be in open state", async () => {
@@ -1146,7 +1145,7 @@ const testPool: Function = (
       describe("...2nd pool cycle is in withdrawal phase 2", async () => {
         before(async () => {
           // Move 2nd pool cycle(10 days open period, 30 days total duration) to locked state
-          await moveForwardTime(getDaysInSeconds(6));
+          await moveForwardTimeByDays(6);
         });
 
         it("...should be in withdrawal phase II", async () => {
@@ -1195,7 +1194,7 @@ const testPool: Function = (
       describe("...2nd pool cycle is locked", async () => {
         before(async () => {
           // Move 2nd pool cycle(10 days open period, 30 days total duration) to locked state
-          await moveForwardTime(getDaysInSeconds(5));
+          await moveForwardTimeByDays(5);
         });
 
         it("...pool cycle should be in locked state", async () => {
@@ -1222,11 +1221,11 @@ const testPool: Function = (
 
     describe("...3rd pool cycle", async () => {
       const currentPoolCycleIndex = 2;
-      const withdrawalPercentScaled = parseEther("0.592654410164652266");
+      const withdrawalPercentScaled = parseEther("0.592654409820269768");
       describe("...withdraw with withdrawal percent < 1 (less total sToken underlying available than requested)", async () => {
         before(async () => {
           // Move pool cycle(10 days open period, 30 days total duration) to open state (next pool cycle)
-          await moveForwardTime(getDaysInSeconds(20));
+          await moveForwardTimeByDays(20);
         });
 
         it("...pool cycle should be in open state", async () => {
@@ -1271,7 +1270,7 @@ const testPool: Function = (
 
         it("...is successful for 1st seller when withdrawal amount is allowed", async () => {
           // Seller has requested 1000 sTokens in 2nd cycle, but max allowed is 592.xx sTokens
-          const withdrawalAmt = parseEther("592.654410164652266"); // 0.5926(withdrawalPercent) * 1000(requestedAmount)
+          const withdrawalAmt = parseEther("592.65"); // 0.5926(withdrawalPercent) * 1000(requestedAmount)
           await verifyWithdrawal(seller, withdrawalAmt);
           const withdrawalRequest = await pool
             .connect(seller)
@@ -1279,7 +1278,9 @@ const testPool: Function = (
 
           // phase1STokenAmountCalculated flag should be set to true for seller's request
           expect(withdrawalRequest.phaseOneSTokenAmountCalculated).to.eq(true);
-          expect(withdrawalRequest.remainingPhaseOneSTokenAmount).to.eq(0);
+          expect(withdrawalRequest.remainingPhaseOneSTokenAmount).to.be.lt(
+            parseEther("0.35")
+          );
 
           // withdrawal percent is 0.5925...
           expect(
@@ -1292,9 +1293,7 @@ const testPool: Function = (
           const withdrawalAmt = parseEther("1");
           await expect(
             pool.connect(seller).withdraw(withdrawalAmt, sellerAddress)
-          ).to.be.revertedWith(
-            `WithdrawalHigherThanAllowed("${sellerAddress}", ${withdrawalAmt.toString()}, 0)`
-          );
+          ).to.be.revertedWith(`WithdrawalHigherThanAllowed`);
         });
 
         it("...is successful for 2nd seller when withdrawal amount is less than allowed", async () => {
@@ -1329,8 +1328,7 @@ const testPool: Function = (
 
       describe("...3rd pool cycle is in withdrawal phase 2", async () => {
         before(async () => {
-          // Move 3rd pool cycle(10 days open period, 30 days total duration) to locked state
-          await moveForwardTime(getDaysInSeconds(6));
+          await moveForwardTimeByDays(6);
         });
 
         it("...should be in withdrawal phase II", async () => {
@@ -1352,7 +1350,7 @@ const testPool: Function = (
           ).sTokenAmount;
           expect(remainingRequestedSTokens)
             .to.be.gt(parseEther("407.34"))
-            .and.lt(parseEther("407.35"));
+            .and.lt(parseEther("407.36"));
           // withdraw should be fine for remaining sTokens
           await verifyWithdrawal(seller, remainingRequestedSTokens);
         });
@@ -1418,6 +1416,155 @@ const testPool: Function = (
           );
         });
       });
+    });
+
+    describe("buyProtection failures with time restrictions", async () => {
+      it("...fails when lending pool is late for payment", async () => {
+        // time has moved forward by more than 30 days, so lending pool is late for payment
+        await expect(
+          pool.connect(_protectionBuyer1).buyProtection({
+            lendingPoolAddress: lendingPoolAddress,
+            nftLpTokenId: 590,
+            protectionAmount: parseUSDC("101"),
+            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(10)
+          })
+        ).to.be.revertedWith(
+          `LendingPoolHasLatePayment("0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf")`
+        );
+      });
+    });
+
+    describe("claimUnlockedCapital", async () => {
+      let lendingPool: ITranchedPool;
+      let _totalSTokenUnderlying: BigNumber;
+
+      const getLatestLockedCapital = async () => {
+        return (
+          await defaultStateManager.getLockedCapitals(
+            poolInstance.address,
+            lendingPoolAddress
+          )
+        )[0];
+      };
+
+      async function claimAndVerifyUnlockedCapital(
+        seller: Signer,
+        success: boolean
+      ): Promise<BigNumber> {
+        const _address = await seller.getAddress();
+        const _expectedBalance = (await poolInstance.balanceOf(_address))
+          .mul(_totalSTokenUnderlying)
+          .div(await poolInstance.totalSupply());
+
+        const _balanceBefore = await USDC.balanceOf(_address);
+        await pool.connect(seller).claimUnlockedCapital(_address);
+        const _balanceAfter = await USDC.balanceOf(_address);
+
+        const _actualBalance = _balanceAfter.sub(_balanceBefore);
+        if (success) {
+          expect(_actualBalance).to.eq(_expectedBalance);
+        }
+
+        return _actualBalance;
+      }
+
+      before(async () => {
+        lendingPool = (await ethers.getContractAt(
+          "ITranchedPool",
+          lendingPoolAddress
+        )) as ITranchedPool;
+
+        _totalSTokenUnderlying = await poolInstance.totalSTokenUnderlying();
+      });
+
+      it("...should have locked capital after missing a payment", async () => {
+        // time has moved forward by more than 30 days, so lending pool is late for payment
+        // and state should be transitioned to "Late" and capital should be locked
+        await expect(defaultStateManager.assessStates())
+          .to.emit(defaultStateManager, "PoolStatesAssessed")
+          .to.emit(defaultStateManager, "LendingPoolLocked");
+
+        // verify that lending pool capital is locked
+        const _lockedCapital = await getLatestLockedCapital();
+        expect(_lockedCapital.locked).to.be.true;
+
+        // verify that locked capital is total underlying capital
+        expect(_lockedCapital.amount).to.be.eq(_totalSTokenUnderlying);
+      });
+
+      it("...should have unlocked capital after payment", async () => {
+        await payToLendingPool(
+          lendingPool,
+          "1000000",
+          getUsdcContract(deployer)
+        );
+        await expect(defaultStateManager.assessStates())
+          .to.emit(defaultStateManager, "PoolStatesAssessed")
+          .to.emit(defaultStateManager, "LendingPoolUnlocked");
+
+        // verify that lending pool capital is unlocked
+        const _lockedCapital = await getLatestLockedCapital();
+        expect(_lockedCapital.locked).to.be.false;
+
+        // verify that unlocked capital is total underlying capital
+        expect(_lockedCapital.amount).to.be.eq(_totalSTokenUnderlying);
+      });
+
+      it("...deployer should  NOT be able to claim", async () => {
+        expect(await claimAndVerifyUnlockedCapital(deployer, false)).to.be.eq(
+          0
+        );
+      });
+
+      it("...seller should be  able to claim his share of unlocked capital from pool 1", async () => {
+        expect(await claimAndVerifyUnlockedCapital(seller, true)).to.be.gt(0);
+      });
+
+      it("...seller should  NOT be able to claim again", async () => {
+        expect(await claimAndVerifyUnlockedCapital(seller, false)).to.be.eq(0);
+      });
+
+      it("...owner should be  able to claim his share of unlocked capital from pool 1", async () => {
+        expect(await claimAndVerifyUnlockedCapital(owner, true)).to.be.gt(0);
+      });
+
+      it("...owner should  NOT be able to claim again", async () => {
+        expect(await claimAndVerifyUnlockedCapital(owner, false)).to.be.eq(0);
+      });
+
+      it("...account 4 should be  able to claim his share of unlocked capital from pool 1", async () => {
+        expect(await claimAndVerifyUnlockedCapital(account4, true)).to.be.gt(0);
+      });
+
+      it("...account 4 should  NOT be able to claim again", async () => {
+        expect(await claimAndVerifyUnlockedCapital(account4, false)).to.be.eq(
+          0
+        );
+      });
+    });
+
+    describe("buyProtection fails because of protection purchase limit", async () => {
+      it("...should succeed", async () => {
+        // lending pool payment is current, so buyProtection should NOT fail for late payment,
+        // but it should fail because of protection purchase limit: past 25 days
+        await expect(
+          pool.connect(_protectionBuyer1).buyProtection({
+            lendingPoolAddress: lendingPoolAddress,
+            nftLpTokenId: 590,
+            protectionAmount: parseUSDC("101"),
+            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(10)
+          })
+        ).to.be.revertedWith("ProtectionPurchaseNotAllowed");
+      });
+    });
+
+    after(async () => {
+      // Revert the state of the pool before pool cycle tests in "before 1st pool cycle is locked"
+      expect(
+        await network.provider.send("evm_revert", [
+          beforePoolCycleTestSnapshotId
+        ])
+      ).to.be.eq(true);
     });
   });
 };

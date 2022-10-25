@@ -29,11 +29,19 @@ const getUnixTimestampAheadByDays: Function = async (
 
 /**
  * Moves forward time by specified number of seconds and mines the block
- * @param _duration in seconds
+ * @param _seconds in seconds
  */
-const moveForwardTime: Function = async (_duration: BigNumber) => {
-  await network.provider.send("evm_increaseTime", [_duration.toNumber()]);
+const moveForwardTime: Function = async (_seconds: BigNumber) => {
+  await network.provider.send("evm_increaseTime", [_seconds.toNumber()]);
   await network.provider.send("evm_mine", []);
+};
+
+/**
+ * Moves forward time by specified number of days and mines the block
+ * @param _days in seconds
+ */
+const moveForwardTimeByDays: Function = async (_days: number) => {
+  await moveForwardTime(getDaysInSeconds(_days));
 };
 
 const getDaysInSeconds: Function = (days: number): BigNumber => {
@@ -49,5 +57,6 @@ export {
   getUnixTimestampAheadByDays,
   moveForwardTime,
   getDaysInSeconds,
-  getLatestBlockTimestamp
+  getLatestBlockTimestamp,
+  moveForwardTimeByDays
 };

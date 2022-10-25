@@ -3,13 +3,14 @@ import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { parseEther } from "ethers/lib/utils";
 import { expect } from "chai";
 import { Signer } from "ethers";
-import { USDC_ADDRESS } from "../utils/constants";
-import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";
-import { PoolFactory } from "../../typechain-types/contracts/core/PoolFactory";
-import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
+import { USDC_ADDRESS, ZERO_ADDRESS } from "../utils/constants";
 import { ethers } from "hardhat";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
 import { IPool, Pool } from "../../typechain-types/contracts/core/pool/Pool";
+import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";
+import { PoolFactory } from "../../typechain-types/contracts/core/PoolFactory";
+import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
+import { DefaultStateManager } from "../../typechain-types/contracts/core/DefaultStateManager";
 import { parseUSDC } from "../utils/usdc";
 import { getLatestBlockTimestamp } from "../utils/time";
 
@@ -22,16 +23,22 @@ const testPoolFactory: Function = (
 ) => {
   describe("PoolFactory", () => {
     let poolCycleManager: PoolCycleManager;
+    let defaultStateManager: DefaultStateManager;
+
     before(async () => {
       poolCycleManager = (await ethers.getContractAt(
         "PoolCycleManager",
-        await poolFactory.poolCycleManager()
+        await poolFactory.getPoolCycleManager()
       )) as PoolCycleManager;
+
+      defaultStateManager = (await ethers.getContractAt(
+        "DefaultStateManager",
+        await poolFactory.getDefaultStateManager()
+      )) as DefaultStateManager;
     });
+
     describe("createPool", async () => {
-      const _secondPoolFirstTrancheSalt: string = "0x".concat(
-        process.env.SECOND_POOL_SALT
-      );
+      const _secondPoolSalt: string = "0x".concat(process.env.SECOND_POOL_SALT);
       const poolCycleParams: IPool.PoolCycleParamsStruct = {
         openCycleDuration: BigNumber.from(10 * 86400), // 10 days
         cycleDuration: BigNumber.from(30 * 86400) // 30 days
@@ -57,7 +64,7 @@ const testPoolFactory: Function = (
           poolFactory
             .connect(account1)
             .createPool(
-              _secondPoolFirstTrancheSalt,
+              _secondPoolSalt,
               _poolParams,
               USDC_ADDRESS,
               referenceLendingPools.address,
@@ -70,14 +77,13 @@ const testPoolFactory: Function = (
       });
 
       it("...the poolId 0 should be empty", async () => {
-        expect(await poolFactory.poolIdToPoolAddress(0)).to.equal(
-          "0x0000000000000000000000000000000000000000"
-        );
+        expect(await poolFactory.getPoolAddress(0)).to.equal(ZERO_ADDRESS);
       });
 
       it("...should have correct pool id counter", async () => {
         // 1st pool is already created by deploy script
-        expect(await poolFactory.poolIdCounter()).equal(2);
+        expect(await poolFactory.getPoolAddress(1)).to.not.equal(ZERO_ADDRESS);
+        expect(await poolFactory.getPoolAddress(2)).to.equal(ZERO_ADDRESS);
       });
 
       it("...should have started a new pool cycle for 1st pool created", async () => {
@@ -96,7 +102,7 @@ const testPoolFactory: Function = (
 
         await expect(
           poolFactory.createPool(
-            _secondPoolFirstTrancheSalt,
+            _secondPoolSalt,
             _poolParams,
             USDC_ADDRESS,
             referenceLendingPools.address,
@@ -123,7 +129,8 @@ const testPoolFactory: Function = (
             expectedCycleStartTimestamp,
             poolCycleParams.openCycleDuration,
             poolCycleParams.cycleDuration
-          );
+          )
+          .emit(defaultStateManager, "PoolRegistered");
       });
 
       it("...should start new pool cycle for the second pool", async () => {
@@ -140,7 +147,8 @@ const testPoolFactory: Function = (
       });
 
       it("...should increment the pool id counter", async () => {
-        expect(await poolFactory.poolIdCounter()).equal(3);
+        expect(await poolFactory.getPoolAddress(2)).to.not.equal(ZERO_ADDRESS);
+        expect(await poolFactory.getPoolAddress(3)).to.equal(ZERO_ADDRESS);
       });
 
       it("...should transfer pool's ownership to poolFactory's owner", async () => {
@@ -149,7 +157,7 @@ const testPoolFactory: Function = (
           .to.emit(poolFactory, "OwnershipTransferred")
           .withArgs(poolFactory.address, deployerAddress);
 
-        const secondPoolAddress: string = await poolFactory.poolIdToPoolAddress(
+        const secondPoolAddress: string = await poolFactory.getPoolAddress(
           _secondPoolId
         );
         const secondPool: Pool = (await ethers.getContractAt(

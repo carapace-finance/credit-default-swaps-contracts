@@ -9,6 +9,7 @@ import "@primitivefi/hardhat-dodoc";
 import "dotenv/config";
 import "hardhat-contract-sizer";
 import "hardhat-gas-reporter";
+import "hardhat-storage-layout";
 
 const config: HardhatUserConfig = {
   defaultNetwork: "hardhat",

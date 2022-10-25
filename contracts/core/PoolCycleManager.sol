@@ -9,13 +9,8 @@ import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
  * @notice Contract to manage the current cycle of various pools.
  */
 contract PoolCycleManager is IPoolCycleManager {
-  /*** errors ***/
-  error NotPoolFactory(address msgSender);
-  error PoolAlreadyRegistered(uint256 poolId);
-  error InvalidCycleDuration(uint256 cycleDuration);
-
   /*** state variables ***/
-  address public poolFactoryAddress;
+  address public immutable poolFactoryAddress;
 
   /// @notice tracks the current cycle of all pools in the system.
   mapping(uint256 => PoolCycle) public poolCycles;

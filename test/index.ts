@@ -8,6 +8,7 @@ import { testRiskFactorCalculator } from "./contracts/RiskFactorCalculator.test"
 import { testGoldfinchV2Adapter } from "./contracts/GoldfinchV2Adapter.test";
 import { testReferenceLendingPools } from "./contracts/ReferenceLendingPools.test";
 import { testReferenceLendingPoolsFactory } from "./contracts/ReferenceLendingPoolsFactory.test";
+import { testDefaultStateManager } from "./contracts/DefaultStateManager.test";
 
 import {
   deployer,
@@ -26,9 +27,13 @@ import {
   goldfinchV2AdapterInstance,
   referenceLendingPoolsFactoryInstance,
   referenceLendingPoolsImplementation,
+  defaultStateManagerInstance,
   GOLDFINCH_LENDING_POOLS,
-  getReferenceLendingPoolsInstanceFromTx
+  getReferenceLendingPoolsInstanceFromTx,
+  getPoolInstanceFromTx
 } from "../utils/deploy";
+import { ethers } from "hardhat";
+import { PoolCycleManager } from "../typechain-types/contracts/core/PoolCycleManager";
 
 describe("start testing", () => {
   before("deploy contracts", async () => {
@@ -72,24 +77,6 @@ describe("start testing", () => {
       );
     });
 
-    it("run the Pool test", async () => {
-      testPool(
-        deployer,
-        account1,
-        account2,
-        account3,
-        account4,
-        poolInstance,
-        GOLDFINCH_LENDING_POOLS
-      );
-    });
-
-    // Run this spec last because it moves time forward a lot and that impacts the pool tests
-    it("run the PoolCycleManager test", async () => {
-      testPoolCycleManager(deployer, account1, poolCycleManagerInstance);
-    });
-
-    // This spec also moves time forward, so keep it last
     it("Run ReferenceLendingPools test", async () => {
       testReferenceLendingPools(
         deployer,
@@ -99,6 +86,42 @@ describe("start testing", () => {
         referenceLendingPoolsFactoryInstance,
         GOLDFINCH_LENDING_POOLS
       );
+    });
+
+    it("run the Pool test", async () => {
+      const poolCycleManager = (await ethers.getContractAt(
+        "PoolCycleManager",
+        await poolFactoryInstance.getPoolCycleManager()
+      )) as PoolCycleManager;
+
+      testPool(
+        deployer,
+        account1,
+        account2,
+        account3,
+        account4,
+        poolInstance,
+        referenceLendingPoolsInstance,
+        poolCycleManager,
+        defaultStateManagerInstance
+      );
+    });
+
+    it("run DefaultStateManager test", async () => {
+      testDefaultStateManager(
+        deployer,
+        account1,
+        account3,
+        defaultStateManagerInstance,
+        poolFactoryInstance,
+        poolInstance,
+        GOLDFINCH_LENDING_POOLS
+      );
+    });
+
+    // Run this spec last because it moves time forward a lot and that impacts the pool tests
+    it("run the PoolCycleManager test", async () => {
+      testPoolCycleManager(deployer, account1, poolCycleManagerInstance);
     });
   });
 });

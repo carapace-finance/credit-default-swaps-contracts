@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
-import {IReferenceLendingPools} from "../../interfaces/IReferenceLendingPools.sol";
+import {IReferenceLendingPools, LendingPoolStatus, LendingProtocol, ProtectionPurchaseParams, ReferenceLendingPoolInfo} from "../../interfaces/IReferenceLendingPools.sol";
 import {ILendingProtocolAdapter} from "../../interfaces/ILendingProtocolAdapter.sol";
 import {GoldfinchV2Adapter} from "../../adapters/GoldfinchV2Adapter.sol";
 import "../../libraries/Constants.sol";
@@ -23,6 +23,9 @@ contract ReferenceLendingPools is
 
   /// @notice the mapping of the lending pool address to the lending pool info
   mapping(address => ReferenceLendingPoolInfo) public referenceLendingPools;
+
+  /// @notice an array of all the added/supported lending pools in this basket
+  address[] private lendingPools;
 
   /// @notice the mapping of the lending pool protocol to the lending protocol adapter
   /// i.e GoldfinchV2 => GoldfinchV2Adapter
@@ -47,10 +50,10 @@ contract ReferenceLendingPools is
   /// @inheritdoc IReferenceLendingPools
   function initialize(
     address _owner,
-    address[] memory _lendingPools,
-    LendingProtocol[] memory _lendingPoolProtocols,
-    uint256[] memory _protectionPurchaseLimitsInDays
-  ) public override initializer {
+    address[] calldata _lendingPools,
+    LendingProtocol[] calldata _lendingPoolProtocols,
+    uint256[] calldata _protectionPurchaseLimitsInDays
+  ) external override initializer {
     if (
       _lendingPools.length != _lendingPoolProtocols.length ||
       _lendingPools.length != _protectionPurchaseLimitsInDays.length
@@ -68,12 +71,16 @@ contract ReferenceLendingPools is
 
     _transferOwnership(_owner);
 
-    for (uint256 i; i < _lendingPools.length; i++) {
+    uint256 length = _lendingPools.length;
+    for (uint256 i; i < length; ) {
       _addReferenceLendingPool(
         _lendingPools[i],
         _lendingPoolProtocols[i],
         _protectionPurchaseLimitsInDays[i]
       );
+      unchecked {
+        ++i;
+      }
     }
   }
 
@@ -102,11 +109,16 @@ contract ReferenceLendingPools is
   /** view functions */
 
   /// @inheritdoc IReferenceLendingPools
+  function getLendingPools() public view override returns (address[] memory) {
+    return lendingPools;
+  }
+
+  /// @inheritdoc IReferenceLendingPools
   function getLendingPoolStatus(address _lendingPoolAddress)
     public
     view
     override
-    returns (LendingPoolStatus poolStatus)
+    returns (LendingPoolStatus)
   {
     if (!_isReferenceLendingPoolAdded(_lendingPoolAddress)) {
       return LendingPoolStatus.NotSupported;
@@ -124,15 +136,19 @@ contract ReferenceLendingPools is
       return LendingPoolStatus.Expired;
     }
 
+    if (_adapter.isLendingPoolLate(_lendingPoolAddress)) {
+      return LendingPoolStatus.Late;
+    }
+
     return LendingPoolStatus.Active;
   }
 
   /// @inheritdoc IReferenceLendingPools
   function canBuyProtection(
     address _buyer,
-    ProtectionPurchaseParams memory _purchaseParams
+    ProtectionPurchaseParams calldata _purchaseParams
   )
-    public
+    external
     view
     override
     whenLendingPoolSupported(_purchaseParams.lendingPoolAddress)
@@ -169,6 +185,47 @@ contract ReferenceLendingPools is
         .calculateProtectionBuyerAPR(_lendingPoolAddress);
   }
 
+  /// @inheritdoc IReferenceLendingPools
+  function assessState()
+    public
+    view
+    override
+    returns (
+      address[] memory _lendingPools,
+      LendingPoolStatus[] memory _statues
+    )
+  {
+    uint256 length = lendingPools.length;
+    _lendingPools = new address[](length);
+    _statues = new LendingPoolStatus[](length);
+    for (uint256 i; i < length; ) {
+      _lendingPools[i] = lendingPools[i];
+      _statues[i] = getLendingPoolStatus(lendingPools[i]);
+      unchecked {
+        ++i;
+      }
+    }
+  }
+
+  /// @inheritdoc IReferenceLendingPools
+  function calculateRemainingPrincipal(
+    address _lendingPool,
+    address _lender,
+    uint256 _nftLpTokenId
+  )
+    public
+    view
+    override
+    whenLendingPoolSupported(_lendingPool)
+    returns (uint256)
+  {
+    return
+      _getLendingProtocolAdapter(_lendingPool).calculateRemainingPrincipal(
+        _lender,
+        _nftLpTokenId
+      );
+  }
+
   /** internal functions */
 
   /**
@@ -191,11 +248,13 @@ contract ReferenceLendingPools is
     uint256 _protectionPurchaseLimitTimestamp = _addedTimestamp +
       (_protectionPurchaseLimitInDays * Constants.SECONDS_IN_DAY_UINT);
 
+    /// add the underlying lending pool to this basket
     referenceLendingPools[_lendingPoolAddress] = ReferenceLendingPoolInfo({
       protocol: _lendingPoolProtocol,
       addedTimestamp: _addedTimestamp,
       protectionPurchaseLimitTimestamp: _protectionPurchaseLimitTimestamp
     });
+    lendingPools.push(_lendingPoolAddress);
 
     /// Create underlying protocol adapter if it doesn't exist
     if (
@@ -243,7 +302,7 @@ contract ReferenceLendingPools is
     internal
     returns (ILendingProtocolAdapter)
   {
-    if (protocol == IReferenceLendingPools.LendingProtocol.GoldfinchV2) {
+    if (protocol == LendingProtocol.GoldfinchV2) {
       return new GoldfinchV2Adapter();
     } else {
       revert LendingProtocolNotSupported(protocol);

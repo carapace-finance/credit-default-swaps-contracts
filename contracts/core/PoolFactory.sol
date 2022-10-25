@@ -8,14 +8,34 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {IPool} from "../interfaces/IPool.sol";
 import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools} from "../interfaces/IReferenceLendingPools.sol";
+import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
+import {IDefaultStateManager} from "../interfaces/IDefaultStateManager.sol";
 import {PoolCycleManager} from "./PoolCycleManager.sol";
+import {DefaultStateManager} from "./DefaultStateManager.sol";
 import {Pool} from "./pool/Pool.sol";
 
-/// @notice PoolFactory creates a new pool and keeps track of them.
+/**
+ * @notice PoolFactory creates a new pool and keeps track of them.
+ * @author Carapace Finance
+ */
 contract PoolFactory is Ownable {
   /*** libraries ***/
   /// @notice OpenZeppelin library for managing counters.
   using Counters for Counters.Counter;
+
+  /*** state variables ***/
+
+  /// @notice pool id counter
+  Counters.Counter private poolIdCounter;
+
+  /// @notice a pool id for each pool address
+  mapping(uint256 => address) private poolIdToPoolAddress;
+
+  /// @notice reference to the pool cycle manager
+  IPoolCycleManager private immutable poolCycleManager;
+
+  /// @notice reference to the default state manager
+  IDefaultStateManager private immutable defaultStateManager;
 
   /*** events ***/
 
@@ -30,24 +50,15 @@ contract PoolFactory is Ownable {
     IPremiumCalculator premiumCalculator
   );
 
-  /*** variables ***/
-  /// @notice reference to the pool cycle manager
-  PoolCycleManager public poolCycleManager;
-
-  /// @notice pool id counter
-  Counters.Counter public poolIdCounter;
-
-  /// @notice a pool id for each pool address
-  mapping(uint256 => address) public poolIdToPoolAddress;
-
   /*** constructor ***/
   /**
    * @dev poolIdCounter starts in 1 for consistency
    */
   constructor() {
-    poolIdCounter.increment();
-
     poolCycleManager = new PoolCycleManager();
+    defaultStateManager = new DefaultStateManager();
+
+    poolIdCounter.increment();
   }
 
   /*** state-changing functions ***/
@@ -62,13 +73,13 @@ contract PoolFactory is Ownable {
    */
   function createPool(
     bytes32 _salt,
-    IPool.PoolParams memory _poolParameters,
+    IPool.PoolParams calldata _poolParameters,
     IERC20Metadata _underlyingToken,
     IReferenceLendingPools _referenceLendingPools,
     IPremiumCalculator _premiumCalculator,
-    string memory _name,
-    string memory _symbol
-  ) public onlyOwner returns (address) {
+    string calldata _name,
+    string calldata _symbol
+  ) external onlyOwner returns (address) {
     uint256 _poolId = poolIdCounter.current();
     Pool pool = new Pool{salt: _salt}(
       IPool.PoolInfo({
@@ -79,6 +90,7 @@ contract PoolFactory is Ownable {
       }),
       _premiumCalculator,
       poolCycleManager,
+      defaultStateManager,
       _name,
       _symbol
     );
@@ -94,6 +106,9 @@ contract PoolFactory is Ownable {
       _poolParameters.poolCycleParams.cycleDuration
     );
 
+    /// register newly created pool to the default state manager
+    defaultStateManager.registerPool(pool);
+
     emit PoolCreated(
       _poolId,
       _poolAddress,
@@ -108,5 +123,26 @@ contract PoolFactory is Ownable {
     pool.transferOwnership(owner());
 
     return _poolAddress;
+  }
+
+  /*** view functions ***/
+
+  function getPoolCycleManager() external view returns (IPoolCycleManager) {
+    return poolCycleManager;
+  }
+
+  function getDefaultStateManager()
+    external
+    view
+    returns (IDefaultStateManager)
+  {
+    return defaultStateManager;
+  }
+
+  /**
+   * @notice Returns the pool address for a given pool id.
+   */
+  function getPoolAddress(uint256 _poolId) external view returns (address) {
+    return poolIdToPoolAddress[_poolId];
   }
 }
