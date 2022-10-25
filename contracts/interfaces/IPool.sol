@@ -3,8 +3,11 @@ pragma solidity ^0.8.13;
 
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {IReferenceLendingPools, ProtectionPurchaseParams} from "./IReferenceLendingPools.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 abstract contract IPool {
+  using EnumerableSet for EnumerableSet.UintSet;
+
   /*** structs ***/
 
   /// @notice Contains pool cycle related parameters.
@@ -79,6 +82,14 @@ abstract contract IPool {
     uint256 nftLpTokenId;
   }
 
+  struct LendingPoolDetail {
+    uint256 lastPremiumAccrualTimestamp;
+    /// @notice Track the total amount of premium for each lending pool
+    uint256 totalPremium;
+    /// @notice Set to track all loan protection bought for specific lending pool.
+    EnumerableSet.UintSet loanProtectionInfoIndexSet;
+  }
+
   /// @notice A struct to store the details of a withdrawal cycle.
   struct WithdrawalCycleDetail {
     /// @notice total amount of sTokens requested to be withdrawn for this cycle
@@ -102,6 +113,10 @@ abstract contract IPool {
   error PoolIsNotOpen(uint256 poolId);
   error PoolLeverageRatioTooHigh(uint256 poolId, uint256 leverageRatio);
   error PoolLeverageRatioTooLow(uint256 poolId, uint256 leverageRatio);
+  error PoolHasNoMinCapitalRequired(
+    uint256 poolId,
+    uint256 totalSTokenUnderlying
+  );
   error NoWithdrawalRequested(address msgSender, uint256 poolCycleIndex);
   error WithdrawalHigherThanRequested(
     address msgSender,
@@ -142,10 +157,10 @@ abstract contract IPool {
     uint256 premium
   );
 
-  /// @notice Emitted when premium is accrued
+  /// @notice Emitted when premium is accrued from all protections bought for a lending pool.
   event PremiumAccrued(
-    uint256 lastPremiumAccrualTimestamp,
-    uint256 totalPremiumAccrued
+    address indexed lendingPool,
+    uint256 lastPremiumAccrualTimestamp
   );
 
   /// @notice Emitted when a withdrawal request is made.
@@ -213,11 +228,11 @@ abstract contract IPool {
     virtual;
 
   /**
-   * @notice Calculates the premium accrued for all existing protections and updates the total premium accrued.
-   * @notice This method calculates premium accrued from the last timestamp to the current timestamp.
-   * @notice This method also removes expired protections.
+   * @notice Accrues the premium from all existing protections and updates the total premium accrued.
+   * This method accrues premium from the last accrual timestamp to the latest payment timestamp of the underlying lending pool.
+   * This method also removes expired protections.
    */
-  function accruePremium() public virtual;
+  function accruePremiumAndExpireProtections() external virtual;
 
   /**
    * @notice Returns various parameters and other pool related info.
@@ -226,7 +241,7 @@ abstract contract IPool {
 
   /**
    * @notice Calculates and returns leverage ratio scaled to 18 decimals.
-   * @notice For example: 0.15 is returned as 0.15 x 10**18 = 15 * 10**16
+   * For example: 0.15 is returned as 0.15 x 10**18 = 15 * 10**16
    */
   function calculateLeverageRatio() external view virtual returns (uint256);
 

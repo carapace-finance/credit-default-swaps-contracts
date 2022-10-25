@@ -182,7 +182,7 @@ const deployContracts: Function = async () => {
       leverageRatioFloor: parseEther("0.1"),
       leverageRatioCeiling: parseEther("0.2"),
       leverageRatioBuffer: parseEther("0.05"),
-      minRequiredCapital: parseUSDC("50000"),
+      minRequiredCapital: parseUSDC("5000"),
       minRequiredProtection: parseUSDC("200000"),
       curvature: parseEther("0.05"),
       minCarapaceRiskPremiumPercent: parseEther("0.02"),

@@ -5,12 +5,11 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import {Counters} from "@openzeppelin/contracts/utils/Counters.sol";
-import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {SToken} from "./SToken.sol";
 import {IPremiumCalculator} from "../../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools, LendingPoolStatus, ProtectionPurchaseParams} from "../../interfaces/IReferenceLendingPools.sol";
 import {IPoolCycleManager} from "../../interfaces/IPoolCycleManager.sol";
-import {IPool} from "../../interfaces/IPool.sol";
+import {IPool, EnumerableSet} from "../../interfaces/IPool.sol";
 import {IDefaultStateManager} from "../../interfaces/IDefaultStateManager.sol";
 
 import "../../libraries/AccruedPremiumCalculator.sol";
@@ -48,9 +47,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /// @notice The total underlying amount of protection bought from this pool
   uint256 public totalProtection;
 
-  /// @notice The timestamp of last premium accrual
-  uint256 public lastPremiumAccrualTimestamp;
-
   /// @notice The total premium accrued in underlying token up to the last premium accrual timestamp
   uint256 public totalPremiumAccrued;
 
@@ -70,18 +66,13 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /// @dev a buyer account id to a lending pool id to the premium amount
   mapping(uint256 => mapping(address => uint256)) public buyerAccounts;
 
-  /// @notice The total amount of premium for each lending pool
-  mapping(address => uint256) public lendingPoolIdToPremiumTotal;
-
   /// @notice The array to track the loan protection info for all protection bought.
   LoanProtectionInfo[] private loanProtectionInfos;
 
-  /// @notice The mapping to track the all loan protection bought for specific lending pool.
-  mapping(address => EnumerableSet.UintSet)
-    private lendingPoolToLoanProtectionInfoIndexSet;
-
   /// @notice The mapping to track pool cycle index at which actual withdrawal will happen to withdrawal details
   mapping(uint256 => WithdrawalCycleDetail) public withdrawalCycleDetails;
+
+  mapping(address => LendingPoolDetail) private lendingPoolDetails;
 
   /*** modifiers ***/
 
@@ -127,6 +118,17 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       revert ProtectionPurchaseNotAllowed(_protectionPurchaseParams);
     }
 
+    _;
+  }
+
+  modifier hasMinCapitalRequired() {
+    /// verify that pool has min capital required
+    if (!_hasMinRequiredCapital()) {
+      revert PoolHasNoMinCapitalRequired(
+        poolInfo.poolId,
+        totalSTokenUnderlying
+      );
+    }
     _;
   }
 
@@ -197,6 +199,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     override
     whenNotPaused
     canBuyProtection(_protectionPurchaseParams)
+    hasMinCapitalRequired
     nonReentrant
   {
     /// Step 1: Create a buyer account if not exists
@@ -204,10 +207,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _createBuyerAccount();
     }
 
-    /// Step 2: accrue premium before calculating leverage ratio
-    accruePremium();
-
-    /// Step 3: Calculate & check the leverage ratio
+    /// Step 2: Calculate & check the leverage ratio
     /// Calculate & when total protection is higher than required min protection,
     /// ensure that leverage ratio floor is not breached
     totalProtection += _protectionPurchaseParams.protectionAmount;
@@ -218,14 +218,14 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       }
     }
 
-    /// Step 4: Calculate the buyer's APR scaled to 18 decimals
+    /// Step 3: Calculate the buyer's APR scaled to 18 decimals
     uint256 _protectionBuyerApr = poolInfo
       .referenceLendingPools
       .calculateProtectionBuyerAPR(
         _protectionPurchaseParams.lendingPoolAddress
       );
 
-    /// Step 5: Calculate the protection premium amount scaled to 18 decimals and scale it to the underlying token decimals.
+    /// Step 4: Calculate the protection premium amount scaled to 18 decimals and scale it to the underlying token decimals.
     (uint256 _premiumAmountIn18Decimals, bool _isMinPremium) = premiumCalculator
       .calculatePremium(
         _protectionPurchaseParams.protectionExpirationTimestamp,
@@ -248,18 +248,19 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _protectionPurchaseParams.lendingPoolAddress
     ] += _premiumAmount;
 
-    /// Step 6: transfer premium amount from buyer to pool & track the premium amount
+    /// Step 5: transfer premium amount from buyer to pool & track the premium amount
     poolInfo.underlyingToken.safeTransferFrom(
       msg.sender,
       address(this),
       _premiumAmount
     );
-    lendingPoolIdToPremiumTotal[
-      _protectionPurchaseParams.lendingPoolAddress
-    ] += _premiumAmount;
     totalPremium += _premiumAmount;
+    LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
+      _protectionPurchaseParams.lendingPoolAddress
+    ];
+    lendingPoolDetail.totalPremium += _premiumAmount;
 
-    /// Step 7: Calculate protection in days and scale it to 18 decimals.
+    /// Step 6: Calculate protection in days and scale it to 18 decimals.
     uint256 _protectionDurationInDaysScaled = ((_protectionPurchaseParams
       .protectionExpirationTimestamp - block.timestamp) *
       Constants.SCALE_18_DECIMALS) / uint256(Constants.SECONDS_IN_DAY);
@@ -271,7 +272,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _leverageRatio
     );
 
-    /// Step 8: Capture loan protection data for premium accrual calculation
+    /// Step 7: Capture loan protection data for premium accrual calculation
     // solhint-disable-next-line
     (int256 _k, int256 _lambda) = AccruedPremiumCalculator.calculateKAndLambda(
       _premiumAmountIn18Decimals,
@@ -284,7 +285,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _isMinPremium ? poolInfo.params.minCarapaceRiskPremiumPercent : 0
     );
 
-    /// Step 9: Add protection to the pool & emit an event
+    /// Step 8: Add protection to the pool & emit an event
     loanProtectionInfos.push(
       LoanProtectionInfo({
         buyer: msg.sender,
@@ -300,11 +301,11 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       })
     );
 
-    /// Track all loan protections for a lending pool to calculate
+    /// Step 9: Track all loan protections for a lending pool to calculate
     // the total locked amount for the lending pool, when/if pool is late for payment
-    lendingPoolToLoanProtectionInfoIndexSet[
-      _protectionPurchaseParams.lendingPoolAddress
-    ].add(loanProtectionInfos.length - 1);
+    lendingPoolDetail.loanProtectionInfoIndexSet.add(
+      loanProtectionInfos.length - 1
+    );
 
     emit ProtectionBought(
       msg.sender,
@@ -318,13 +319,9 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   function deposit(uint256 _underlyingAmount, address _receiver)
     external
     override
-    whenPoolIsOpen
     whenNotPaused
     nonReentrant
   {
-    /// accrue premium before calculating leverage ratio
-    accruePremium();
-
     uint256 _sTokenShares = convertToSToken(_underlyingAmount);
     totalSTokenUnderlying += _underlyingAmount;
     _safeMint(_receiver, _sTokenShares);
@@ -335,7 +332,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     );
 
     /// Verify leverage ratio only when total capital/sTokenUnderlying is higher than minimum capital requirement
-    if (totalSTokenUnderlying > poolInfo.params.minRequiredCapital) {
+    if (_hasMinRequiredCapital()) {
       /// calculate pool's current leverage ratio considering the new deposit
       uint256 _leverageRatio = calculateLeverageRatio();
 
@@ -423,28 +420,25 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       revert NoWithdrawalRequested(msg.sender, _currentCycleIndex);
     }
 
-    /// Step 3: accrue premium before calculating withdrawal cycle details
-    accruePremium();
-
-    /// Step 4: If it is the first withdrawal for this cycle, calculate & capture withdrawal cycle percent
+    /// Step 3: If it is the first withdrawal for this cycle, calculate & capture withdrawal cycle percent
     uint256 _withdrawalPercent = withdrawalCycle.withdrawalPercent;
     if (_withdrawalPercent == 0) {
       _calculateWithdrawalPercent(withdrawalCycle);
     }
 
-    /// Step 5: Calculate and verify the allowed sToken amount that can be withdrawn based on current withdrawal phase
+    /// Step 4: Calculate and verify the allowed sToken amount that can be withdrawn based on current withdrawal phase
     uint256 _allowedSTokenWithdrawalAmount = _calculateAndVerifyAllowedWithdrawalAmount(
         withdrawalCycle,
         request,
         _sTokenWithdrawalAmount
       );
 
-    /// Step 6: calculate underlying amount to transfer based on allowed sToken withdrawal amount
+    /// Step 5: calculate underlying amount to transfer based on allowed sToken withdrawal amount
     uint256 _underlyingAmountToTransfer = convertToUnderlying(
       _allowedSTokenWithdrawalAmount
     );
 
-    /// Step 7: Verify that the leverage ratio does not breach the floor because of withdrawal
+    /// Step 6: Verify that the leverage ratio does not breach the floor because of withdrawal
     /// totalSTokenUnderlying must be updated before calculating leverage ratio
     totalSTokenUnderlying -= _underlyingAmountToTransfer;
     uint256 _leverageRatio = calculateLeverageRatio();
@@ -452,18 +446,17 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       revert PoolLeverageRatioTooLow(poolInfo.poolId, _leverageRatio);
     }
 
-    /// Step 8: burn sTokens shares.
+    /// Step 7: burn sTokens shares.
     /// This step must be done after calculating underlying amount to be transferred
     _burn(msg.sender, _allowedSTokenWithdrawalAmount);
 
-    /// Step 9: update/delete withdrawal request
+    /// Step 8: update/delete withdrawal request
     request.sTokenAmount -= _allowedSTokenWithdrawalAmount;
-
     if (request.sTokenAmount == 0) {
       delete withdrawalCycle.withdrawalRequests[msg.sender];
     }
 
-    /// Step 10: transfer underlying token to receiver
+    /// Step 9: transfer underlying token to receiver
     poolInfo.underlyingToken.safeTransfer(
       _receiver,
       _underlyingAmountToTransfer
@@ -472,90 +465,76 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     emit WithdrawalMade(msg.sender, _sTokenWithdrawalAmount, _receiver);
   }
 
-  /// @notice allows the owner to pause the contract
-  function pause() external onlyOwner {
-    _pause();
-  }
-
-  /// @notice allows the owner to unpause the contract
-  function unpause() external onlyOwner {
-    _unpause();
-  }
-
-  function updateFloor(uint256 newFloor) external onlyOwner {
-    poolInfo.params.leverageRatioFloor = newFloor;
-  }
-
-  function updateCeiling(uint256 newCeiling) external onlyOwner {
-    poolInfo.params.leverageRatioCeiling = newCeiling;
-  }
-
   /// @inheritdoc IPool
-  function accruePremium() public override {
-    /// Ensure we accrue premium only once per the block
-    if (block.timestamp == lastPremiumAccrualTimestamp) {
-      return;
-    }
-
+  function accruePremiumAndExpireProtections() external override {
     uint256 _removalIndex = 0;
     uint256[] memory _expiredProtections = new uint256[](
       loanProtectionInfos.length
     );
 
-    /// Iterate through existing protections and calculate accrued premium for non-expired protections
-    uint256 _loanProtectionCount = loanProtectionInfos.length;
-    for (uint256 _loanIndex; _loanIndex < _loanProtectionCount; _loanIndex++) {
-      LoanProtectionInfo storage loanProtectionInfo = loanProtectionInfos[
-        _loanIndex
+    address[] memory _lendingPools = poolInfo
+      .referenceLendingPools
+      .getLendingPools();
+
+    uint256 length = _lendingPools.length;
+    for (uint256 _lendingPoolIndex; _lendingPoolIndex < length; ) {
+      address _lendingPool = _lendingPools[_lendingPoolIndex];
+      LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
+        _lendingPool
       ];
 
-      /**
-       * <-Protection Bought(second: 0) --- last accrual --- now --- Expiration->
-       * The time line starts when protection is bought and ends when protection is expired.
-       * secondsUntilLastPremiumAccrual is the second elapsed since the last accrual timestamp
-       * after the protection is bought.
-       * toSeconds is the second elapsed until now after protection is bought.
-       */
-      uint256 _startTimestamp = loanProtectionInfo.startTimestamp;
-      uint256 _expirationTimestamp = loanProtectionInfo.expirationTimestamp;
-      uint256 _secondsUntilLastPremiumAccrual = lastPremiumAccrualTimestamp -
-        _startTimestamp;
+      /// Step 1: get the latest payment timestamp for the lending pool
+      uint256 _latestPaymentTimestamp = poolInfo
+        .referenceLendingPools
+        .getLatestPaymentTimestamp(_lendingPool);
 
-      /// if loan protection is expired, then accrue interest till expiration and mark it for removal
-      uint256 _secondsUntilNow;
-      if (block.timestamp > _expirationTimestamp) {
-        totalProtection -= loanProtectionInfo.protectionAmount;
-        _expiredProtections[_removalIndex] = _loanIndex;
-        _removalIndex++;
+      /// If there is payment made after the last premium accrual, then accrue premium
+      uint256 _lastPremiumAccrualTimestamp = lendingPoolDetail
+        .lastPremiumAccrualTimestamp;
+      if (_latestPaymentTimestamp > _lastPremiumAccrualTimestamp) {
+        /// Step 2: go through all the loan protections for this lending pool and accrue premium for each
+        uint256[] memory _protectionIndexes = lendingPoolDetail
+          .loanProtectionInfoIndexSet
+          .values();
 
-        _secondsUntilNow = _expirationTimestamp - _startTimestamp;
-      } else {
-        _secondsUntilNow = block.timestamp - _startTimestamp;
+        uint256 protectionLength = _protectionIndexes.length;
+        for (uint256 _protectionIndex; _protectionIndex < protectionLength; ) {
+          LoanProtectionInfo storage loanProtectionInfo = loanProtectionInfos[
+            _protectionIndexes[_protectionIndex]
+          ];
+
+          /// Step 3: accrue premium for the loan protection and
+          /// if loan protection is expired, add it to the list of expired protections
+          if (
+            _accruePremium(
+              loanProtectionInfo,
+              _lastPremiumAccrualTimestamp,
+              _latestPaymentTimestamp
+            )
+          ) {
+            _expiredProtections[_removalIndex] = _protectionIndex;
+            _removalIndex++;
+          }
+
+          /// Step 4: persist the latest payment timestamp for the lending pool
+          lendingPoolDetail
+            .lastPremiumAccrualTimestamp = _latestPaymentTimestamp;
+
+          unchecked {
+            ++_protectionIndex;
+          }
+        }
+
+        emit PremiumAccrued(_lendingPool, _latestPaymentTimestamp);
       }
 
-      uint256 _accruedPremium = AccruedPremiumCalculator
-        .calculateAccruedPremium(
-          _secondsUntilLastPremiumAccrual,
-          _secondsUntilNow,
-          loanProtectionInfo.K,
-          loanProtectionInfo.lambda
-        );
-
-      console.log(
-        "accruedPremium from second %s to %s: ",
-        _secondsUntilLastPremiumAccrual,
-        _secondsUntilNow,
-        _accruedPremium
-      );
-      uint256 _accruedPremiumInUnderlying = _scale18DecimalsAmtToUnderlyingDecimals(
-          _accruedPremium
-        );
-      totalPremiumAccrued += _accruedPremiumInUnderlying;
-      totalSTokenUnderlying += _accruedPremiumInUnderlying;
+      unchecked {
+        ++_lendingPoolIndex;
+      }
     }
 
     /// Remove expired protections from the list
-    for (uint256 i; i < _removalIndex; i++) {
+    for (uint256 i; i < _removalIndex; ) {
       uint256 expiredProtectionIndex = _expiredProtections[i];
       address _lendingPool = loanProtectionInfos[expiredProtectionIndex]
         .lendingPool;
@@ -568,14 +547,18 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       /// remove the last element
       loanProtectionInfos.pop();
 
-      /// remove expired protection index from lendingPoolToLoanProtectionInfoIndexSet
-      lendingPoolToLoanProtectionInfoIndexSet[_lendingPool].remove(
+      /// remove expired protection index from lendingPool's loanProtectionInfoIndexSet
+      LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
+        _lendingPool
+      ];
+      lendingPoolDetail.loanProtectionInfoIndexSet.remove(
         expiredProtectionIndex
       );
-    }
 
-    lastPremiumAccrualTimestamp = block.timestamp;
-    emit PremiumAccrued(lastPremiumAccrualTimestamp, totalPremiumAccrued);
+      unchecked {
+        ++i;
+      }
+    }
   }
 
   /// @inheritdoc IPool
@@ -583,6 +566,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     external
     override
     onlyDefaultStateManager
+    whenNotPaused
     returns (uint256 _lockedAmount, uint256 _snapshotId)
   {
     /// step 1: Capture protection pool's current investors by creating a snapshot of the token balance by using ERC20Snapshot in SToken
@@ -592,10 +576,12 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     /// calculate remaining principal amount for each loan protection in the lending pool.
     /// for each loan protection, lockedAmt = min(protectionAmt, remainingPrincipal)
     /// total locked amount = sum of lockedAmt for all loan protections
-    uint256[]
-      memory _protectionIndexes = lendingPoolToLoanProtectionInfoIndexSet[
-        _lendingPoolAddress
-      ].values();
+    LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
+      _lendingPoolAddress
+    ];
+    uint256[] memory _protectionIndexes = lendingPoolDetail
+      .loanProtectionInfoIndexSet
+      .values();
 
     IReferenceLendingPools _referenceLendingPools = poolInfo
       .referenceLendingPools;
@@ -634,7 +620,11 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   }
 
   /// @inheritdoc IPool
-  function claimUnlockedCapital(address _receiver) external override {
+  function claimUnlockedCapital(address _receiver)
+    external
+    override
+    whenNotPaused
+  {
     /// Investors can claim their total share of released/unlocked capital across all lending pools
     uint256 _claimableAmount = defaultStateManager
       .calculateAndClaimUnlockedCapital(msg.sender);
@@ -643,6 +633,26 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       /// transfer the share of unlocked capital to the receiver
       poolInfo.underlyingToken.safeTransfer(_receiver, _claimableAmount);
     }
+  }
+
+  /** admin functions */
+
+  /// @notice allows the owner to pause the contract
+  function pause() external onlyOwner {
+    _pause();
+  }
+
+  /// @notice allows the owner to unpause the contract
+  function unpause() external onlyOwner {
+    _unpause();
+  }
+
+  function updateFloor(uint256 newFloor) external onlyOwner {
+    poolInfo.params.leverageRatioFloor = newFloor;
+  }
+
+  function updateCeiling(uint256 newCeiling) external onlyOwner {
+    poolInfo.params.leverageRatioCeiling = newCeiling;
   }
 
   /** view functions */
@@ -718,6 +728,22 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       ];
   }
 
+  /**
+   * @notice Returns the lending pool's detail.
+   */
+  function getLendingPoolDetail(address _lendingPoolAddress)
+    external
+    view
+    returns (uint256 _lastPremiumAccrualTimestamp, uint256 _totalPremium)
+  {
+    LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
+      _lendingPoolAddress
+    ];
+    _lastPremiumAccrualTimestamp = lendingPoolDetail
+      .lastPremiumAccrualTimestamp;
+    _totalPremium = lendingPoolDetail.totalPremium;
+  }
+
   /*** internal functions */
 
   /**
@@ -744,6 +770,10 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     return _exchangeRate;
   }
 
+  function _hasMinRequiredCapital() internal view returns (bool) {
+    return totalSTokenUnderlying >= poolInfo.params.minRequiredCapital;
+  }
+
   /*** private functions ***/
 
   function _noBuyerAccountExist() private view returns (bool) {
@@ -759,44 +789,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     ownerAddressToBuyerAccountId[msg.sender] = _buyerAccountId;
     buyerAccountIdCounter.increment();
     emit BuyerAccountCreated(msg.sender, _buyerAccountId);
-  }
-
-  /**
-   * @dev Scales the given underlying token amount to the amount with 18 decimals.
-   */
-  function _scaleUnderlyingAmtTo18Decimals(uint256 underlyingAmt)
-    private
-    view
-    returns (uint256)
-  {
-    return
-      (underlyingAmt * Constants.SCALE_18_DECIMALS) /
-      10**(poolInfo.underlyingToken.decimals());
-  }
-
-  /**
-   * @dev Scales the given amount from 18 decimals to decimals used by underlying token.
-   */
-  function _scale18DecimalsAmtToUnderlyingDecimals(uint256 amt)
-    private
-    view
-    returns (uint256)
-  {
-    return
-      (amt * 10**(poolInfo.underlyingToken.decimals())) /
-      Constants.SCALE_18_DECIMALS;
-  }
-
-  function _calculateLeverageRatio(uint256 totalCapital)
-    internal
-    view
-    returns (uint256)
-  {
-    if (totalProtection == 0) {
-      return 0;
-    }
-
-    return (totalCapital * Constants.SCALE_18_DECIMALS) / totalProtection;
   }
 
   /**
@@ -905,5 +897,97 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         sTokenAllowedWithdrawalAmount
       );
     }
+  }
+
+  /**
+   * @dev Accrues premium for given loan protection from last premium accrual to the latest payment timestamp.
+   * @param loanProtectionInfo The loan protection to accrue premium for.
+   * @param _lastPremiumAccrualTimestamp The timestamp of last premium accrual.
+   * @param _latestPaymentTimestamp The timestamp of latest payment made to the underlying lending pool.
+   * @return _expired Whether the loan protection has expired or not.
+   */
+  function _accruePremium(
+    LoanProtectionInfo storage loanProtectionInfo,
+    uint256 _lastPremiumAccrualTimestamp,
+    uint256 _latestPaymentTimestamp
+  ) internal returns (bool _expired) {
+    /**
+     * <-Protection Bought(second: 0) --- last accrual --- now(latestPaymentTimestamp) --- Expiration->
+     * The time line starts when protection is bought and ends when protection is expired.
+     * secondsUntilLastPremiumAccrual is the second elapsed since the last accrual timestamp.
+     * secondsUntilLatestPayment is the second elapsed until latest payment is made.
+     */
+    uint256 _startTimestamp = loanProtectionInfo.startTimestamp;
+    uint256 _expirationTimestamp = loanProtectionInfo.expirationTimestamp;
+    uint256 _secondsUntilLastPremiumAccrual = _lastPremiumAccrualTimestamp -
+      _startTimestamp;
+
+    /// if loan protection is expired, then accrue interest till expiration and mark it for removal
+    uint256 _secondsUntilLatestPayment;
+    if (_latestPaymentTimestamp > _expirationTimestamp) {
+      totalProtection -= loanProtectionInfo.protectionAmount;
+      _expired = true;
+
+      _secondsUntilLatestPayment = _expirationTimestamp - _startTimestamp;
+    } else {
+      _secondsUntilLatestPayment = _latestPaymentTimestamp - _startTimestamp;
+    }
+
+    uint256 _accruedPremium = AccruedPremiumCalculator.calculateAccruedPremium(
+      _secondsUntilLastPremiumAccrual,
+      _secondsUntilLatestPayment,
+      loanProtectionInfo.K,
+      loanProtectionInfo.lambda
+    );
+
+    console.log(
+      "accruedPremium from second %s to %s: ",
+      _secondsUntilLastPremiumAccrual,
+      _secondsUntilLatestPayment,
+      _accruedPremium
+    );
+    uint256 _accruedPremiumInUnderlying = _scale18DecimalsAmtToUnderlyingDecimals(
+        _accruedPremium
+      );
+    totalPremiumAccrued += _accruedPremiumInUnderlying;
+    totalSTokenUnderlying += _accruedPremiumInUnderlying;
+  }
+
+  /**
+   * @dev Scales the given underlying token amount to the amount with 18 decimals.
+   */
+  function _scaleUnderlyingAmtTo18Decimals(uint256 underlyingAmt)
+    internal
+    view
+    returns (uint256)
+  {
+    return
+      (underlyingAmt * Constants.SCALE_18_DECIMALS) /
+      10**(poolInfo.underlyingToken.decimals());
+  }
+
+  /**
+   * @dev Scales the given amount from 18 decimals to decimals used by underlying token.
+   */
+  function _scale18DecimalsAmtToUnderlyingDecimals(uint256 amt)
+    internal
+    view
+    returns (uint256)
+  {
+    return
+      (amt * 10**(poolInfo.underlyingToken.decimals())) /
+      Constants.SCALE_18_DECIMALS;
+  }
+
+  function _calculateLeverageRatio(uint256 _totalCapital)
+    internal
+    view
+    returns (uint256)
+  {
+    if (totalProtection == 0) {
+      return 0;
+    }
+
+    return (_totalCapital * Constants.SCALE_18_DECIMALS) / totalProtection;
   }
 }

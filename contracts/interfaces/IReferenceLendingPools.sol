@@ -146,4 +146,13 @@ abstract contract IReferenceLendingPools {
     address _lender,
     uint256 _nftLpTokenId
   ) public view virtual returns (uint256);
+
+  /**
+   * @notice Returns the latest payment timestamp of the specified lending pool
+   */
+  function getLatestPaymentTimestamp(address _lendingPool)
+    public
+    view
+    virtual
+    returns (uint256);
 }
