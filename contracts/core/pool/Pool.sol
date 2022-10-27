@@ -87,7 +87,10 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     /// a buyer needs to buy protection longer than 90 days
     uint256 _protectionDurationInSeconds = _protectionPurchaseParams
       .protectionExpirationTimestamp - block.timestamp;
-    if (_protectionDurationInSeconds < MIN_PROTECTION_DURATION) {
+    if (
+      _protectionDurationInSeconds <
+      poolInfo.params.minProtectionDurationInSeconds
+    ) {
       revert ProtectionDurationTooShort(_protectionDurationInSeconds);
     }
 
@@ -417,11 +420,14 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     /// This step must be done after calculating underlying amount to be transferred
     _burn(msg.sender, _sTokenWithdrawalAmount);
 
-    /// Step 6: update seller's withdrawal amount and total requested withdrawal amount
+    /// Step 6: Update total sToken underlying amount
+    totalSTokenUnderlying -= _underlyingAmountToTransfer;
+
+    /// Step 7: update seller's withdrawal amount and total requested withdrawal amount
     withdrawalCycle.withdrawalRequests[msg.sender] -= _sTokenWithdrawalAmount;
     withdrawalCycle.totalSTokenRequested -= _sTokenWithdrawalAmount;
 
-    /// Step 7: transfer underlying token to receiver
+    /// Step 8: transfer underlying token to receiver
     poolInfo.underlyingToken.safeTransfer(
       _receiver,
       _underlyingAmountToTransfer
@@ -441,6 +447,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       .referenceLendingPools
       .getLendingPools();
 
+    /// Iterate all lending pools of this protection pool to check if there is new payment after last premium accrual
     uint256 length = _lendingPools.length;
     for (uint256 _lendingPoolIndex; _lendingPoolIndex < length; ) {
       address _lendingPool = _lendingPools[_lendingPoolIndex];
@@ -448,7 +455,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         _lendingPool
       ];
 
-      /// Step 1: get the latest payment timestamp for the lending pool
+      /// Get the latest payment timestamp for the lending pool
       uint256 _latestPaymentTimestamp = poolInfo
         .referenceLendingPools
         .getLatestPaymentTimestamp(_lendingPool);
@@ -456,19 +463,26 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       /// If there is payment made after the last premium accrual, then accrue premium
       uint256 _lastPremiumAccrualTimestamp = lendingPoolDetail
         .lastPremiumAccrualTimestamp;
+      console.log(
+        "lendingPool: %s, lastPremiumAccrualTimestamp: %s, latestPaymentTimestamp: %s",
+        _lendingPool,
+        _lastPremiumAccrualTimestamp,
+        _latestPaymentTimestamp
+      );
       if (_latestPaymentTimestamp > _lastPremiumAccrualTimestamp) {
-        /// Step 2: go through all the loan protections for this lending pool and accrue premium for each
         uint256[] memory _protectionIndexes = lendingPoolDetail
           .protectionInfoIndexSet
           .values();
 
+        /// Iterate all loan protections for this lending pool and accrue premium for each
         uint256 protectionLength = _protectionIndexes.length;
-        for (uint256 _protectionIndex; _protectionIndex < protectionLength; ) {
+        for (uint256 j; j < protectionLength; ) {
+          uint256 _protectionIndex = _protectionIndexes[j];
           ProtectionInfo storage protectionInfo = protectionInfos[
-            _protectionIndexes[_protectionIndex]
+            _protectionIndex
           ];
 
-          /// Step 3: accrue premium for the loan protection and
+          /// Accrue premium for the loan protection and
           /// if loan protection is expired, add it to the list of expired protections
           if (
             _accruePremium(
@@ -481,16 +495,18 @@ contract Pool is IPool, SToken, ReentrancyGuard {
             _removalIndex++;
           }
 
-          /// Step 4: persist the latest payment timestamp for the lending pool
-          lendingPoolDetail
-            .lastPremiumAccrualTimestamp = _latestPaymentTimestamp;
-
           unchecked {
-            ++_protectionIndex;
+            ++j;
           }
         }
 
-        emit PremiumAccrued(_lendingPool, _latestPaymentTimestamp);
+        if (protectionLength > 0) {
+          /// Persist the latest payment timestamp for the lending pool
+          lendingPoolDetail
+            .lastPremiumAccrualTimestamp = _latestPaymentTimestamp;
+
+          emit PremiumAccrued(_lendingPool, _latestPaymentTimestamp);
+        }
       }
 
       unchecked {
@@ -499,10 +515,21 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     }
 
     /// Remove expired protections from the list
+    // TODO: fix removal
+    console.log("removalIndex: %s", _removalIndex);
     for (uint256 i; i < _removalIndex; ) {
       uint256 expiredProtectionIndex = _expiredProtections[i];
       address _lendingPool = protectionInfos[expiredProtectionIndex]
         .lendingPool;
+      console.log(
+        "expiredProtectionIndex: %s, lendingPool: %s",
+        expiredProtectionIndex,
+        _lendingPool
+      );
+
+      /// Reduce the total protection amount of this protection pool
+      totalProtection -= protectionInfos[expiredProtectionIndex]
+        .protectionAmount;
 
       /// move the last element to the expired protection index
       protectionInfos[expiredProtectionIndex] = protectionInfos[
@@ -594,6 +621,11 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       .calculateAndClaimUnlockedCapital(msg.sender);
 
     if (_claimableAmount > 0) {
+      console.log(
+        "Pool Balance: %s, claimableAmount: %s",
+        poolInfo.underlyingToken.balanceOf(address(this)),
+        _claimableAmount
+      );
       /// transfer the share of unlocked capital to the receiver
       poolInfo.underlyingToken.safeTransfer(_receiver, _claimableAmount);
     }
@@ -774,27 +806,53 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     uint256 _lastPremiumAccrualTimestamp,
     uint256 _latestPaymentTimestamp
   ) internal returns (bool _expired) {
+    uint256 _startTimestamp = protectionInfo.startTimestamp;
+
+    /// This means no payment has been made after the protection is bought,
+    /// so no premium needs to be accrued.
+    if (_latestPaymentTimestamp < _startTimestamp) {
+      return false;
+    }
+
     /**
      * <-Protection Bought(second: 0) --- last accrual --- now(latestPaymentTimestamp) --- Expiration->
      * The time line starts when protection is bought and ends when protection is expired.
      * secondsUntilLastPremiumAccrual is the second elapsed since the last accrual timestamp.
      * secondsUntilLatestPayment is the second elapsed until latest payment is made.
      */
-    uint256 _startTimestamp = protectionInfo.startTimestamp;
     uint256 _expirationTimestamp = protectionInfo.expirationTimestamp;
-    uint256 _secondsUntilLastPremiumAccrual = _lastPremiumAccrualTimestamp -
-      _startTimestamp;
+
+    // When premium is accrued for the first time, the _secondsUntilLastPremiumAccrual is 0.
+    uint256 _secondsUntilLastPremiumAccrual;
+    if (_lastPremiumAccrualTimestamp > _startTimestamp) {
+      _secondsUntilLastPremiumAccrual =
+        _lastPremiumAccrualTimestamp -
+        _startTimestamp;
+      console.log(
+        "secondsUntilLastPremiumAccrual: %s",
+        _secondsUntilLastPremiumAccrual
+      );
+    }
 
     /// if loan protection is expired, then accrue interest till expiration and mark it for removal
     uint256 _secondsUntilLatestPayment;
-    if (_latestPaymentTimestamp > _expirationTimestamp) {
-      totalProtection -= protectionInfo.protectionAmount;
+    if (block.timestamp > _expirationTimestamp) {
       _expired = true;
-
       _secondsUntilLatestPayment = _expirationTimestamp - _startTimestamp;
+      console.log(
+        "Protection expired for amt: %s",
+        protectionInfo.protectionAmount
+      );
     } else {
       _secondsUntilLatestPayment = _latestPaymentTimestamp - _startTimestamp;
     }
+
+    console.log(
+      "Accrue premium for lending pool:%s from secondsUntilLastPremiumAccrual: %s to secondsUntilLatestPayment: %s",
+      protectionInfo.lendingPool,
+      _secondsUntilLastPremiumAccrual,
+      _secondsUntilLatestPayment
+    );
 
     uint256 _accruedPremium = AccruedPremiumCalculator.calculateAccruedPremium(
       _secondsUntilLastPremiumAccrual,

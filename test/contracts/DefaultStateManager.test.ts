@@ -6,9 +6,14 @@ import { Pool } from "../../typechain-types/contracts/core/pool/Pool";
 import { PoolFactory } from "../../typechain-types/contracts/core/PoolFactory";
 import { ethers } from "hardhat";
 import { parseUSDC, getUsdcContract } from "../utils/usdc";
-import { moveForwardTimeByDays } from "../utils/time";
+import {
+  getUnixTimestampAheadByDays,
+  moveForwardTimeByDays
+} from "../utils/time";
 import { ITranchedPool } from "../../typechain-types/contracts/external/goldfinch/ITranchedPool";
 import { payToLendingPool } from "../utils/goldfinch";
+import { BigNumber } from "@ethersproject/bignumber";
+import { getGoldfinchLender1 } from "../utils/goldfinch";
 
 const testDefaultStateManager: Function = (
   deployer: Signer,
@@ -119,6 +124,41 @@ const testDefaultStateManager: Function = (
     });
 
     describe("state transition from active -> late", async () => {
+      const depositToPool = async (
+        _account: Signer,
+        _depositAmount: BigNumber
+      ) => {
+        const _accountAddress = await _account.getAddress();
+        await usdcContract
+          .connect(_account)
+          .approve(poolInstance.address, _depositAmount);
+        await poolInstance
+          .connect(_account)
+          .deposit(_depositAmount, _accountAddress);
+      };
+
+      before(async () => {
+        // deposit capital into pool
+        await depositToPool(seller, parseUSDC("5000"));
+        await depositToPool(account1, parseUSDC("5000"));
+
+        expect(await poolInstance.totalSTokenUnderlying()).to.equal(
+          parseUSDC("10000")
+        );
+
+        // Buy protection
+        const _protection_buyer = await getGoldfinchLender1();
+        await usdcContract
+          .connect(_protection_buyer)
+          .approve(poolInstance.address, parseUSDC("3000"));
+        await poolInstance.connect(_protection_buyer).buyProtection({
+          lendingPoolAddress: lendingPools[1],
+          nftLpTokenId: 590,
+          protectionAmount: parseUSDC("20000"),
+          protectionExpirationTimestamp: await getUnixTimestampAheadByDays(20)
+        });
+      });
+
       it("...should lock capital for both lending pools in pool 1", async () => {
         await moveForwardTimeByDays(30);
         await defaultStateManager.assessStates();
@@ -126,6 +166,8 @@ const testDefaultStateManager: Function = (
         // Verify that both lending pools in Pool 1 are in late state and has locked capital instances
         const lockedCapitalsLendingPool1 =
           await defaultStateManager.getLockedCapitals(pool1, lendingPools[0]);
+
+        console.log("lockedCapitalsLendingPool1", lockedCapitalsLendingPool1);
 
         expect(lockedCapitalsLendingPool1.length).to.eq(1);
         expect(lockedCapitalsLendingPool1[0].snapshotId).to.eq(1);
@@ -166,15 +208,22 @@ const testDefaultStateManager: Function = (
           ).to.eq(0);
         });
 
-        it("...should return ~1000 claimable amount for seller from pool 1", async () => {
+        it("...should return 5000 claimable amount for seller from pool 1", async () => {
           expect(
             await defaultStateManager.calculateClaimableUnlockedAmount(
               pool1,
               sellerAddress
             )
-          )
-            .to.be.gt(parseUSDC("1000"))
-            .and.to.be.lt(parseUSDC("1001"));
+          ).to.be.eq(parseUSDC("5000"));
+        });
+
+        it("...should return 5000 claimable amount for account 1 from pool 1", async () => {
+          expect(
+            await defaultStateManager.calculateClaimableUnlockedAmount(
+              pool1,
+              await account1.getAddress()
+            )
+          ).to.be.eq(parseUSDC("5000"));
         });
       });
 

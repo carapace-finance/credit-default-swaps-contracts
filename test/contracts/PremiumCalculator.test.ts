@@ -1,11 +1,14 @@
 import { BigNumber } from "@ethersproject/bignumber";
 import { expect } from "chai";
 import { parseEther, formatEther } from "ethers/lib/utils";
-import { IPool } from "../../typechain-types/contracts/core/pool/Pool";
+import {
+  PoolParamsStruct,
+  PoolCycleParamsStruct
+} from "../../typechain-types/contracts/interfaces/IPool";
 import { parseUSDC } from "../utils/usdc";
 
 import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";
-import { getUnixTimestampAheadByDays } from "../utils/time";
+import { getDaysInSeconds, getUnixTimestampAheadByDays } from "../utils/time";
 
 const testPremiumCalculator: Function = (
   premiumCalculator: PremiumCalculator
@@ -18,13 +21,13 @@ const testPremiumCalculator: Function = (
     const _protectionAmt = parseEther("100000"); // 100k
     const _currentLeverageRatio = parseEther("0.15"); // 15%
     const _protectionBuyerApy = parseEther("0.17"); // 17%
-    const poolCycleParams: IPool.PoolCycleParamsStruct = {
+    const poolCycleParams: PoolCycleParamsStruct = {
       openCycleDuration: BigNumber.from(10 * 86400), // 10 days
       cycleDuration: BigNumber.from(30 * 86400) // 30 days
     };
     const _minRequiredCapital = parseUSDC("10000");
     const _minRequiredProtection = parseUSDC("20000");
-    const _poolParams: IPool.PoolParamsStruct = {
+    const _poolParams: PoolParamsStruct = {
       leverageRatioFloor: _leverageRatioFloor,
       leverageRatioCeiling: _leverageRatioCeiling,
       leverageRatioBuffer: _leverageRatioBuffer,
@@ -33,6 +36,7 @@ const testPremiumCalculator: Function = (
       curvature: _curvature,
       minCarapaceRiskPremiumPercent: parseEther("0.02"), // 2%
       underlyingRiskPremiumPercent: parseEther("0.1"), // 10%
+      minProtectionDurationInSeconds: getDaysInSeconds(10),
       poolCycleParams: poolCycleParams
     };
 

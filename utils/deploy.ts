@@ -3,7 +3,11 @@ import { ContractFactory, Signer } from "ethers";
 import { parseEther } from "ethers/lib/utils";
 import { ethers } from "hardhat";
 import { USDC_ADDRESS } from "../test/utils/constants";
-import { IPool, Pool } from "../typechain-types/contracts/core/pool/Pool";
+import { Pool } from "../typechain-types/contracts/core/pool/Pool";
+import {
+  PoolParamsStruct,
+  PoolCycleParamsStruct
+} from "../typechain-types/contracts/interfaces/IPool";
 import { PoolFactory } from "../typechain-types/contracts/core/PoolFactory";
 import { PremiumCalculator } from "../typechain-types/contracts/core/PremiumCalculator";
 import { ReferenceLendingPools } from "../typechain-types/contracts/core/pool/ReferenceLendingPools";
@@ -15,6 +19,7 @@ import { ReferenceLendingPoolsFactory } from "../typechain-types/contracts/core/
 import { DefaultStateManager } from "../typechain-types/contracts/core/DefaultStateManager";
 
 import { parseUSDC } from "../test/utils/usdc";
+import { getDaysInSeconds } from "../test/utils/time";
 
 let deployer: Signer;
 let account1: Signer;
@@ -125,7 +130,7 @@ const deployContracts: Function = async () => {
 
     // Create an instance of the ReferenceLendingPools
     const _lendingProtocols = [0, 0]; // 0 = Goldfinch
-    const _purchaseLimitsInDays = [90, 25];
+    const _purchaseLimitsInDays = [90, 60];
     const tx1 =
       await referenceLendingPoolsFactoryInstance.createReferenceLendingPools(
         GOLDFINCH_LENDING_POOLS,
@@ -173,12 +178,12 @@ const deployContracts: Function = async () => {
       defaultStateManagerInstance.address
     );
 
-    const _poolCycleParams: IPool.PoolCycleParamsStruct = {
+    const _poolCycleParams: PoolCycleParamsStruct = {
       openCycleDuration: BigNumber.from(10 * 86400), // 10 days
       cycleDuration: BigNumber.from(30 * 86400) // 30 days
     };
 
-    const _poolParams: IPool.PoolParamsStruct = {
+    const _poolParams: PoolParamsStruct = {
       leverageRatioFloor: parseEther("0.1"),
       leverageRatioCeiling: parseEther("0.2"),
       leverageRatioBuffer: parseEther("0.05"),
@@ -187,6 +192,7 @@ const deployContracts: Function = async () => {
       curvature: parseEther("0.05"),
       minCarapaceRiskPremiumPercent: parseEther("0.02"),
       underlyingRiskPremiumPercent: parseEther("0.1"),
+      minProtectionDurationInSeconds: getDaysInSeconds(10),
       poolCycleParams: _poolCycleParams
     };
 

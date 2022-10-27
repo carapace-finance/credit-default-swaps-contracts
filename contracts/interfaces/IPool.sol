@@ -31,6 +31,8 @@ struct PoolParams {
   uint256 minCarapaceRiskPremiumPercent;
   /// @notice the percent of protection buyers' yield used in premium calculation scaled to 18 decimals
   uint256 underlyingRiskPremiumPercent;
+  /// @notice the minimum duration of the protection coverage in seconds that buyer has to buy
+  uint256 minProtectionDurationInSeconds;
   /// @notice pool cycle related parameters
   PoolCycleParams poolCycleParams;
 }
@@ -85,8 +87,6 @@ struct WithdrawalCycleDetail {
 
 abstract contract IPool {
   using EnumerableSet for EnumerableSet.UintSet;
-
-  uint256 public constant MIN_PROTECTION_DURATION = 90 days;
 
   /*** errors ***/
   error LendingPoolNotSupported(address lendingPoolAddress);
