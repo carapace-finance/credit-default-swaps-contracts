@@ -49,8 +49,10 @@ const testPool: Function = (
     let before1stDepositSnapshotId: string;
     let beforePoolCycleTestSnapshotId: string;
     let _protectionBuyer1: Signer;
-    let circleAccount: Signer;
-    let lendingPoolAddress: string;
+    let _circleAccount: Signer;
+    let _goldfinchLendingPools: string[];
+    let _lendingPool1: string;
+    let _lendingPool2: string;
 
     const calculateTotalSellerDeposit = async () => {
       // seller deposit should total sToken underlying - premium accrued
@@ -117,7 +119,7 @@ const testPool: Function = (
       _buyer: Signer,
       _amount: BigNumber
     ) => {
-      await USDC.connect(circleAccount).transfer(
+      await USDC.connect(_circleAccount).transfer(
         await _buyer.getAddress(),
         _amount
       );
@@ -136,6 +138,11 @@ const testPool: Function = (
       expect(currentPoolCycle.currentCycleState).to.eq(expectedState);
     };
 
+    const getActiveProtections = async () => {
+      const allProtections = await pool.getAllProtections();
+      return allProtections.filter((p: any) => p.expired === false);
+    };
+
     before("setup", async () => {
       deployerAddress = await deployer.getAddress();
       sellerAddress = await seller.getAddress();
@@ -146,19 +153,22 @@ const testPool: Function = (
       USDC = getUsdcContract(deployer);
 
       // Impersonate CIRCLE account and transfer some USDC to test accounts
-      circleAccount = await impersonateCircle();
-      USDC.connect(circleAccount).transfer(
+      _circleAccount = await impersonateCircle();
+      USDC.connect(_circleAccount).transfer(
         deployerAddress,
         parseUSDC("1000000")
       );
-      USDC.connect(circleAccount).transfer(ownerAddress, parseUSDC("20000"));
-      USDC.connect(circleAccount).transfer(sellerAddress, parseUSDC("20000"));
-      USDC.connect(circleAccount).transfer(account4Address, parseUSDC("20000"));
+      USDC.connect(_circleAccount).transfer(ownerAddress, parseUSDC("20000"));
+      USDC.connect(_circleAccount).transfer(sellerAddress, parseUSDC("20000"));
+      USDC.connect(_circleAccount).transfer(
+        account4Address,
+        parseUSDC("20000")
+      );
 
       // 420K principal for token 590
       _protectionBuyer1 = await getGoldfinchLender1();
 
-      USDC.connect(circleAccount).transfer(
+      USDC.connect(_circleAccount).transfer(
         PROTECTION_BUYER1_ADDRESS,
         parseUSDC("1000000")
       );
@@ -166,9 +176,9 @@ const testPool: Function = (
       // these lending pools have been already added to referenceLendingPools instance
       // Lending pool details: https://app.goldfinch.finance/pools/0xd09a57127bc40d680be7cb061c2a6629fe71abef
       // Lending pool tokens: https://lark.market/?attributes%5BPool+Address%5D=0xd09a57127bc40d680be7cb061c2a6629fe71abef
-      let goldfinchLendingPools: string[] =
-        await referenceLendingPools.getLendingPools();
-      lendingPoolAddress = goldfinchLendingPools[1];
+      _goldfinchLendingPools = await referenceLendingPools.getLendingPools();
+      _lendingPool1 = _goldfinchLendingPools[0];
+      _lendingPool2 = _goldfinchLendingPools[1];
     });
 
     describe("constructor", () => {
@@ -371,7 +381,7 @@ const testPool: Function = (
         it("...buyProtection should fail when pool does not have min capital required", async () => {
           await expect(
             pool.connect(_protectionBuyer1).buyProtection({
-              lendingPoolAddress: lendingPoolAddress,
+              lendingPoolAddress: _lendingPool2,
               nftLpTokenId: 590,
               protectionAmount: parseUSDC("101"),
               protectionExpirationTimestamp: await getUnixTimestampAheadByDays(
@@ -423,15 +433,6 @@ const testPool: Function = (
             await pool.convertToUnderlying(await pool.balanceOf(sellerAddress))
           ).to.be.eq(_underlyingAmount);
         });
-
-        // for some reason, this test fails without hardhat generating stacktrace
-        xit("...fail if deposit causes to breach leverage ratio ceiling", async () => {
-          expect(await pool.totalProtection()).to.eq(parseUSDC("100000"));
-          const depositAmt: BigNumber = parseUSDC("52000");
-          await expect(
-            pool.deposit(depositAmt, sellerAddress)
-          ).to.be.revertedWith("PoolLeverageRatioTooHigh");
-        });
       });
 
       describe("calculateLeverageRatio after deposits and no protection", () => {
@@ -469,7 +470,7 @@ const testPool: Function = (
         it("...fails if the pool contract is paused", async () => {
           await expect(
             pool.connect(_protectionBuyer1).buyProtection({
-              lendingPoolAddress: lendingPoolAddress,
+              lendingPoolAddress: _lendingPool2,
               nftLpTokenId: 583,
               protectionAmount: parseUSDC("101"),
               protectionExpirationTimestamp: await getUnixTimestampAheadByDays(
@@ -493,7 +494,7 @@ const testPool: Function = (
         it("...fail if USDC is not approved", async () => {
           await expect(
             pool.connect(_protectionBuyer1).buyProtection({
-              lendingPoolAddress: lendingPoolAddress,
+              lendingPoolAddress: _lendingPool2,
               nftLpTokenId: 590,
               protectionAmount: parseUSDC("101"),
               protectionExpirationTimestamp: await getUnixTimestampAheadByDays(
@@ -539,7 +540,7 @@ const testPool: Function = (
         it("...fails when buyer doesn't own lending NFT", async () => {
           await expect(
             pool.connect(_protectionBuyer1).buyProtection({
-              lendingPoolAddress: lendingPoolAddress,
+              lendingPoolAddress: _lendingPool2,
               nftLpTokenId: 591,
               protectionAmount: parseUSDC("101"),
               protectionExpirationTimestamp: await getUnixTimestampAheadByDays(
@@ -552,7 +553,7 @@ const testPool: Function = (
         it("...fails when protection amount is higher than buyer's loan principal", async () => {
           await expect(
             pool.connect(_protectionBuyer1).buyProtection({
-              lendingPoolAddress: lendingPoolAddress,
+              lendingPoolAddress: _lendingPool2,
               nftLpTokenId: 590,
               protectionAmount: parseUSDC("500000"),
               protectionExpirationTimestamp: await getUnixTimestampAheadByDays(
@@ -566,14 +567,14 @@ const testPool: Function = (
           const _initialBuyerAccountId: BigNumber = BigNumber.from(1);
           const _initialPremiumAmountOfAccount: BigNumber = BigNumber.from(0);
           const _premiumTotalOfLendingPoolIdBefore: BigNumber = (
-            await pool.getLendingPoolDetail(lendingPoolAddress)
+            await pool.getLendingPoolDetail(_lendingPool2)
           )[0];
           const _premiumTotalBefore: BigNumber = await pool.totalPremium();
           const _expectedPremiumAmount = parseUSDC("2186.178896");
 
           const _protectionAmount = parseUSDC("100000"); // 100,000 USDC
           _purchaseParams = {
-            lendingPoolAddress: lendingPoolAddress,
+            lendingPoolAddress: _lendingPool2,
             nftLpTokenId: 590,
             protectionAmount: _protectionAmount,
             protectionExpirationTimestamp: await getUnixTimestampAheadByDays(40)
@@ -590,17 +591,14 @@ const testPool: Function = (
             .to.emit(pool, "CoverageBought")
             .withArgs(
               PROTECTION_BUYER1_ADDRESS,
-              lendingPoolAddress,
+              _lendingPool2,
               _protectionAmount
             );
 
           const _premiumAmountOfAccountAfter: BigNumber =
-            await pool.buyerAccounts(
-              _initialBuyerAccountId,
-              lendingPoolAddress
-            );
+            await pool.buyerAccounts(_initialBuyerAccountId, _lendingPool2);
           const _premiumTotalOfLendingPoolIdAfter: BigNumber = (
-            await pool.getLendingPoolDetail(lendingPoolAddress)
+            await pool.getLendingPoolDetail(_lendingPool2)
           )[1];
           const _premiumTotalAfter: BigNumber = await pool.totalPremium();
           expect(
@@ -636,7 +634,7 @@ const testPool: Function = (
             parseUSDC("2500")
           );
           _purchaseParams = {
-            lendingPoolAddress: lendingPoolAddress,
+            lendingPoolAddress: _lendingPool2,
             nftLpTokenId: 590,
             protectionAmount: _protectionAmount,
             protectionExpirationTimestamp: await getUnixTimestampAheadByDays(30)
@@ -821,7 +819,7 @@ const testPool: Function = (
         });
       });
 
-      xdescribe("accruePremiumAndExpireProtections", async () => {
+      describe("accruePremiumAndExpireProtections", async () => {
         it("...should NOT accrue premium", async () => {
           // no premium should be accrued because there is no new payment
           await expect(pool.accruePremiumAndExpireProtections()).to.not.emit(
@@ -830,81 +828,7 @@ const testPool: Function = (
           );
         });
 
-        it("...should accrue premium and update last accrual timestamp", async () => {
-          const totalPremiumAccruedBefore = await pool.totalPremiumAccrued();
-          expect(totalPremiumAccruedBefore).to.eq(0);
-
-          /// Time needs to be moved ahead by 31 days to apply payment to lending pool
-          await moveForwardTimeByDays(31);
-
-          // pay to lending pool
-          await payToLendingPoolAddress(lendingPoolAddress, "100000", USDC);
-
-          // accrue premium
-          expect(await pool.accruePremiumAndExpireProtections()).to.emit(
-            pool,
-            "PremiumAccrued"
-          );
-
-          expect(await pool.totalPremiumAccrued()).to.be.eq(
-            parseUSDC("1599.282240")
-          );
-
-          expect(
-            (await pool.getLendingPoolDetail(lendingPoolAddress))[0]
-          ).to.be.eq(
-            await referenceLendingPools.getLatestPaymentTimestamp(
-              lendingPoolAddress
-            )
-          );
-
-          expect((await pool.getAllProtections()).length).to.eq(1);
-        });
-
-        xit("...should remove single expired protection", async () => {
-          const protectionCount = (await pool.getAllProtections()).length;
-          expect(protectionCount).to.eq(1);
-          expect(await pool.totalProtection()).to.eq(parseUSDC("100000"));
-
-          const _protectionAmount = parseUSDC("20000");
-          const _purchaseParams = {
-            lendingPoolAddress: lendingPoolAddress,
-            nftLpTokenId: 590,
-            protectionAmount: _protectionAmount,
-            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(10)
-          };
-
-          const _premiumPaid = parseUSDC("418.617884");
-          await pool.connect(_protectionBuyer1).buyProtection(_purchaseParams);
-
-          expect(await pool.totalProtection()).to.eq(parseUSDC("120000")); // 120K
-          expect(await pool.getAllProtections()).to.have.lengthOf(2);
-
-          /// Time needs to be moved ahead by 31 days to apply payment to lending pool
-          await moveForwardTimeByDays(31);
-
-          // pay to lending pool
-          await payToLendingPoolAddress(lendingPoolAddress, "100000", USDC);
-
-          // 2nd protection should be expired and removed
-          const _totalPremiumAccruedBefore = await pool.totalPremiumAccrued();
-          await pool.accruePremiumAndExpireProtections();
-
-          expect(await pool.getAllProtections()).to.have.lengthOf(1);
-          expect(await pool.totalProtection()).to.eq(parseUSDC("100000"));
-
-          // all premium for expired protection should be accrued
-          const _totalPremiumAccruedAfter = await pool.totalPremiumAccrued();
-          expect(
-            _totalPremiumAccruedAfter.sub(_totalPremiumAccruedBefore)
-          ).to.be.gt(_premiumPaid);
-        });
-
-        xit("...should remove multiple expired protection", async () => {
-          const protectionCount = (await pool.getAllProtections()).length;
-          expect(protectionCount).to.eq(1);
-          expect(await pool.totalProtection()).to.eq(parseUSDC("100000"));
-
+        it("...add more protections", async () => {
           // Impersonate accounts with lending pool positions
           const _buyer1 = await ethers.getImpersonatedSigner(
             "0xcb726f13479963934e91b6f34b6e87ec69c21bb9"
@@ -913,7 +837,7 @@ const testPool: Function = (
             "0x5cd8c821c080b7340df6969252a979ed416a4e3f"
           );
           const _buyer3 = await ethers.getImpersonatedSigner(
-            "0xb5a790758cdb6644305d1cf368b67bbba4c9a68c"
+            "0x4902b20bb3b8e7776cbcdcb6e3397e7f6b4e449e"
           );
 
           // Transfer USDC to buyers from circle account
@@ -924,146 +848,120 @@ const testPool: Function = (
           }
 
           // Add bunch of protections
-          // buyer 1 has principal of 35K USDC with token id: 615
+          // protection 2: buyer 1 has principal of 35K USDC with token id: 615
           await pool.connect(_buyer1).buyProtection({
-            lendingPoolAddress: lendingPoolAddress,
+            lendingPoolAddress: _lendingPool2,
             nftLpTokenId: 615,
             protectionAmount: parseUSDC("20000"),
             protectionExpirationTimestamp: await getUnixTimestampAheadByDays(11)
           });
 
-          // buyer 2 has principal of 63K USDC with token id: 579
+          // protection 3: buyer 2 has principal of 63K USDC with token id: 579
           await pool.connect(_buyer2).buyProtection({
-            lendingPoolAddress: lendingPoolAddress,
+            lendingPoolAddress: _lendingPool2,
             nftLpTokenId: 579,
             protectionAmount: parseUSDC("30000"),
-            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(20)
+            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(30)
           });
 
-          // buyer 3 has principal of 60K USDC with token id: 620
-          // await pool.connect(_buyer3).buyProtection({
-          //   lendingPoolAddress: lendingPoolAddress,
-          //   nftLpTokenId: 620,
-          //   protectionAmount: parseUSDC("40000"),
-          //   protectionExpirationTimestamp: await getUnixTimestampAheadByDays(25)
-          // });
+          // protection 4: buyer 3 has principal of 158K USDC with token id: 645 in pool
+          await pool.connect(_buyer3).buyProtection({
+            lendingPoolAddress: _goldfinchLendingPools[0],
+            nftLpTokenId: 645,
+            protectionAmount: parseUSDC("50000"),
+            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(35)
+          });
 
-          // 190K USDC = 100K + 20K + 30K + 40K
-          expect(await pool.totalProtection()).to.eq(parseUSDC("150000"));
-          expect(await pool.getAllProtections()).to.have.lengthOf(3);
+          expect((await getActiveProtections()).length).to.eq(4);
 
+          // 200K USDC = 100K + 20K + 30K + 50K
+          expect(await pool.totalProtection()).to.eq(parseUSDC("200000"));
+        });
+
+        it("...should accrue premium and update last accrual timestamp", async () => {
+          expect(await pool.totalPremiumAccrued()).to.eq(0);
+          const _totalSTokenUnderlyingBefore =
+            await pool.totalSTokenUnderlying();
+
+          /// Time needs to be moved ahead by 31 days to apply payment to lending pool
           await moveForwardTimeByDays(31);
+
           // pay to lending pool
-          await payToLendingPoolAddress(lendingPoolAddress, "100000", USDC);
+          await payToLendingPoolAddress(_lendingPool2, "100000", USDC);
+          await payToLendingPoolAddress(_lendingPool1, "100000", USDC);
 
-          // 2nd & 3rd protections should be expired and removed
-          await pool.accruePremiumAndExpireProtections();
+          // accrue premium
+          expect(await pool.accruePremiumAndExpireProtections()).to.emit(
+            pool,
+            "PremiumAccrued"
+          );
 
-          expect(await pool.getAllProtections()).to.have.lengthOf(2);
-          expect(await pool.totalProtection()).to.eq(parseUSDC("140000")); // 140K USDC = 100K + 40K
+          const _expectedPremiumAccrued = parseUSDC("1599.280981") // protection 1: 100K
+            .add(parseUSDC("708.304729")) // protection 4: 50K
+            .add(parseUSDC("410.239831")) // protection 2: 20K
+            .add(parseUSDC("641.890247")); // protection 3: 30K
+          expect(await pool.totalPremiumAccrued()).to.be.eq(
+            _expectedPremiumAccrued
+          );
+
+          expect(await pool.totalSTokenUnderlying()).to.be.eq(
+            _totalSTokenUnderlyingBefore.add(_expectedPremiumAccrued)
+          );
+
+          expect((await pool.getLendingPoolDetail(_lendingPool2))[0]).to.be.eq(
+            await referenceLendingPools.getLatestPaymentTimestamp(_lendingPool2)
+          );
+
+          expect((await pool.getLendingPoolDetail(_lendingPool1))[0]).to.be.eq(
+            await referenceLendingPools.getLatestPaymentTimestamp(_lendingPool1)
+          );
         });
 
-        // This test is meant to report gas usage for buyProtection with large numbers of protections in the pool
-        xit("...gas consumption test", async () => {
-          const gasUsage = [];
+        it("...should mark protections 2 & 3 expired", async () => {
+          // 2nd & 3rd protections should be marked expired
+          const allProtections = await pool.getAllProtections();
+          expect(allProtections[1].expired).to.eq(true);
+          expect(allProtections[2].expired).to.eq(true);
 
-          // buyer 0x4535498cfbee9c7e2f817d1df21b2e9e2d9ec9b4 has principal of 25K USDC with token id: 575
-          const buyer1 = await ethers.getImpersonatedSigner(
-            "0x4535498cfbee9c7e2f817d1df21b2e9e2d9ec9b4"
-          );
+          expect(await getActiveProtections()).to.have.lengthOf(2);
+          expect(allProtections[0].expired).to.eq(false);
+          expect(allProtections[3].expired).to.eq(false);
+          expect(await pool.totalProtection()).to.eq(parseUSDC("150000"));
+        });
+      });
 
-          for (let index = 0; index < 151; index++) {
-            const tx = await pool.connect(buyer1).buyProtection(
-              {
-                lendingPoolAddress: lendingPoolAddress,
-                nftLpTokenId: 575,
-                protectionAmount: parseUSDC("10000"),
-                protectionExpirationTimestamp:
-                  await getUnixTimestampAheadByDays(30)
-              },
-              { gasLimit: 10_000_000 } // 30_000_000 is block gas limit
-            );
-            const receipt = await tx.wait();
+      describe("deposit after buyProtection", async () => {
+        it("...fails if it breaches leverage ratio ceiling", async () => {
+          expect(await pool.totalProtection()).to.eq(parseUSDC("150000"));
 
-            console.log(
-              `Gas used for protection# ${
-                index + 1
-              }: ${receipt.gasUsed.toString()}`
-            );
-            gasUsage.push(`${receipt.gasUsed}`);
-            // console.log(`***** Buy Protection ${index}`);
-          }
-          console.log(`***** buyProtection Gas Usage: ${gasUsage.join("\n")}`);
+          const depositAmt: BigNumber = parseUSDC("50000");
+          await transferAndApproveUsdc(deployer, depositAmt);
+          await expect(
+            pool.connect(deployer).deposit(depositAmt, deployerAddress)
+          ).to.be.revertedWith("PoolLeverageRatioTooHigh");
         });
 
-        // This test is meant to report gas usage for deposit with large numbers of protections in the pool
-        xit("...gas consumption test for deposit", async () => {
-          const gasUsage = [];
-          // Revert the state of the pool to the open state
-          expect(
-            await network.provider.send("evm_revert", [
-              before1stDepositSnapshotId
-            ])
-          ).to.eq(true);
-          console.log(
-            "***** Current Pool Cycle State: " +
-              (await poolCycleManager.getCurrentCycleState(poolInfo.poolId))
-          );
-
-          // buyer 0x4535498cfbee9c7e2f817d1df21b2e9e2d9ec9b4 has principal of 25K USDC with token id: 575
-          const buyer1 = await ethers.getImpersonatedSigner(
-            "0x4535498cfbee9c7e2f817d1df21b2e9e2d9ec9b4"
-          );
-
-          // Approve the pool to spend USDC
-          await USDC.approve(pool.address, parseUSDC("1000000"));
-          for (let index = 0; index < 150; index++) {
-            await pool.connect(buyer1).buyProtection(
-              {
-                lendingPoolAddress: lendingPoolAddress,
-                nftLpTokenId: 575,
-                protectionAmount: parseUSDC("10000"),
-                protectionExpirationTimestamp:
-                  await getUnixTimestampAheadByDays(60)
-              },
-              { gasLimit: 10_000_000 } // 30_000_000 is block gas limit
-            );
-            const tx = await pool.deposit(parseUSDC("1000"), deployerAddress, {
-              gasLimit: 10_000_000
-            }); // 30_000_000 is block gas limit
-            const receipt = await tx.wait();
-
-            console.log(
-              `Gas used for deposit after protection# ${
-                index + 1
-              }: ${receipt.gasUsed.toString()}`
-            );
-            gasUsage.push(`${receipt.gasUsed}`);
-            console.log(`***** Buy Protection + Deposit ${index}`);
-          }
-          console.log(`***** deposit Gas Usage: \n ${gasUsage.join("\n")}`);
+        it("...succeeds if leverage ratio is below ceiling", async () => {
+          const _depositAmount = parseUSDC("5000");
+          await transferAndApproveUsdc(deployer, _depositAmount);
+          await pool.connect(deployer).deposit(_depositAmount, deployerAddress);
         });
       });
 
       describe("buyProtection after deposit", async () => {
-        it("...should succeed when total protection is higher than min requirement and leverage ratio higher than floor", async () => {
-          // Approve the pool to spend USDC & deposit 5K USDC, min capital required is 5K
-          const _depositAmount = parseUSDC("5000");
-          await transferAndApproveUsdc(deployer, _depositAmount);
-          await pool.connect(deployer).deposit(_depositAmount, deployerAddress);
-
+        it("...succeeds when total protection is higher than min requirement and leverage ratio higher than floor", async () => {
           // Buyer 1 buys protection of 10K USDC, so approve premium to be paid
           await transferAndApproveUsdc(_protectionBuyer1, parseUSDC("500"));
           await pool.connect(_protectionBuyer1).buyProtection({
-            lendingPoolAddress: lendingPoolAddress,
+            lendingPoolAddress: _lendingPool2,
             // see: https://lark.market/tokenDetail?tokenId=590
             nftLpTokenId: 590, // this token has 420K principal for buyer 1
             protectionAmount: parseUSDC("10000"),
             protectionExpirationTimestamp: getUnixTimestampAheadByDays(15)
           });
 
-          expect(await pool.getAllProtections()).to.have.lengthOf(2);
-          expect(await pool.totalProtection()).to.eq(parseUSDC("110000")); // 100K + 10K
+          expect(await getActiveProtections()).to.have.lengthOf(3);
+          expect(await pool.totalProtection()).to.eq(parseUSDC("160000")); // 100K + 50K + 10K
 
           // previous deposits: 3K + 3K + 20 = 6020, new deposit: 5K
           expect(await calculateTotalSellerDeposit()).to.eq(parseUSDC("11020"));
@@ -1071,7 +969,6 @@ const testPool: Function = (
       });
 
       const currentPoolCycleIndex = 0;
-
       describe("...before 1st pool cycle is locked", async () => {
         before(async () => {
           // Revert the state of the pool before 1st deposit
@@ -1131,7 +1028,7 @@ const testPool: Function = (
             parseUSDC("3000")
           );
           await pool.connect(_protectionBuyer1).buyProtection({
-            lendingPoolAddress: lendingPoolAddress,
+            lendingPoolAddress: _lendingPool2,
             nftLpTokenId: 590,
             protectionAmount: parseUSDC("40000"),
             protectionExpirationTimestamp: await getUnixTimestampAheadByDays(20)
@@ -1365,7 +1262,7 @@ const testPool: Function = (
         // time has moved forward by more than 30 days, so lending pool is late for payment
         await expect(
           pool.connect(_protectionBuyer1).buyProtection({
-            lendingPoolAddress: lendingPoolAddress,
+            lendingPoolAddress: _lendingPool2,
             nftLpTokenId: 590,
             protectionAmount: parseUSDC("101"),
             protectionExpirationTimestamp: await getUnixTimestampAheadByDays(20)
@@ -1384,7 +1281,7 @@ const testPool: Function = (
         return (
           await defaultStateManager.getLockedCapitals(
             poolInstance.address,
-            lendingPoolAddress
+            _lendingPool2
           )
         )[0];
       };
@@ -1413,7 +1310,7 @@ const testPool: Function = (
       before(async () => {
         lendingPool = (await ethers.getContractAt(
           "ITranchedPool",
-          lendingPoolAddress
+          _lendingPool2
         )) as ITranchedPool;
 
         _totalSTokenUnderlying = await poolInstance.totalSTokenUnderlying();
@@ -1491,7 +1388,7 @@ const testPool: Function = (
         // but it should fail because of protection purchase limit: past 60 days
         await expect(
           pool.connect(_protectionBuyer1).buyProtection({
-            lendingPoolAddress: lendingPoolAddress,
+            lendingPoolAddress: _lendingPool2,
             nftLpTokenId: 590,
             protectionAmount: parseUSDC("101"),
             protectionExpirationTimestamp: await getUnixTimestampAheadByDays(11)

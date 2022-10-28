@@ -67,6 +67,8 @@ struct ProtectionInfo {
   /// @notice The id of NFT token representing the loan in the lending pool
   /// This is only relevant for lending protocols which provide NFT token to represent the loan
   uint256 nftLpTokenId;
+  /// @notice A flag indicating if the protection is expired or not
+  bool expired;
 }
 
 struct LendingPoolDetail {
@@ -130,9 +132,16 @@ abstract contract IPool {
   /// @notice Emitted when a new protection is bought.
   event ProtectionBought(
     address indexed buyer,
-    address lendingPoolAddress,
+    address indexed lendingPoolAddress,
     uint256 protectionAmount,
     uint256 premium
+  );
+
+  /// @notice Emitted when a existing protection is expired.
+  event ProtectionExpired(
+    address indexed buyer,
+    address indexed lendingPoolAddress,
+    uint256 protectionAmount
   );
 
   /// @notice Emitted when premium is accrued from all protections bought for a lending pool.

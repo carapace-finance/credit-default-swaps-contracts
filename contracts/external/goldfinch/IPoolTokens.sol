@@ -12,6 +12,8 @@ import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
  *  2. Removed "pragma experimental ABIEncoderV2"
  *  3. Updated ERC721 interface import
  *  4. Removed all unused structs/events/functions
+
+ * Mainnet: https://etherscan.io/address/0x57686612C601Cb5213b01AA8e80AfEb24BBd01df
  */
 interface IPoolTokens is IERC721 {
   struct TokenInfo {

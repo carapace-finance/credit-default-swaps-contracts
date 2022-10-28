@@ -179,8 +179,8 @@ const deployContracts: Function = async () => {
     );
 
     const _poolCycleParams: PoolCycleParamsStruct = {
-      openCycleDuration: BigNumber.from(10 * 86400), // 10 days
-      cycleDuration: BigNumber.from(30 * 86400) // 30 days
+      openCycleDuration: getDaysInSeconds(10),
+      cycleDuration: getDaysInSeconds(30)
     };
 
     const _poolParams: PoolParamsStruct = {

@@ -95,6 +95,10 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     }
 
     /// allow buyers to buy protection only up to the next cycle end
+    // uint256 poolId = poolInfo.poolId;
+    // CycleState cycleState = poolCycleManager.calculateAndSetPoolCycleState(
+    //   poolInfo.poolId
+    // );
     uint256 _nextCycleEndTimestamp = poolCycleManager.getNextCycleEndTimestamp(
       poolInfo.poolId
     );
@@ -106,6 +110,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     }
 
     /// Verify that the lending pool is active
+
     LendingPoolStatus poolStatus = poolInfo
       .referenceLendingPools
       .getLendingPoolStatus(_protectionPurchaseParams.lendingPoolAddress);
@@ -300,7 +305,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         K: _k,
         lambda: _lambda,
         lendingPool: _protectionPurchaseParams.lendingPoolAddress,
-        nftLpTokenId: _protectionPurchaseParams.nftLpTokenId
+        nftLpTokenId: _protectionPurchaseParams.nftLpTokenId,
+        expired: false
       })
     );
 
@@ -438,11 +444,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /// @inheritdoc IPool
   function accruePremiumAndExpireProtections() external override {
-    uint256 _removalIndex = 0;
-    uint256[] memory _expiredProtections = new uint256[](
-      protectionInfos.length
-    );
-
     address[] memory _lendingPools = poolInfo
       .referenceLendingPools
       .getLendingPools();
@@ -474,7 +475,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
           .protectionInfoIndexSet
           .values();
 
-        /// Iterate all loan protections for this lending pool and accrue premium for each
+        /// Iterate all protections for this lending pool and accrue premium for each
+        uint256 _accruedPremiumForLendingPool;
         uint256 protectionLength = _protectionIndexes.length;
         for (uint256 j; j < protectionLength; ) {
           uint256 _protectionIndex = _protectionIndexes[j];
@@ -483,16 +485,20 @@ contract Pool is IPool, SToken, ReentrancyGuard {
           ];
 
           /// Accrue premium for the loan protection and
-          /// if loan protection is expired, add it to the list of expired protections
-          if (
-            _accruePremium(
+          /// if the protection is expired, then mark it as expired
+          (uint256 _accruedPremiumInUnderlying, bool _expired) = _accruePremium(
+            protectionInfo,
+            _lastPremiumAccrualTimestamp,
+            _latestPaymentTimestamp
+          );
+          _accruedPremiumForLendingPool += _accruedPremiumInUnderlying;
+
+          if (_expired) {
+            _expireProtection(
               protectionInfo,
-              _lastPremiumAccrualTimestamp,
-              _latestPaymentTimestamp
-            )
-          ) {
-            _expiredProtections[_removalIndex] = _protectionIndex;
-            _removalIndex++;
+              lendingPoolDetail,
+              _protectionIndex
+            );
           }
 
           unchecked {
@@ -500,7 +506,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
           }
         }
 
-        if (protectionLength > 0) {
+        if (_accruedPremiumForLendingPool > 0) {
           /// Persist the latest payment timestamp for the lending pool
           lendingPoolDetail
             .lastPremiumAccrualTimestamp = _latestPaymentTimestamp;
@@ -511,42 +517,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
       unchecked {
         ++_lendingPoolIndex;
-      }
-    }
-
-    /// Remove expired protections from the list
-    // TODO: fix removal
-    console.log("removalIndex: %s", _removalIndex);
-    for (uint256 i; i < _removalIndex; ) {
-      uint256 expiredProtectionIndex = _expiredProtections[i];
-      address _lendingPool = protectionInfos[expiredProtectionIndex]
-        .lendingPool;
-      console.log(
-        "expiredProtectionIndex: %s, lendingPool: %s",
-        expiredProtectionIndex,
-        _lendingPool
-      );
-
-      /// Reduce the total protection amount of this protection pool
-      totalProtection -= protectionInfos[expiredProtectionIndex]
-        .protectionAmount;
-
-      /// move the last element to the expired protection index
-      protectionInfos[expiredProtectionIndex] = protectionInfos[
-        protectionInfos.length - 1
-      ];
-
-      /// remove the last element
-      protectionInfos.pop();
-
-      /// remove expired protection index from lendingPool's protectionInfoIndexSet
-      LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
-        _lendingPool
-      ];
-      lendingPoolDetail.protectionInfoIndexSet.remove(expiredProtectionIndex);
-
-      unchecked {
-        ++i;
       }
     }
   }
@@ -659,7 +629,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   }
 
   /**
-   * @notice Returns all the protections bought from the pool.
+   * @notice Returns all the protections bought from the pool, active & expired.
    */
   function getAllProtections() external view returns (ProtectionInfo[] memory) {
     return protectionInfos;
@@ -799,19 +769,20 @@ contract Pool is IPool, SToken, ReentrancyGuard {
    * @param protectionInfo The loan protection to accrue premium for.
    * @param _lastPremiumAccrualTimestamp The timestamp of last premium accrual.
    * @param _latestPaymentTimestamp The timestamp of latest payment made to the underlying lending pool.
+   * @return _accruedPremiumInUnderlying The premium accrued for the protection.
    * @return _expired Whether the loan protection has expired or not.
    */
   function _accruePremium(
     ProtectionInfo storage protectionInfo,
     uint256 _lastPremiumAccrualTimestamp,
     uint256 _latestPaymentTimestamp
-  ) internal returns (bool _expired) {
+  ) internal returns (uint256 _accruedPremiumInUnderlying, bool _expired) {
     uint256 _startTimestamp = protectionInfo.startTimestamp;
 
     /// This means no payment has been made after the protection is bought,
     /// so no premium needs to be accrued.
     if (_latestPaymentTimestamp < _startTimestamp) {
-      return false;
+      return (0, false);
     }
 
     /**
@@ -847,31 +818,45 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _secondsUntilLatestPayment = _latestPaymentTimestamp - _startTimestamp;
     }
 
-    console.log(
-      "Accrue premium for lending pool:%s from secondsUntilLastPremiumAccrual: %s to secondsUntilLatestPayment: %s",
-      protectionInfo.lendingPool,
-      _secondsUntilLastPremiumAccrual,
-      _secondsUntilLatestPayment
-    );
-
-    uint256 _accruedPremium = AccruedPremiumCalculator.calculateAccruedPremium(
-      _secondsUntilLastPremiumAccrual,
-      _secondsUntilLatestPayment,
-      protectionInfo.K,
-      protectionInfo.lambda
-    );
+    uint256 _accruedPremiumIn18Decimals = AccruedPremiumCalculator
+      .calculateAccruedPremium(
+        _secondsUntilLastPremiumAccrual,
+        _secondsUntilLatestPayment,
+        protectionInfo.K,
+        protectionInfo.lambda
+      );
 
     console.log(
       "accruedPremium from second %s to %s: ",
       _secondsUntilLastPremiumAccrual,
       _secondsUntilLatestPayment,
-      _accruedPremium
+      _accruedPremiumIn18Decimals
     );
-    uint256 _accruedPremiumInUnderlying = _scale18DecimalsAmtToUnderlyingDecimals(
-        _accruedPremium
-      );
+    _accruedPremiumInUnderlying = _scale18DecimalsAmtToUnderlyingDecimals(
+      _accruedPremiumIn18Decimals
+    );
     totalPremiumAccrued += _accruedPremiumInUnderlying;
     totalSTokenUnderlying += _accruedPremiumInUnderlying;
+  }
+
+  function _expireProtection(
+    ProtectionInfo storage protectionInfo,
+    LendingPoolDetail storage lendingPoolDetail,
+    uint256 _protectionIndex
+  ) internal {
+    protectionInfo.expired = true;
+
+    /// Reduce the total protection amount of this protection pool
+    totalProtection -= protectionInfo.protectionAmount;
+
+    /// remove expired protection index from lendingPool's protectionInfoIndexSet
+    lendingPoolDetail.protectionInfoIndexSet.remove(_protectionIndex);
+
+    emit ProtectionExpired(
+      protectionInfo.buyer,
+      protectionInfo.lendingPool,
+      protectionInfo.protectionAmount
+    );
   }
 
   /**

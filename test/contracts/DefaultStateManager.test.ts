@@ -167,8 +167,6 @@ const testDefaultStateManager: Function = (
         const lockedCapitalsLendingPool1 =
           await defaultStateManager.getLockedCapitals(pool1, lendingPools[0]);
 
-        console.log("lockedCapitalsLendingPool1", lockedCapitalsLendingPool1);
-
         expect(lockedCapitalsLendingPool1.length).to.eq(1);
         expect(lockedCapitalsLendingPool1[0].snapshotId).to.eq(1);
         expect(lockedCapitalsLendingPool1[0].amount).to.eq(0);
