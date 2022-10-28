@@ -38,7 +38,7 @@ contract PoolCycleManager is IPoolCycleManager {
     uint256 _poolId,
     uint256 _openCycleDuration,
     uint256 _cycleDuration
-  ) public override onlyPoolFactory {
+  ) external override onlyPoolFactory {
     PoolCycle storage poolCycle = poolCycles[_poolId];
 
     if (poolCycle.currentCycleStartTime > 0) {
@@ -56,7 +56,7 @@ contract PoolCycleManager is IPoolCycleManager {
 
   /// @inheritdoc IPoolCycleManager
   function calculateAndSetPoolCycleState(uint256 _poolId)
-    public
+    external
     override
     returns (CycleState)
   {
@@ -98,7 +98,7 @@ contract PoolCycleManager is IPoolCycleManager {
 
   /// @inheritdoc IPoolCycleManager
   function getCurrentCycleState(uint256 _poolId)
-    public
+    external
     view
     override
     returns (CycleState)
@@ -108,7 +108,7 @@ contract PoolCycleManager is IPoolCycleManager {
 
   /// @inheritdoc IPoolCycleManager
   function getCurrentCycleIndex(uint256 _poolId)
-    public
+    external
     view
     override
     returns (uint256)
@@ -118,7 +118,7 @@ contract PoolCycleManager is IPoolCycleManager {
 
   /// @inheritdoc IPoolCycleManager
   function getCurrentPoolCycle(uint256 _poolId)
-    public
+    external
     view
     override
     returns (PoolCycle memory)
@@ -127,7 +127,7 @@ contract PoolCycleManager is IPoolCycleManager {
   }
 
   function getNextCycleEndTimestamp(uint256 _poolId)
-    public
+    external
     view
     override
     returns (uint256 _nextCycleEndTimestamp)

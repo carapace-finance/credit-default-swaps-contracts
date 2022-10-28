@@ -50,7 +50,7 @@ abstract contract IPoolCycleManager {
     uint256 _poolId,
     uint256 openCycleDuration,
     uint256 cycleDuration
-  ) public virtual;
+  ) external virtual;
 
   /**
    * @notice Determines & returns the current cycle state of the given pool.
@@ -59,7 +59,7 @@ abstract contract IPoolCycleManager {
    * @return state The newly determined cycle state of the pool.
    */
   function calculateAndSetPoolCycleState(uint256 _poolId)
-    public
+    external
     virtual
     returns (CycleState);
 
@@ -69,7 +69,7 @@ abstract contract IPoolCycleManager {
    * @return state The current cycle state of the given pool.
    */
   function getCurrentCycleState(uint256 _poolId)
-    public
+    external
     view
     virtual
     returns (CycleState);
@@ -80,7 +80,7 @@ abstract contract IPoolCycleManager {
    * @return index The current cycle index of the given pool.
    */
   function getCurrentCycleIndex(uint256 _poolId)
-    public
+    external
     view
     virtual
     returns (uint256);
@@ -89,7 +89,7 @@ abstract contract IPoolCycleManager {
    * @notice Provides the current cycle info for the pool with specified id.
    */
   function getCurrentPoolCycle(uint256 _poolId)
-    public
+    external
     view
     virtual
     returns (PoolCycle memory);
@@ -98,7 +98,7 @@ abstract contract IPoolCycleManager {
    * @notice Provides the timestamp of the end of the next cycle for the pool with specified id.
    */
   function getNextCycleEndTimestamp(uint256 _poolId)
-    public
+    external
     view
     virtual
     returns (uint256 _nextCycleEndTimestamp);
