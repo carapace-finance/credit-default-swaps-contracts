@@ -76,89 +76,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /*** modifiers ***/
 
-  /**
-   * @notice Verifies that the status of the lending pool is ACTIVE and protection can be bought,
-   *         otherwise reverts with the appropriate error message.
-   * @param _protectionPurchaseParams The protection purchase params such as lending pool address, protection amount, duration etc
-   */
-  modifier canBuyProtection(
-    ProtectionPurchaseParams calldata _protectionPurchaseParams
-  ) {
-    /// a buyer needs to buy protection longer than 90 days
-    uint256 _protectionDurationInSeconds = _protectionPurchaseParams
-      .protectionExpirationTimestamp - block.timestamp;
-    if (
-      _protectionDurationInSeconds <
-      poolInfo.params.minProtectionDurationInSeconds
-    ) {
-      revert ProtectionDurationTooShort(_protectionDurationInSeconds);
-    }
-
-    /// allow buyers to buy protection only up to the next cycle end
-    // uint256 poolId = poolInfo.poolId;
-    // CycleState cycleState = poolCycleManager.calculateAndSetPoolCycleState(
-    //   poolInfo.poolId
-    // );
-    uint256 _nextCycleEndTimestamp = poolCycleManager.getNextCycleEndTimestamp(
-      poolInfo.poolId
-    );
-    if (
-      _protectionPurchaseParams.protectionExpirationTimestamp >
-      _nextCycleEndTimestamp
-    ) {
-      revert ProtectionDurationTooLong(_protectionDurationInSeconds);
-    }
-
-    /// Verify that the lending pool is active
-
-    LendingPoolStatus poolStatus = poolInfo
-      .referenceLendingPools
-      .getLendingPoolStatus(_protectionPurchaseParams.lendingPoolAddress);
-
-    if (poolStatus == LendingPoolStatus.NotSupported) {
-      revert LendingPoolNotSupported(
-        _protectionPurchaseParams.lendingPoolAddress
-      );
-    }
-
-    if (poolStatus == LendingPoolStatus.Late) {
-      revert LendingPoolHasLatePayment(
-        _protectionPurchaseParams.lendingPoolAddress
-      );
-    }
-
-    if (poolStatus == LendingPoolStatus.Expired) {
-      revert LendingPoolExpired(_protectionPurchaseParams.lendingPoolAddress);
-    }
-
-    if (poolStatus == LendingPoolStatus.Defaulted) {
-      revert LendingPoolDefaulted(_protectionPurchaseParams.lendingPoolAddress);
-    }
-
-    /// Verify that buyer can buy the protection
-    if (
-      !poolInfo.referenceLendingPools.canBuyProtection(
-        msg.sender,
-        _protectionPurchaseParams
-      )
-    ) {
-      revert ProtectionPurchaseNotAllowed(_protectionPurchaseParams);
-    }
-
-    _;
-  }
-
-  modifier hasMinCapitalRequired() {
-    /// verify that pool has min capital required
-    if (!_hasMinRequiredCapital()) {
-      revert PoolHasNoMinCapitalRequired(
-        poolInfo.poolId,
-        totalSTokenUnderlying
-      );
-    }
-    _;
-  }
-
   modifier noBuyerAccountExist() {
     if (!(ownerAddressToBuyerAccountId[msg.sender] == 0))
       revert BuyerAccountExists(msg.sender);
@@ -222,20 +139,17 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /// @inheritdoc IPool
   function buyProtection(
     ProtectionPurchaseParams calldata _protectionPurchaseParams
-  )
-    external
-    override
-    whenNotPaused
-    canBuyProtection(_protectionPurchaseParams)
-    hasMinCapitalRequired
-    nonReentrant
-  {
-    /// Step 1: Create a buyer account if not exists
-    if (_noBuyerAccountExist() == true) {
-      _createBuyerAccount();
-    }
+  ) external override whenNotPaused nonReentrant {
+    /// Step 1: Verify that user can buy protection
+    _verifyUserCanBuyProtection(_protectionPurchaseParams);
 
-    /// Step 2: Calculate & check the leverage ratio
+    /// Step 2: Verify that pool has minimum required capital
+    _verifyMinCapitalRequired();
+
+    /// Step 3: Create a buyer account if not exists
+    _verifyAndCreateBuyerAccount();
+
+    /// Step 4: Calculate & check the leverage ratio
     /// Calculate & when total protection is higher than required min protection,
     /// ensure that leverage ratio floor is not breached
     totalProtection += _protectionPurchaseParams.protectionAmount;
@@ -250,7 +164,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _protectionPurchaseParams.lendingPoolAddress
     ];
 
-    //// Step 3: Calculate the protection premium amount scaled to 18 decimals and scale it to the underlying token decimals.
+    //// Step 5: Calculate the protection premium amount scaled to 18 decimals and scale it to the underlying token decimals.
     (
       uint256 _premiumAmountIn18Decimals,
       uint256 _premiumAmount,
@@ -261,14 +175,14 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         _leverageRatio
       );
 
-    /// Step 4: transfer premium amount from buyer to pool & track the premium amount
+    /// Step 6: transfer premium amount from buyer to pool & track the premium amount
     poolInfo.underlyingToken.safeTransferFrom(
       msg.sender,
       address(this),
       _premiumAmount
     );
 
-    /// Step 5: Calculate protection in days and scale it to 18 decimals.
+    /// Step 7: Calculate protection in days and scale it to 18 decimals.
     uint256 _protectionDurationInDaysScaled = ((_protectionPurchaseParams
       .protectionExpirationTimestamp - block.timestamp) *
       Constants.SCALE_18_DECIMALS) / uint256(Constants.SECONDS_IN_DAY);
@@ -280,7 +194,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _leverageRatio
     );
 
-    /// Step 6: Capture loan protection data for premium accrual calculation
+    /// Step 8: Capture loan protection data for premium accrual calculation
     // solhint-disable-next-line
     (int256 _k, int256 _lambda) = AccruedPremiumCalculator.calculateKAndLambda(
       _premiumAmountIn18Decimals,
@@ -293,24 +207,20 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _isMinPremium ? poolInfo.params.minCarapaceRiskPremiumPercent : 0
     );
 
-    /// Step 7: Add protection to the pool & emit an event
+    /// Step 9: Add protection to the pool & emit an event
     protectionInfos.push(
       ProtectionInfo({
         buyer: msg.sender,
-        protectionAmount: _protectionPurchaseParams.protectionAmount,
         protectionPremium: _premiumAmount,
         startTimestamp: block.timestamp,
-        expirationTimestamp: _protectionPurchaseParams
-          .protectionExpirationTimestamp,
         K: _k,
         lambda: _lambda,
-        lendingPool: _protectionPurchaseParams.lendingPoolAddress,
-        nftLpTokenId: _protectionPurchaseParams.nftLpTokenId,
+        purchaseParams: _protectionPurchaseParams,
         expired: false
       })
     );
 
-    /// Step 8: Track all loan protections for a lending pool to calculate
+    /// Step 10: Track all loan protections for a lending pool to calculate
     // the total locked amount for the lending pool, when/if pool is late for payment
     lendingPoolDetail.protectionInfoIndexSet.add(protectionInfos.length - 1);
 
@@ -555,9 +465,11 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         .calculateRemainingPrincipal(
           _lendingPoolAddress,
           protectionInfo.buyer,
-          protectionInfo.nftLpTokenId
+          protectionInfo.purchaseParams.nftLpTokenId
         );
-      uint256 _protectionAmount = protectionInfo.protectionAmount;
+      uint256 _protectionAmount = protectionInfo
+        .purchaseParams
+        .protectionAmount;
       uint256 _lockedAmountPerProtection = _protectionAmount <
         _remainingPrincipal
         ? _protectionAmount
@@ -757,11 +669,13 @@ contract Pool is IPool, SToken, ReentrancyGuard {
    * @notice Create a unique account of a protection buyer for an EOA
    * @dev Only one account can be created per EOA
    */
-  function _createBuyerAccount() private noBuyerAccountExist whenNotPaused {
-    uint256 _buyerAccountId = buyerAccountIdCounter.current();
-    ownerAddressToBuyerAccountId[msg.sender] = _buyerAccountId;
-    buyerAccountIdCounter.increment();
-    emit BuyerAccountCreated(msg.sender, _buyerAccountId);
+  function _verifyAndCreateBuyerAccount() private {
+    if (_noBuyerAccountExist() == true) {
+      uint256 _buyerAccountId = buyerAccountIdCounter.current();
+      ownerAddressToBuyerAccountId[msg.sender] = _buyerAccountId;
+      buyerAccountIdCounter.increment();
+      emit BuyerAccountCreated(msg.sender, _buyerAccountId);
+    }
   }
 
   /**
@@ -791,7 +705,9 @@ contract Pool is IPool, SToken, ReentrancyGuard {
      * secondsUntilLastPremiumAccrual is the second elapsed since the last accrual timestamp.
      * secondsUntilLatestPayment is the second elapsed until latest payment is made.
      */
-    uint256 _expirationTimestamp = protectionInfo.expirationTimestamp;
+    uint256 _expirationTimestamp = protectionInfo
+      .purchaseParams
+      .protectionExpirationTimestamp;
 
     // When premium is accrued for the first time, the _secondsUntilLastPremiumAccrual is 0.
     uint256 _secondsUntilLastPremiumAccrual;
@@ -812,7 +728,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _secondsUntilLatestPayment = _expirationTimestamp - _startTimestamp;
       console.log(
         "Protection expired for amt: %s",
-        protectionInfo.protectionAmount
+        protectionInfo.purchaseParams.protectionAmount
       );
     } else {
       _secondsUntilLatestPayment = _latestPaymentTimestamp - _startTimestamp;
@@ -847,15 +763,15 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     protectionInfo.expired = true;
 
     /// Reduce the total protection amount of this protection pool
-    totalProtection -= protectionInfo.protectionAmount;
+    totalProtection -= protectionInfo.purchaseParams.protectionAmount;
 
     /// remove expired protection index from lendingPool's protectionInfoIndexSet
     lendingPoolDetail.protectionInfoIndexSet.remove(_protectionIndex);
 
     emit ProtectionExpired(
       protectionInfo.buyer,
-      protectionInfo.lendingPool,
-      protectionInfo.protectionAmount
+      protectionInfo.purchaseParams.lendingPoolAddress,
+      protectionInfo.purchaseParams.protectionAmount
     );
   }
 
@@ -942,5 +858,83 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
     totalPremium += _premiumAmount;
     lendingPoolDetail.totalPremium += _premiumAmount;
+  }
+
+  /**
+   * @notice Verifies that the status of the lending pool is ACTIVE and protection can be bought,
+   * otherwise reverts with the appropriate error message.
+   * @param _protectionPurchaseParams The protection purchase params such as lending pool address, protection amount, duration etc
+   */
+  function _verifyUserCanBuyProtection(
+    ProtectionPurchaseParams calldata _protectionPurchaseParams
+  ) internal {
+    /// a buyer needs to buy protection longer than 90 days
+    uint256 _protectionDurationInSeconds = _protectionPurchaseParams
+      .protectionExpirationTimestamp - block.timestamp;
+    if (
+      _protectionDurationInSeconds <
+      poolInfo.params.minProtectionDurationInSeconds
+    ) {
+      revert ProtectionDurationTooShort(_protectionDurationInSeconds);
+    }
+
+    /// allow buyers to buy protection only up to the next cycle end
+    uint256 poolId = poolInfo.poolId;
+    poolCycleManager.calculateAndSetPoolCycleState(poolId);
+    uint256 _nextCycleEndTimestamp = poolCycleManager.getNextCycleEndTimestamp(
+      poolId
+    );
+    if (
+      _protectionPurchaseParams.protectionExpirationTimestamp >
+      _nextCycleEndTimestamp
+    ) {
+      revert ProtectionDurationTooLong(_protectionDurationInSeconds);
+    }
+
+    /// Verify that the lending pool is active
+
+    LendingPoolStatus poolStatus = poolInfo
+      .referenceLendingPools
+      .getLendingPoolStatus(_protectionPurchaseParams.lendingPoolAddress);
+
+    if (poolStatus == LendingPoolStatus.NotSupported) {
+      revert LendingPoolNotSupported(
+        _protectionPurchaseParams.lendingPoolAddress
+      );
+    }
+
+    if (poolStatus == LendingPoolStatus.Late) {
+      revert LendingPoolHasLatePayment(
+        _protectionPurchaseParams.lendingPoolAddress
+      );
+    }
+
+    if (poolStatus == LendingPoolStatus.Expired) {
+      revert LendingPoolExpired(_protectionPurchaseParams.lendingPoolAddress);
+    }
+
+    if (poolStatus == LendingPoolStatus.Defaulted) {
+      revert LendingPoolDefaulted(_protectionPurchaseParams.lendingPoolAddress);
+    }
+
+    /// Verify that buyer can buy the protection
+    if (
+      !poolInfo.referenceLendingPools.canBuyProtection(
+        msg.sender,
+        _protectionPurchaseParams
+      )
+    ) {
+      revert ProtectionPurchaseNotAllowed(_protectionPurchaseParams);
+    }
+  }
+
+  function _verifyMinCapitalRequired() internal view {
+    /// verify that pool has min capital required
+    if (!_hasMinRequiredCapital()) {
+      revert PoolHasNoMinCapitalRequired(
+        poolInfo.poolId,
+        totalSTokenUnderlying
+      );
+    }
   }
 }

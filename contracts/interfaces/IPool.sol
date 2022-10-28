@@ -48,14 +48,10 @@ struct PoolInfo {
 struct ProtectionInfo {
   /// @notice the address of a protection buyer
   address buyer;
-  /// @notice The amount of protection purchased.
-  uint256 protectionAmount;
   /// @notice The amount of premium paid in underlying token
   uint256 protectionPremium;
   /// @notice The timestamp at which the loan protection is bought
   uint256 startTimestamp;
-  /// @notice The timestamp at which the loan protection is expired
-  uint256 expirationTimestamp;
   /// @notice Constant K is calculated & captured at the time of loan protection purchase
   /// @notice It is used in accrued premium calculation
   // solhint-disable-next-line var-name-mixedcase
@@ -63,10 +59,7 @@ struct ProtectionInfo {
   /// @notice Lambda is calculated & captured at the time of loan protection purchase
   /// @notice It is used in accrued premium calculation
   int256 lambda;
-  address lendingPool;
-  /// @notice The id of NFT token representing the loan in the lending pool
-  /// This is only relevant for lending protocols which provide NFT token to represent the loan
-  uint256 nftLpTokenId;
+  ProtectionPurchaseParams purchaseParams;
   /// @notice A flag indicating if the protection is expired or not
   bool expired;
 }

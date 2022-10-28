@@ -36,11 +36,6 @@ const testGoldfinchV2Adapter: Function = (
           )
         ).to.be.false;
       });
-
-      // Could not find a pool with writedown > 0
-      xit("...should return true for a pool with writedown > 0", async () => {
-        expect(await goldfinchV2Adapter.isLendingPoolDefaulted("")).to.be.false;
-      });
     });
 
     describe("isLendingPoolLate", () => {

@@ -878,7 +878,7 @@ const testPool: Function = (
           expect(await pool.totalProtection()).to.eq(parseUSDC("200000"));
         });
 
-        it("...should accrue premium and update last accrual timestamp", async () => {
+        it("...should accrue premium, expire protections & update last accrual timestamp", async () => {
           expect(await pool.totalPremiumAccrued()).to.eq(0);
           const _totalSTokenUnderlyingBefore =
             await pool.totalSTokenUnderlying();
@@ -891,10 +891,9 @@ const testPool: Function = (
           await payToLendingPoolAddress(_lendingPool1, "100000", USDC);
 
           // accrue premium
-          expect(await pool.accruePremiumAndExpireProtections()).to.emit(
-            pool,
-            "PremiumAccrued"
-          );
+          expect(await pool.accruePremiumAndExpireProtections())
+            .to.emit(pool, "PremiumAccrued")
+            .to.emit(pool, "ProtectionExpired");
 
           const _expectedPremiumAccrued = parseUSDC("1599.280981") // protection 1: 100K
             .add(parseUSDC("708.304729")) // protection 4: 50K
