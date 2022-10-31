@@ -102,7 +102,7 @@ abstract contract IReferenceLendingPools {
    * protection amount is less than or equal to the lent amount.
    * @param _buyer the address of the buyer
    * @param _purchaseParams the protection purchase parameters
-   * @param _buyerHasActiveProtection whether the buyer has active protection for the specified lending pool or not
+   * @param _buyerHasActiveProtection whether the buyer has active protection for the same lending position in the specified lending pool or not
    * @return true if the buyer can buy protection, false otherwise
    */
   function canBuyProtection(

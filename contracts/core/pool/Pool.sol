@@ -372,15 +372,15 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         _latestPaymentTimestamp
       );
       if (_latestPaymentTimestamp > _lastPremiumAccrualTimestamp) {
-        EnumerableSet.UintSet
-          storage activeProtectionIndexes = lendingPoolDetail
-            .activeProtectionIndexes;
+        uint256[] memory _protectionIndexes = lendingPoolDetail
+          .activeProtectionIndexes
+          .values();
 
         /// Iterate all protections for this lending pool and accrue premium for each
         uint256 _accruedPremiumForLendingPool;
-        uint256 _length = activeProtectionIndexes.length();
+        uint256 _length = _protectionIndexes.length;
         for (uint256 j; j < _length; ) {
-          uint256 _protectionIndex = activeProtectionIndexes.at(j);
+          uint256 _protectionIndex = _protectionIndexes[j];
           ProtectionInfo storage protectionInfo = protectionInfos[
             _protectionIndex
           ];
@@ -603,6 +603,9 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /**
    * @notice Returns the lending pool's detail.
+   * @param _lendingPoolAddress The address of the lending pool.
+   * @return _lastPremiumAccrualTimestamp The timestamp of the last premium accrual.
+   * @return _totalPremium The total premium paid for the lending pool.
    */
   function getLendingPoolDetail(address _lendingPoolAddress)
     external
@@ -615,6 +618,43 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     _lastPremiumAccrualTimestamp = lendingPoolDetail
       .lastPremiumAccrualTimestamp;
     _totalPremium = lendingPoolDetail.totalPremium;
+  }
+
+  /**
+   * @notice Returns all active protections bought by the specified buyer.
+   * @param _buyer The address of the buyer.
+   * @return _protectionInfos The array of active protections.
+   */
+  function getActiveProtections(address _buyer)
+    external
+    view
+    returns (ProtectionInfo[] memory _protectionInfos)
+  {
+    EnumerableSet.UintSet
+      storage activeProtectionIndexes = protectionBuyerAccounts[_buyer]
+        .activeProtectionIndexes;
+    uint256 _length = activeProtectionIndexes.length();
+    _protectionInfos = new ProtectionInfo[](_length);
+
+    for (uint256 i; i < _length; ) {
+      uint256 _protectionIndex = activeProtectionIndexes.at(i);
+      _protectionInfos[i] = protectionInfos[_protectionIndex];
+
+      unchecked {
+        ++i;
+      }
+    }
+  }
+
+  /**
+   * @notice Returns total premium paid by buyer for the specified lending pool.
+   */
+  function getTotalPremiumPaidForLendingPool(
+    address _buyer,
+    address _lendingPoolAddress
+  ) external view returns (uint256) {
+    return
+      protectionBuyerAccounts[_buyer].lendingPoolToPremium[_lendingPoolAddress];
   }
 
   /*** internal functions */
@@ -890,6 +930,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     }
 
     /// Verify that buyer can buy the protection
+    /// _doesBuyerHaveActiveProtection verifies whether a buyer has active protection for the same position in the same lending pool.
+    /// If s/he has, then we allow to buy protection even when protection purchase limit is passed.
     if (
       !poolInfo.referenceLendingPools.canBuyProtection(
         msg.sender,
@@ -912,7 +954,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   }
 
   /**
-   * @dev Verifies whether a buyer has active protection for a lending position in the given lending pool.
+   * @dev Verifies whether a buyer has active protection for same lending position
+   * in the same lending pool specified in the protection purchase params.
    */
   function _doesBuyerHaveActiveProtection(
     ProtectionPurchaseParams calldata _protectionPurchaseParams
@@ -928,6 +971,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
           _protectionIndex
         ].purchaseParams;
 
+      /// This means a buyer has active protection for the same position in the same lending pool
       if (
         existingProtectionPurchaseParams.lendingPoolAddress ==
         _protectionPurchaseParams.lendingPoolAddress &&

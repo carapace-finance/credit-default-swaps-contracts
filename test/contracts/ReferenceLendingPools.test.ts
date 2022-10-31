@@ -290,8 +290,10 @@ const testReferenceLendingPools: Function = (
         let _purchaseParams: ProtectionPurchaseParamsStruct;
         const BUYER1 = "0x12c2cfda0a51fe2a68e443868bcbf3d6f6e2dda2";
         const BUYER2 = "0x10a590f528eff3d5de18c90da6e03a4acdde3a7d";
+        let _buyerHasActiveProtection: boolean;
 
         before("set up", async () => {
+          _buyerHasActiveProtection = false;
           _purchaseParams = {
             lendingPoolAddress: LENDING_POOL_3,
             nftLpTokenId: 714, // see: https://lark.market/tokenDetail?tokenId=714
@@ -304,7 +306,8 @@ const testReferenceLendingPools: Function = (
           expect(
             await referenceLendingPoolsInstance.canBuyProtection(
               BUYER1,
-              _purchaseParams
+              _purchaseParams,
+              _buyerHasActiveProtection
             )
           ).to.be.eq(true);
         });
@@ -315,7 +318,8 @@ const testReferenceLendingPools: Function = (
           expect(
             await referenceLendingPoolsInstance.canBuyProtection(
               BUYER1,
-              _purchaseParams
+              _purchaseParams,
+              _buyerHasActiveProtection
             )
           ).to.be.eq(false);
         });
@@ -325,7 +329,8 @@ const testReferenceLendingPools: Function = (
           expect(
             await referenceLendingPoolsInstance.canBuyProtection(
               BUYER1,
-              _purchaseParams
+              _purchaseParams,
+              _buyerHasActiveProtection
             )
           ).to.be.eq(false);
         });
@@ -338,7 +343,8 @@ const testReferenceLendingPools: Function = (
           expect(
             await referenceLendingPoolsInstance.canBuyProtection(
               BUYER2,
-              _purchaseParams
+              _purchaseParams,
+              _buyerHasActiveProtection
             )
           ).to.be.eq(false);
         });
@@ -348,7 +354,19 @@ const testReferenceLendingPools: Function = (
           expect(
             await referenceLendingPoolsInstance.canBuyProtection(
               _implementationDeployerAddress,
-              _purchaseParams
+              _purchaseParams,
+              _buyerHasActiveProtection
+            )
+          ).to.be.eq(false);
+        });
+
+        it("...should return true when protection purchase limit is expired but buyer has active protection", async () => {
+          _buyerHasActiveProtection = true;
+          expect(
+            await referenceLendingPoolsInstance.canBuyProtection(
+              _implementationDeployerAddress,
+              _purchaseParams,
+              _buyerHasActiveProtection
             )
           ).to.be.eq(false);
         });
@@ -359,7 +377,8 @@ const testReferenceLendingPools: Function = (
           await expect(
             referenceLendingPoolsInstance.canBuyProtection(
               BUYER1,
-              _purchaseParams
+              _purchaseParams,
+              _buyerHasActiveProtection
             )
           ).to.be.revertedWith("ReferenceLendingPoolNotSupported");
         });
