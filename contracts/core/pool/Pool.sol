@@ -9,7 +9,7 @@ import {SToken} from "./SToken.sol";
 import {IPremiumCalculator} from "../../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools, LendingPoolStatus, ProtectionPurchaseParams} from "../../interfaces/IReferenceLendingPools.sol";
 import {IPoolCycleManager, CycleState} from "../../interfaces/IPoolCycleManager.sol";
-import {IPool, EnumerableSet, PoolParams, PoolCycleParams, PoolInfo, ProtectionInfo, LendingPoolDetail, WithdrawalCycleDetail} from "../../interfaces/IPool.sol";
+import {IPool, EnumerableSet, PoolParams, PoolCycleParams, PoolInfo, ProtectionInfo, LendingPoolDetail, WithdrawalCycleDetail, ProtectionBuyerAccount} from "../../interfaces/IPool.sol";
 import {IDefaultStateManager} from "../../interfaces/IDefaultStateManager.sol";
 
 import "../../libraries/AccruedPremiumCalculator.sol";
@@ -59,13 +59,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /// @notice Buyer account id counter
   Counters.Counter public buyerAccountIdCounter;
 
-  /// @notice a buyer account id for each address
-  mapping(address => uint256) public ownerAddressToBuyerAccountId;
-
-  /// @notice The premium amount for each lending pool for each account id
-  /// @dev a buyer account id to a lending pool id to the premium amount
-  mapping(uint256 => mapping(address => uint256)) public buyerAccounts;
-
   /// @notice The array to track the info for all protection bought.
   ProtectionInfo[] private protectionInfos;
 
@@ -74,13 +67,10 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   mapping(address => LendingPoolDetail) private lendingPoolDetails;
 
-  /*** modifiers ***/
+  /// @notice The mapping to track all protection buyer accounts by address
+  mapping(address => ProtectionBuyerAccount) private protectionBuyerAccounts;
 
-  modifier noBuyerAccountExist() {
-    if (!(ownerAddressToBuyerAccountId[msg.sender] == 0))
-      revert BuyerAccountExists(msg.sender);
-    _;
-  }
+  /*** modifiers ***/
 
   /// @notice Checks whether pool cycle is in open state. If not, reverts.
   modifier whenPoolIsOpen() {
@@ -146,10 +136,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     /// Step 2: Verify that pool has minimum required capital
     _verifyMinCapitalRequired();
 
-    /// Step 3: Create a buyer account if not exists
-    _verifyAndCreateBuyerAccount();
-
-    /// Step 4: Calculate & check the leverage ratio
+    /// Step 3: Calculate & check the leverage ratio
     /// Calculate & when total protection is higher than required min protection,
     /// ensure that leverage ratio floor is not breached
     totalProtection += _protectionPurchaseParams.protectionAmount;
@@ -164,7 +151,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _protectionPurchaseParams.lendingPoolAddress
     ];
 
-    //// Step 5: Calculate the protection premium amount scaled to 18 decimals and scale it to the underlying token decimals.
+    //// Step 4: Calculate the protection premium amount scaled to 18 decimals and scale it to the underlying token decimals.
     (
       uint256 _premiumAmountIn18Decimals,
       uint256 _premiumAmount,
@@ -175,14 +162,14 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         _leverageRatio
       );
 
-    /// Step 6: transfer premium amount from buyer to pool & track the premium amount
+    /// Step 5: transfer premium amount from buyer to pool & track the premium amount
     poolInfo.underlyingToken.safeTransferFrom(
       msg.sender,
       address(this),
       _premiumAmount
     );
 
-    /// Step 7: Calculate protection in days and scale it to 18 decimals.
+    /// Step 6: Calculate protection in days and scale it to 18 decimals.
     uint256 _protectionDurationInDaysScaled = ((_protectionPurchaseParams
       .protectionExpirationTimestamp - block.timestamp) *
       Constants.SCALE_18_DECIMALS) / uint256(Constants.SECONDS_IN_DAY);
@@ -194,7 +181,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _leverageRatio
     );
 
-    /// Step 8: Capture loan protection data for premium accrual calculation
+    /// Step 7: Capture loan protection data for premium accrual calculation
     // solhint-disable-next-line
     (int256 _k, int256 _lambda) = AccruedPremiumCalculator.calculateKAndLambda(
       _premiumAmountIn18Decimals,
@@ -207,7 +194,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _isMinPremium ? poolInfo.params.minCarapaceRiskPremiumPercent : 0
     );
 
-    /// Step 9: Add protection to the pool & emit an event
+    /// Step 8: Add protection to the pool & emit an event
     protectionInfos.push(
       ProtectionInfo({
         buyer: msg.sender,
@@ -220,9 +207,13 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       })
     );
 
-    /// Step 10: Track all loan protections for a lending pool to calculate
+    /// Step 9: Track all loan protections for a lending pool to calculate
     // the total locked amount for the lending pool, when/if pool is late for payment
-    lendingPoolDetail.protectionInfoIndexSet.add(protectionInfos.length - 1);
+    uint256 _protectionIndex = protectionInfos.length - 1;
+    lendingPoolDetail.activeProtectionIndexes.add(_protectionIndex);
+    protectionBuyerAccounts[msg.sender].activeProtectionIndexes.add(
+      _protectionIndex
+    );
 
     emit ProtectionBought(
       msg.sender,
@@ -381,15 +372,15 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         _latestPaymentTimestamp
       );
       if (_latestPaymentTimestamp > _lastPremiumAccrualTimestamp) {
-        uint256[] memory _protectionIndexes = lendingPoolDetail
-          .protectionInfoIndexSet
-          .values();
+        EnumerableSet.UintSet
+          storage activeProtectionIndexes = lendingPoolDetail
+            .activeProtectionIndexes;
 
         /// Iterate all protections for this lending pool and accrue premium for each
         uint256 _accruedPremiumForLendingPool;
-        uint256 protectionLength = _protectionIndexes.length;
-        for (uint256 j; j < protectionLength; ) {
-          uint256 _protectionIndex = _protectionIndexes[j];
+        uint256 _length = activeProtectionIndexes.length();
+        for (uint256 j; j < _length; ) {
+          uint256 _protectionIndex = activeProtectionIndexes.at(j);
           ProtectionInfo storage protectionInfo = protectionInfos[
             _protectionIndex
           ];
@@ -449,19 +440,16 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
       _lendingPoolAddress
     ];
-    uint256[] memory _protectionIndexes = lendingPoolDetail
-      .protectionInfoIndexSet
-      .values();
 
-    IReferenceLendingPools _referenceLendingPools = poolInfo
-      .referenceLendingPools;
+    EnumerableSet.UintSet storage activeProtectionIndexes = lendingPoolDetail
+      .activeProtectionIndexes;
+    uint256 _length = activeProtectionIndexes.length();
+    for (uint256 i; i < _length; ) {
+      uint256 _protectionIndex = activeProtectionIndexes.at(i);
+      ProtectionInfo storage protectionInfo = protectionInfos[_protectionIndex];
 
-    uint256 length = _protectionIndexes.length;
-    for (uint256 i; i < length; ) {
-      ProtectionInfo storage protectionInfo = protectionInfos[
-        _protectionIndexes[i]
-      ];
-      uint256 _remainingPrincipal = _referenceLendingPools
+      uint256 _remainingPrincipal = poolInfo
+        .referenceLendingPools
         .calculateRemainingPrincipal(
           _lendingPoolAddress,
           protectionInfo.buyer,
@@ -659,25 +647,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     return totalSTokenUnderlying >= poolInfo.params.minRequiredCapital;
   }
 
-  /*** private functions ***/
-
-  function _noBuyerAccountExist() private view returns (bool) {
-    return ownerAddressToBuyerAccountId[msg.sender] == 0;
-  }
-
-  /**
-   * @notice Create a unique account of a protection buyer for an EOA
-   * @dev Only one account can be created per EOA
-   */
-  function _verifyAndCreateBuyerAccount() private {
-    if (_noBuyerAccountExist() == true) {
-      uint256 _buyerAccountId = buyerAccountIdCounter.current();
-      ownerAddressToBuyerAccountId[msg.sender] = _buyerAccountId;
-      buyerAccountIdCounter.increment();
-      emit BuyerAccountCreated(msg.sender, _buyerAccountId);
-    }
-  }
-
   /**
    * @dev Accrues premium for given loan protection from last premium accrual to the latest payment timestamp.
    * @param protectionInfo The loan protection to accrue premium for.
@@ -765,11 +734,15 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     /// Reduce the total protection amount of this protection pool
     totalProtection -= protectionInfo.purchaseParams.protectionAmount;
 
-    /// remove expired protection index from lendingPool's protectionInfoIndexSet
-    lendingPoolDetail.protectionInfoIndexSet.remove(_protectionIndex);
+    /// remove expired protection index from activeProtectionIndexes of lendingPool & buyer account
+    address _buyer = protectionInfo.buyer;
+    lendingPoolDetail.activeProtectionIndexes.remove(_protectionIndex);
+    protectionBuyerAccounts[_buyer].activeProtectionIndexes.remove(
+      _protectionIndex
+    );
 
     emit ProtectionExpired(
-      protectionInfo.buyer,
+      _buyer,
       protectionInfo.purchaseParams.lendingPoolAddress,
       protectionInfo.purchaseParams.protectionAmount
     );
@@ -851,8 +824,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     );
 
     /// Step 3: Track the premium amount
-    uint256 _accountId = ownerAddressToBuyerAccountId[msg.sender];
-    buyerAccounts[_accountId][
+    protectionBuyerAccounts[msg.sender].lendingPoolToPremium[
       _protectionPurchaseParams.lendingPoolAddress
     ] += _premiumAmount;
 
@@ -921,7 +893,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     if (
       !poolInfo.referenceLendingPools.canBuyProtection(
         msg.sender,
-        _protectionPurchaseParams
+        _protectionPurchaseParams,
+        _doesBuyerHaveActiveProtection(_protectionPurchaseParams)
       )
     ) {
       revert ProtectionPurchaseNotAllowed(_protectionPurchaseParams);
@@ -935,6 +908,39 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         poolInfo.poolId,
         totalSTokenUnderlying
       );
+    }
+  }
+
+  /**
+   * @dev Verifies whether a buyer has active protection for a lending position in the given lending pool.
+   */
+  function _doesBuyerHaveActiveProtection(
+    ProtectionPurchaseParams calldata _protectionPurchaseParams
+  ) internal view returns (bool _buyerHasActiveProtection) {
+    EnumerableSet.UintSet
+      storage activeProtectionIndexes = protectionBuyerAccounts[msg.sender]
+        .activeProtectionIndexes;
+    uint256 _length = activeProtectionIndexes.length();
+    for (uint256 i; i < _length; ) {
+      uint256 _protectionIndex = activeProtectionIndexes.at(i);
+      ProtectionPurchaseParams
+        storage existingProtectionPurchaseParams = protectionInfos[
+          _protectionIndex
+        ].purchaseParams;
+
+      if (
+        existingProtectionPurchaseParams.lendingPoolAddress ==
+        _protectionPurchaseParams.lendingPoolAddress &&
+        existingProtectionPurchaseParams.nftLpTokenId ==
+        _protectionPurchaseParams.nftLpTokenId
+      ) {
+        _buyerHasActiveProtection = true;
+        break;
+      }
+
+      unchecked {
+        ++i;
+      }
     }
   }
 }

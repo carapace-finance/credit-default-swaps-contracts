@@ -68,8 +68,8 @@ struct LendingPoolDetail {
   uint256 lastPremiumAccrualTimestamp;
   /// @notice Track the total amount of premium for each lending pool
   uint256 totalPremium;
-  /// @notice Set to track all protection bought for specific lending pool.
-  EnumerableSet.UintSet protectionInfoIndexSet;
+  /// @notice Set to track all protections bought for specific lending pool, which are active/not expired
+  EnumerableSet.UintSet activeProtectionIndexes;
 }
 
 /// @notice A struct to store the details of a withdrawal cycle.
@@ -78,6 +78,15 @@ struct WithdrawalCycleDetail {
   uint256 totalSTokenRequested;
   /// @notice The mapping to track the requested amount of sTokens to withdraw per protection seller for this withdrawal cycle.
   mapping(address => uint256) withdrawalRequests;
+}
+
+/// @notice A struct to store the details of a protection buyer.
+struct ProtectionBuyerAccount {
+  /// @notice The premium amount for each lending pool per buyer
+  /// @dev a lending pool address to the premium amount paid
+  mapping(address => uint256) lendingPoolToPremium;
+  /// @notice Set to track all protections bought by a buyer, which are active/not-expired.
+  EnumerableSet.UintSet activeProtectionIndexes;
 }
 
 abstract contract IPool {
@@ -118,9 +127,6 @@ abstract contract IPool {
   );
 
   event ProtectionSold(address protectionSeller, uint256 protectionAmount);
-
-  /// @notice Emitted when a new buyer account is created.
-  event BuyerAccountCreated(address owner, uint256 accountId);
 
   /// @notice Emitted when a new protection is bought.
   event ProtectionBought(
