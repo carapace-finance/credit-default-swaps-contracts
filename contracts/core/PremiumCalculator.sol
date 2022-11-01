@@ -21,7 +21,6 @@ contract PremiumCalculator is IPremiumCalculator {
     uint256 _protectionBuyerApy,
     uint256 _leverageRatio,
     uint256 _totalCapital,
-    uint256 _totalProtection,
     PoolParams calldata _poolParameters
   ) external view override returns (uint256 premiumAmount, bool isMinPremium) {
     console.log(
@@ -39,12 +38,10 @@ contract PremiumCalculator is IPremiumCalculator {
     if (
       RiskFactorCalculator.canCalculateRiskFactor(
         _totalCapital,
-        _totalProtection,
         _leverageRatio,
         _poolParameters.leverageRatioFloor,
         _poolParameters.leverageRatioCeiling,
-        _poolParameters.minRequiredCapital,
-        _poolParameters.minRequiredProtection
+        _poolParameters.minRequiredCapital
       )
     ) {
       int256 riskFactor = RiskFactorCalculator.calculateRiskFactor(

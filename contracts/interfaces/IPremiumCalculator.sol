@@ -11,7 +11,6 @@ abstract contract IPremiumCalculator {
    * @param _protectionBuyerApy the protection buyer's APY scaled to 18 decimals
    * @param _leverageRatio the leverage ratio of the pool scaled to 18 decimals
    * @param _totalCapital the total capital of the pool scaled to underlying decimals
-   * @param _totalProtection the total protection purchased from the pool scaled to underlying decimals
    * @param _poolParameters the pool parameters
    * @return premiumAmount the premium amount scaled to 18 decimals
    * @return isMinPremium indicates whether the returned premium is the minimum premium or not
@@ -22,7 +21,6 @@ abstract contract IPremiumCalculator {
     uint256 _protectionBuyerApy,
     uint256 _leverageRatio,
     uint256 _totalCapital,
-    uint256 _totalProtection,
     PoolParams calldata _poolParameters
   ) external view virtual returns (uint256 premiumAmount, bool isMinPremium);
 }

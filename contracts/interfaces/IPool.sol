@@ -5,6 +5,12 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {IReferenceLendingPools, ProtectionPurchaseParams} from "./IReferenceLendingPools.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
+enum PoolState {
+  DepositOnly,
+  BuyProtectionOnly,
+  DepositAndBuyProtection
+}
+
 /// @notice Contains pool cycle related parameters.
 struct PoolCycleParams {
   /// @notice Time duration for which cycle is OPEN, meaning deposit & withdraw from pool is allowed.
@@ -23,8 +29,8 @@ struct PoolParams {
   uint256 leverageRatioBuffer;
   /// @notice the minimum capital required capital in the pool in underlying tokens
   uint256 minRequiredCapital;
-  /// @notice the minimum protection required in the pool in underlying tokens
-  uint256 minRequiredProtection;
+  /// @notice the max initial capital allowed in the pool in underlying tokens
+  uint256 maxAllowedInitialCapital;
   /// @notice curvature used in risk premium calculation scaled to 18 decimals
   uint256 curvature;
   /// @notice the minimum premium rate in percent paid by a protection buyer scaled to 18 decimals
@@ -43,6 +49,8 @@ struct PoolInfo {
   PoolParams params;
   IERC20Metadata underlyingToken;
   IReferenceLendingPools referenceLendingPools;
+  /// @notice A enum indicating current state of the pool.
+  PoolState state;
 }
 
 struct ProtectionInfo {

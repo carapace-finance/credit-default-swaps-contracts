@@ -8,7 +8,7 @@ import {SToken} from "./SToken.sol";
 import {IPremiumCalculator} from "../../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools, LendingPoolStatus, ProtectionPurchaseParams} from "../../interfaces/IReferenceLendingPools.sol";
 import {IPoolCycleManager, CycleState} from "../../interfaces/IPoolCycleManager.sol";
-import {IPool, EnumerableSet, PoolParams, PoolCycleParams, PoolInfo, ProtectionInfo, LendingPoolDetail, WithdrawalCycleDetail, ProtectionBuyerAccount} from "../../interfaces/IPool.sol";
+import {IPool, EnumerableSet, PoolParams, PoolCycleParams, PoolInfo, ProtectionInfo, LendingPoolDetail, WithdrawalCycleDetail, ProtectionBuyerAccount, PoolState} from "../../interfaces/IPool.sol";
 import {IDefaultStateManager} from "../../interfaces/IDefaultStateManager.sol";
 
 import "../../libraries/AccruedPremiumCalculator.sol";
@@ -130,11 +130,11 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     _verifyMinCapitalRequired();
 
     /// Step 3: Calculate & check the leverage ratio
-    /// Calculate & when total protection is higher than required min protection,
+    /// When pool is open for trading (deposit & buyProtection),
     /// ensure that leverage ratio floor is not breached
     totalProtection += _protectionPurchaseParams.protectionAmount;
     uint256 _leverageRatio = calculateLeverageRatio();
-    if (totalProtection > poolInfo.params.minRequiredProtection) {
+    if (poolInfo.state == PoolState.DepositAndBuyProtection) {
       if (_leverageRatio < poolInfo.params.leverageRatioFloor) {
         revert PoolLeverageRatioTooLow(poolInfo.poolId, _leverageRatio);
       }
@@ -848,7 +848,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         _protectionBuyerApr,
         _leverageRatio,
         totalSTokenUnderlying,
-        totalProtection,
         poolInfo.params
       );
 
