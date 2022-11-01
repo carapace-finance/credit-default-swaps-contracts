@@ -4,7 +4,6 @@ pragma solidity ^0.8.13;
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import {Counters} from "@openzeppelin/contracts/utils/Counters.sol";
 import {SToken} from "./SToken.sol";
 import {IPremiumCalculator} from "../../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools, LendingPoolStatus, ProtectionPurchaseParams} from "../../interfaces/IReferenceLendingPools.sol";
@@ -23,8 +22,7 @@ import "hardhat/console.sol";
  */
 contract Pool is IPool, SToken, ReentrancyGuard {
   /*** libraries ***/
-  /// @notice OpenZeppelin library for managing counters.
-  using Counters for Counters.Counter;
+  /// @notice OpenZeppelin library for managing counters
   using SafeERC20 for IERC20Metadata;
   using EnumerableSet for EnumerableSet.UintSet;
 
@@ -55,9 +53,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
    * @notice This is the total capital deposited by sellers + accrued premiums from buyers - locked capital - default payouts.
    */
   uint256 public totalSTokenUnderlying;
-
-  /// @notice Buyer account id counter
-  Counters.Counter public buyerAccountIdCounter;
 
   /// @notice The array to track the info for all protection bought.
   ProtectionInfo[] private protectionInfos;
@@ -113,8 +108,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     premiumCalculator = _premiumCalculator;
     poolCycleManager = _poolCycleManager;
     defaultStateManager = _defaultStateManager;
-
-    buyerAccountIdCounter.increment();
 
     emit PoolInitialized(
       _name,
