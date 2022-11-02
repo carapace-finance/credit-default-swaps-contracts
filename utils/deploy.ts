@@ -160,9 +160,18 @@ const deployContracts: Function = async () => {
       goldfinchV2AdapterInstance.address
     );
 
+    // Deploy PoolHelper library contract
+    const poolHelperFactory = await contractFactory("PoolHelper", {
+      AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address
+    });
+    const poolHelperInstance = await poolHelperFactory.deploy();
+    await poolHelperInstance.deployed();
+    console.log("PoolHelper lib deployed to:", poolHelperInstance.address);
+
     // Deploy PoolFactory
     const _poolFactoryFactory = await contractFactory("PoolFactory", {
-      AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address
+      AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address,
+      PoolHelper: poolHelperInstance.address
     });
     poolFactoryInstance = await _poolFactoryFactory.deploy();
     await poolFactoryInstance.deployed();
