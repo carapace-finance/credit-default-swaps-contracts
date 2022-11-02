@@ -29,8 +29,6 @@ struct PoolParams {
   uint256 leverageRatioBuffer;
   /// @notice the minimum capital required capital in the pool in underlying tokens
   uint256 minRequiredCapital;
-  /// @notice the max initial capital allowed in the pool in underlying tokens
-  uint256 maxAllowedInitialCapital;
   /// @notice curvature used in risk premium calculation scaled to 18 decimals
   uint256 curvature;
   /// @notice the minimum premium rate in percent paid by a protection buyer scaled to 18 decimals

@@ -205,11 +205,7 @@ const testPool: Function = (
       it("...set the min required capital", async () => {
         expect(poolInfo.params.minRequiredCapital).to.eq(parseUSDC("5000"));
       });
-      it("...set the min required protection", async () => {
-        expect(poolInfo.params.minRequiredProtection).to.eq(
-          parseUSDC("200000")
-        );
-      });
+
       it("...set the curvature", async () => {
         expect(poolInfo.params.curvature).to.eq(parseEther("0.05"));
       });
@@ -627,24 +623,6 @@ const testPool: Function = (
             (await pool.getActiveProtections(PROTECTION_BUYER1_ADDRESS)).length
           ).to.eq(1);
         });
-
-        it("...fail when total protection crosses min requirement with leverage ratio breaching floor", async () => {
-          const _protectionAmount = parseUSDC("110000");
-          await USDC.connect(_protectionBuyer1).approve(
-            pool.address,
-            parseUSDC("2500")
-          );
-          _purchaseParams = {
-            lendingPoolAddress: _lendingPool2,
-            nftLpTokenId: 590,
-            protectionAmount: _protectionAmount,
-            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(30)
-          };
-
-          await expect(
-            pool.connect(_protectionBuyer1).buyProtection(_purchaseParams)
-          ).to.be.revertedWith("PoolLeverageRatioTooLow");
-        });
       });
 
       describe("calculateLeverageRatio after 2 deposits & 1 protection", () => {
@@ -910,17 +888,18 @@ const testPool: Function = (
             .to.emit(pool, "PremiumAccrued")
             .to.emit(pool, "ProtectionExpired");
 
-          const _expectedPremiumAccrued = parseUSDC("1599.280981") // protection 1: 100K
-            .add(parseUSDC("708.304729")) // protection 4: 50K
-            .add(parseUSDC("410.239831")) // protection 2: 20K
-            .add(parseUSDC("641.890247")); // protection 3: 30K
-          expect(await pool.totalPremiumAccrued()).to.be.eq(
-            _expectedPremiumAccrued
-          );
+          // 1599.28 + 708.30 + 410.23 + 641.89
+          expect(await pool.totalPremiumAccrued())
+            .to.be.gt(parseUSDC("3359.71"))
+            .and.to.be.lt(parseUSDC("3359.72"));
 
-          expect(await pool.totalSTokenUnderlying()).to.be.eq(
-            _totalSTokenUnderlyingBefore.add(_expectedPremiumAccrued)
-          );
+          expect(
+            (await pool.totalSTokenUnderlying()).sub(
+              _totalSTokenUnderlyingBefore
+            )
+          )
+            .to.be.gt(parseUSDC("3359.71"))
+            .and.to.be.lt(parseUSDC("3359.72"));
 
           expect((await pool.getLendingPoolDetail(_lendingPool2))[0]).to.be.eq(
             await referenceLendingPools.getLatestPaymentTimestamp(_lendingPool2)
