@@ -12,13 +12,23 @@ import "hardhat-contract-sizer";
 import "hardhat-gas-reporter";
 import "hardhat-storage-layout";
 
+const {
+  ALCHEMY_API_KEY,
+  INFURA_API_KEY,
+  MNEMONIC_WORDS,
+  WALLET_INITIAL_INDEX,
+  TENDERLY_ETH_MAINNET_FORK_URL,
+  DEPLOYMENT_ACCOUNT_PRIVATE_KEY,
+  ETHERSCAN_API_KEY
+} = process.env;
+
 const config: HardhatUserConfig = {
   defaultNetwork: "hardhat",
   networks: {
     hardhat: {
       forking: {
-        url: `https://eth-mainnet.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`,
-        // url: `https://mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`,
+        url: `https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_API_KEY}`,
+        // url: `https://mainnet.infura.io/v3/${INFURA_API_KEY}`,
         // 09/23/2022: We are pinning to this block number to avoid goldfinch pool & token position changes
         blockNumber: 15598870
       },
@@ -26,24 +36,22 @@ const config: HardhatUserConfig = {
       gasPrice: 259000000000, // check the latest gas price market in https://www.ethgasstation.info/
       // inject: false, // optional. If true, it will EXPOSE your mnemonic in your frontend code. Then it would be available as an "in-page browser wallet" / signer which can sign without confirmation.
       accounts: {
-        mnemonic: process.env.MNEMONIC_WORDS,
-        initialIndex: process.env.WALLET_INITIAL_INDEX
-          ? parseInt(process.env.WALLET_INITIAL_INDEX)
-          : 0 // set index of account to use inside wallet (defaults to 0)
+        mnemonic: MNEMONIC_WORDS,
+        initialIndex: WALLET_INITIAL_INDEX ? parseInt(WALLET_INITIAL_INDEX) : 0 // set index of account to use inside wallet (defaults to 0)
       },
       allowUnlimitedContractSize: false
     },
     tenderly: {
       chainId: 1, // the chain you fork
-      url: process.env.TENDERLY_ETH_MAINNET_FORK_URL
+      url: TENDERLY_ETH_MAINNET_FORK_URL
     },
     mainnet: {
-      url: `https://eth-mainnet.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`,
-      // url: `https://mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`,
+      url: `https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_API_KEY}`,
+      // url: `https://mainnet.infura.io/v3/${INFURA_API_KEY}`,
       gas: "auto", // gasLimit
       gasPrice: 41000000000, // check the latest gas price market in https://www.ethgasstation.info/
       // inject: false, // optional. If true, it will EXPOSE your mnemonic in your frontend code. Then it would be available as an "in-page browser wallet" / signer which can sign without confirmation.
-      accounts: [`0x${process.env.DEPLOYMENT_ACCOUNT_PRIVATE_KEY}`]
+      accounts: [`0x${DEPLOYMENT_ACCOUNT_PRIVATE_KEY}`]
     }
   },
   solidity: {
@@ -70,7 +78,7 @@ const config: HardhatUserConfig = {
     timeout: 2000000
   },
   etherscan: {
-    apiKey: process.env.ETHERSCAN_API_KEY
+    apiKey: ETHERSCAN_API_KEY
   },
   dodoc: {
     runOnCompile: false,
