@@ -485,9 +485,9 @@ const testPool: Function = (
           expect(await pool.paused()).to.be.false;
         });
 
-        it("...the buyer account doesn't exist for the msg.sender", async () => {
+        it("...buyer should NOT have any active protection", async () => {
           expect(
-            await pool.ownerAddressToBuyerAccountId(deployerAddress)
+            (await pool.getActiveProtections(PROTECTION_BUYER1_ADDRESS)).length
           ).to.eq(0);
         });
 
@@ -596,7 +596,10 @@ const testPool: Function = (
             );
 
           const _premiumAmountOfAccountAfter: BigNumber =
-            await pool.buyerAccounts(_initialBuyerAccountId, _lendingPool2);
+            await pool.getTotalPremiumPaidForLendingPool(
+              PROTECTION_BUYER1_ADDRESS,
+              _lendingPool2
+            );
           const _premiumTotalOfLendingPoolIdAfter: BigNumber = (
             await pool.getLendingPoolDetail(_lendingPool2)
           )[1];
@@ -619,12 +622,10 @@ const testPool: Function = (
           );
         });
 
-        it("...the buyer account for the msg.sender exists already", async () => {
-          const _noBuyerAccountExist: boolean =
-            (await pool
-              .ownerAddressToBuyerAccountId(deployerAddress)
-              .toString()) === "0";
-          expect(_noBuyerAccountExist).to.eq(false);
+        it("...buyer should have 1 active protection", async () => {
+          expect(
+            (await pool.getActiveProtections(PROTECTION_BUYER1_ADDRESS)).length
+          ).to.eq(1);
         });
 
         it("...fail when total protection crosses min requirement with leverage ratio breaching floor", async () => {
@@ -820,6 +821,10 @@ const testPool: Function = (
       });
 
       describe("accruePremiumAndExpireProtections", async () => {
+        let _buyer1: Signer;
+        let _buyer2: Signer;
+        let _buyer3: Signer;
+
         it("...should NOT accrue premium", async () => {
           // no premium should be accrued because there is no new payment
           await expect(pool.accruePremiumAndExpireProtections()).to.not.emit(
@@ -830,13 +835,13 @@ const testPool: Function = (
 
         it("...add more protections", async () => {
           // Impersonate accounts with lending pool positions
-          const _buyer1 = await ethers.getImpersonatedSigner(
+          _buyer1 = await ethers.getImpersonatedSigner(
             "0xcb726f13479963934e91b6f34b6e87ec69c21bb9"
           );
-          const _buyer2 = await ethers.getImpersonatedSigner(
+          _buyer2 = await ethers.getImpersonatedSigner(
             "0x5cd8c821c080b7340df6969252a979ed416a4e3f"
           );
-          const _buyer3 = await ethers.getImpersonatedSigner(
+          _buyer3 = await ethers.getImpersonatedSigner(
             "0x4902b20bb3b8e7776cbcdcb6e3397e7f6b4e449e"
           );
 
@@ -855,6 +860,9 @@ const testPool: Function = (
             protectionAmount: parseUSDC("20000"),
             protectionExpirationTimestamp: await getUnixTimestampAheadByDays(11)
           });
+          expect(
+            (await pool.getActiveProtections(await _buyer1.getAddress())).length
+          ).to.be.eq(1);
 
           // protection 3: buyer 2 has principal of 63K USDC with token id: 579
           await pool.connect(_buyer2).buyProtection({
@@ -863,6 +871,9 @@ const testPool: Function = (
             protectionAmount: parseUSDC("30000"),
             protectionExpirationTimestamp: await getUnixTimestampAheadByDays(30)
           });
+          expect(
+            (await pool.getActiveProtections(await _buyer2.getAddress())).length
+          ).to.be.eq(1);
 
           // protection 4: buyer 3 has principal of 158K USDC with token id: 645 in pool
           await pool.connect(_buyer3).buyProtection({
@@ -871,7 +882,11 @@ const testPool: Function = (
             protectionAmount: parseUSDC("50000"),
             protectionExpirationTimestamp: await getUnixTimestampAheadByDays(35)
           });
+          expect(
+            (await pool.getActiveProtections(await _buyer3.getAddress())).length
+          ).to.be.eq(1);
 
+          expect((await pool.getAllProtections()).length).to.be.eq(4);
           expect((await getActiveProtections()).length).to.eq(4);
 
           // 200K USDC = 100K + 20K + 30K + 50K
@@ -919,8 +934,16 @@ const testPool: Function = (
         it("...should mark protections 2 & 3 expired", async () => {
           // 2nd & 3rd protections should be marked expired
           const allProtections = await pool.getAllProtections();
+          expect(allProtections.length).to.be.eq(4);
           expect(allProtections[1].expired).to.eq(true);
           expect(allProtections[2].expired).to.eq(true);
+
+          expect(
+            (await pool.getActiveProtections(await _buyer1.getAddress())).length
+          ).to.be.eq(0);
+          expect(
+            (await pool.getActiveProtections(await _buyer2.getAddress())).length
+          ).to.be.eq(0);
 
           expect(await getActiveProtections()).to.have.lengthOf(2);
           expect(allProtections[0].expired).to.eq(false);
@@ -1381,10 +1404,90 @@ const testPool: Function = (
       });
     });
 
-    describe("buyProtection fails because of protection purchase limit", async () => {
-      it("...should fail", async () => {
+    describe("buyProtection after purchase limit", async () => {
+      // TODO: add unit test for successful deposit after claimUnlockedCapital once "initial pool condition" is implemented
+      // before(async () => {
+      //   const _depositAmount = parseUSDC("5100");
+      //   await transferAndApproveUsdc(deployer, _depositAmount);
+      //   await pool.connect(deployer).deposit(_depositAmount, deployerAddress);
+      // });
+
+      it("...should fail because of protection purchase limit for new buyer", async () => {
         // lending pool payment is current, so buyProtection should NOT fail for late payment,
-        // but it should fail because of protection purchase limit: past 60 days
+        // but it should fail for NEW buyer because of protection purchase limit: past 60 days
+
+        // protection 3: buyer 2 has principal of 63K USDC with token id: 579
+        const _buyer2 = await ethers.getImpersonatedSigner(
+          "0x5cd8c821c080b7340df6969252a979ed416a4e3f"
+        );
+        expect(
+          (await pool.getActiveProtections(await _buyer2.getAddress())).length
+        ).to.be.eq(0);
+        await expect(
+          pool.connect(_buyer2).buyProtection({
+            lendingPoolAddress: _lendingPool2,
+            nftLpTokenId: 579,
+            protectionAmount: parseUSDC("30000"),
+            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(30)
+          })
+        ).to.be.revertedWith("ProtectionPurchaseNotAllowed");
+      });
+
+      it("...should fail because of protection purchase limit for existing buyer with different lending position", async () => {
+        // it should fail because of ProtectionPurchaseNotAllowed after protection purchase limit: past 60 days
+        // because buyer has existing protection with different lending position (different nftLpTokenId)
+        expect(
+          (
+            await pool.getActiveProtections(
+              await _protectionBuyer1.getAddress()
+            )
+          ).length
+        ).to.be.eq(1);
+        await expect(
+          pool.connect(_protectionBuyer1).buyProtection({
+            lendingPoolAddress: _lendingPool2,
+            nftLpTokenId: 591,
+            protectionAmount: parseUSDC("101"),
+            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(11)
+          })
+        ).to.be.revertedWith("ProtectionPurchaseNotAllowed");
+      });
+
+      it("...should fail because of protection purchase limit for existing buyer with different lending pool", async () => {
+        // it should fail because of ProtectionPurchaseNotAllowed after protection purchase limit: past 60 days
+        // because buyer has existing protection with different lending pool
+        expect(
+          (
+            await pool.getActiveProtections(
+              await _protectionBuyer1.getAddress()
+            )
+          ).length
+        ).to.be.eq(1);
+        await payToLendingPoolAddress(
+          _lendingPool1,
+          "250000",
+          getUsdcContract(owner)
+        );
+        await expect(
+          pool.connect(_protectionBuyer1).buyProtection({
+            lendingPoolAddress: _lendingPool1,
+            nftLpTokenId: 590,
+            protectionAmount: parseUSDC("101"),
+            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(11)
+          })
+        ).to.be.revertedWith("ProtectionPurchaseNotAllowed");
+      });
+
+      it("...should NOT fail because of protection purchase limit for existing buyer", async () => {
+        // it should fail because of PoolHasNoMinCapitalRequired after protection purchase limit: past 60 days
+        // because buyer has existing protection
+        expect(
+          (
+            await pool.getActiveProtections(
+              await _protectionBuyer1.getAddress()
+            )
+          ).length
+        ).to.be.eq(1);
         await expect(
           pool.connect(_protectionBuyer1).buyProtection({
             lendingPoolAddress: _lendingPool2,
@@ -1392,7 +1495,7 @@ const testPool: Function = (
             protectionAmount: parseUSDC("101"),
             protectionExpirationTimestamp: await getUnixTimestampAheadByDays(11)
           })
-        ).to.be.revertedWith("ProtectionPurchaseNotAllowed");
+        ).to.be.revertedWith("PoolHasNoMinCapitalRequired");
       });
     });
 
