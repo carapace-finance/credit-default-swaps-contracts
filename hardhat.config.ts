@@ -7,6 +7,7 @@ import "@typechain/hardhat";
 import "solidity-coverage";
 import "@primitivefi/hardhat-dodoc";
 import "dotenv/config";
+import "hardhat-abi-exporter";
 import "hardhat-contract-sizer";
 import "hardhat-gas-reporter";
 import "hardhat-storage-layout";
@@ -77,6 +78,10 @@ const config: HardhatUserConfig = {
   },
   gasReporter: {
     enabled: false
+  },
+  abiExporter: {
+    flat: true,
+    format: "json"
   }
 };
 
