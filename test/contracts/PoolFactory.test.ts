@@ -6,13 +6,17 @@ import { Signer } from "ethers";
 import { USDC_ADDRESS, ZERO_ADDRESS } from "../utils/constants";
 import { ethers } from "hardhat";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
-import { IPool, Pool } from "../../typechain-types/contracts/core/pool/Pool";
+import {
+  PoolParamsStruct,
+  PoolCycleParamsStruct
+} from "../../typechain-types/contracts/interfaces/IPool";
+import { Pool } from "../../typechain-types/contracts/core/Pool";
 import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";
 import { PoolFactory } from "../../typechain-types/contracts/core/PoolFactory";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { DefaultStateManager } from "../../typechain-types/contracts/core/DefaultStateManager";
 import { parseUSDC } from "../utils/usdc";
-import { getLatestBlockTimestamp } from "../utils/time";
+import { getDaysInSeconds, getLatestBlockTimestamp } from "../utils/time";
 
 const testPoolFactory: Function = (
   deployer: Signer,
@@ -39,7 +43,7 @@ const testPoolFactory: Function = (
 
     describe("createPool", async () => {
       const _secondPoolSalt: string = "0x".concat(process.env.SECOND_POOL_SALT);
-      const poolCycleParams: IPool.PoolCycleParamsStruct = {
+      const poolCycleParams: PoolCycleParamsStruct = {
         openCycleDuration: BigNumber.from(10 * 86400), // 10 days
         cycleDuration: BigNumber.from(30 * 86400) // 30 days
       };
@@ -47,7 +51,7 @@ const testPoolFactory: Function = (
       const _ceiling: BigNumber = BigNumber.from(500);
       const _firstPoolId: BigNumber = BigNumber.from(1);
       const _secondPoolId: BigNumber = BigNumber.from(2);
-      const _poolParams: IPool.PoolParamsStruct = {
+      const _poolParams: PoolParamsStruct = {
         leverageRatioFloor: _floor,
         leverageRatioCeiling: _ceiling,
         leverageRatioBuffer: BigNumber.from(5),
@@ -56,6 +60,7 @@ const testPoolFactory: Function = (
         curvature: BigNumber.from(5),
         minCarapaceRiskPremiumPercent: parseEther("0.02"),
         underlyingRiskPremiumPercent: parseEther("0.1"),
+        minProtectionDurationInSeconds: getDaysInSeconds(10),
         poolCycleParams: poolCycleParams
       };
 

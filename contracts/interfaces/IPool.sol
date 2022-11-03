@@ -5,102 +5,83 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {IReferenceLendingPools, ProtectionPurchaseParams} from "./IReferenceLendingPools.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
+/// @notice Contains pool cycle related parameters.
+struct PoolCycleParams {
+  /// @notice Time duration for which cycle is OPEN, meaning deposit & withdraw from pool is allowed.
+  uint256 openCycleDuration;
+  /// @notice Total time duration of a cycle.
+  uint256 cycleDuration;
+}
+
+/// @notice Contains pool related parameters.
+struct PoolParams {
+  /// @notice the minimum leverage ratio allowed in the pool scaled to 18 decimals
+  uint256 leverageRatioFloor;
+  /// @notice the maximum leverage ratio allowed in the pool scaled to 18 decimals
+  uint256 leverageRatioCeiling;
+  /// @notice the leverage ratio buffer used in risk factor calculation scaled to 18 decimals
+  uint256 leverageRatioBuffer;
+  /// @notice the minimum capital required capital in the pool in underlying tokens
+  uint256 minRequiredCapital;
+  /// @notice the minimum protection required in the pool in underlying tokens
+  uint256 minRequiredProtection;
+  /// @notice curvature used in risk premium calculation scaled to 18 decimals
+  uint256 curvature;
+  /// @notice the minimum premium rate in percent paid by a protection buyer scaled to 18 decimals
+  uint256 minCarapaceRiskPremiumPercent;
+  /// @notice the percent of protection buyers' yield used in premium calculation scaled to 18 decimals
+  uint256 underlyingRiskPremiumPercent;
+  /// @notice the minimum duration of the protection coverage in seconds that buyer has to buy
+  uint256 minProtectionDurationInSeconds;
+  /// @notice pool cycle related parameters
+  PoolCycleParams poolCycleParams;
+}
+
+/// @notice Contains pool information
+struct PoolInfo {
+  uint256 poolId;
+  PoolParams params;
+  IERC20Metadata underlyingToken;
+  IReferenceLendingPools referenceLendingPools;
+}
+
+struct ProtectionInfo {
+  /// @notice the address of a protection buyer
+  address buyer;
+  /// @notice The amount of premium paid in underlying token
+  uint256 protectionPremium;
+  /// @notice The timestamp at which the loan protection is bought
+  uint256 startTimestamp;
+  /// @notice Constant K is calculated & captured at the time of loan protection purchase
+  /// @notice It is used in accrued premium calculation
+  // solhint-disable-next-line var-name-mixedcase
+  int256 K;
+  /// @notice Lambda is calculated & captured at the time of loan protection purchase
+  /// @notice It is used in accrued premium calculation
+  int256 lambda;
+  ProtectionPurchaseParams purchaseParams;
+  /// @notice A flag indicating if the protection is expired or not
+  bool expired;
+}
+
+struct LendingPoolDetail {
+  uint256 lastPremiumAccrualTimestamp;
+  /// @notice Track the total amount of premium for each lending pool
+  uint256 totalPremium;
+  /// @notice Set to track all protection bought for specific lending pool.
+  EnumerableSet.UintSet protectionInfoIndexSet;
+}
+
+/// @notice A struct to store the details of a withdrawal cycle.
+struct WithdrawalCycleDetail {
+  /// @notice total amount of sTokens requested to be withdrawn for this cycle
+  uint256 totalSTokenRequested;
+  /// @notice The mapping to track the requested amount of sTokens to withdraw per protection seller for this withdrawal cycle.
+  mapping(address => uint256) withdrawalRequests;
+}
+
 abstract contract IPool {
   using EnumerableSet for EnumerableSet.UintSet;
-
-  /*** structs ***/
-
-  /// @notice Contains pool cycle related parameters.
-  struct PoolCycleParams {
-    /// @notice Time duration for which cycle is OPEN, meaning deposit & withdraw from pool is allowed.
-    uint256 openCycleDuration;
-    /// @notice Total time duration of a cycle.
-    uint256 cycleDuration;
-  }
-
-  /// @notice Contains pool related parameters.
-  struct PoolParams {
-    /// @notice the minimum leverage ratio allowed in the pool scaled to 18 decimals
-    uint256 leverageRatioFloor;
-    /// @notice the maximum leverage ratio allowed in the pool scaled to 18 decimals
-    uint256 leverageRatioCeiling;
-    /// @notice the leverage ratio buffer used in risk factor calculation scaled to 18 decimals
-    uint256 leverageRatioBuffer;
-    /// @notice the minimum capital required capital in the pool in underlying tokens
-    uint256 minRequiredCapital;
-    /// @notice the minimum protection required in the pool in underlying tokens
-    uint256 minRequiredProtection;
-    /// @notice curvature used in risk premium calculation scaled to 18 decimals
-    uint256 curvature;
-    /// @notice the minimum premium rate in percent paid by a protection buyer scaled to 18 decimals
-    uint256 minCarapaceRiskPremiumPercent;
-    /// @notice the percent of protection buyers' yield used in premium calculation scaled to 18 decimals
-    uint256 underlyingRiskPremiumPercent;
-    /// @notice pool cycle related parameters
-    PoolCycleParams poolCycleParams;
-  }
-
-  /// @notice Contains pool information
-  struct PoolInfo {
-    uint256 poolId;
-    PoolParams params;
-    IERC20Metadata underlyingToken;
-    IReferenceLendingPools referenceLendingPools;
-  }
-
-  /// @notice A struct to store the details of a withdrawal request.
-  struct WithdrawalRequest {
-    /// @notice The requested amount of sTokens to withdraw in a cycle.
-    uint256 sTokenAmount;
-    /// @notice The remaining amount of sTokens to withdraw in phase 1 of withdrawal cycle.
-    uint256 remainingPhaseOneSTokenAmount;
-    /// @notice The flag to indicate whether allowed withdrawal amount for phase 1 is calculated or not
-    bool phaseOneSTokenAmountCalculated;
-  }
-
-  struct LoanProtectionInfo {
-    /// @notice the address of a protection buyer
-    address buyer;
-    /// @notice The amount of protection purchased.
-    uint256 protectionAmount;
-    /// @notice The amount of premium paid in underlying token
-    uint256 protectionPremium;
-    /// @notice The timestamp at which the loan protection is bought
-    uint256 startTimestamp;
-    /// @notice The timestamp at which the loan protection is expired
-    uint256 expirationTimestamp;
-    /// @notice Constant K is calculated & captured at the time of loan protection purchase
-    /// @notice It is used in accrued premium calculation
-    // solhint-disable-next-line var-name-mixedcase
-    int256 K;
-    /// @notice Lambda is calculated & captured at the time of loan protection purchase
-    /// @notice It is used in accrued premium calculation
-    int256 lambda;
-    address lendingPool;
-    /// @notice The id of NFT token representing the loan in the lending pool
-    /// This is only relevant for lending protocols which provide NFT token to represent the loan
-    uint256 nftLpTokenId;
-  }
-
-  struct LendingPoolDetail {
-    uint256 lastPremiumAccrualTimestamp;
-    /// @notice Track the total amount of premium for each lending pool
-    uint256 totalPremium;
-    /// @notice Set to track all loan protection bought for specific lending pool.
-    EnumerableSet.UintSet loanProtectionInfoIndexSet;
-  }
-
-  /// @notice A struct to store the details of a withdrawal cycle.
-  struct WithdrawalCycleDetail {
-    /// @notice total amount of sTokens requested to be withdrawn for this cycle
-    uint256 totalSTokenRequested;
-    /// @notice Percent of requested sTokens that can be withdrawn for this cycle without breaching the leverage ratio floor
-    uint256 withdrawalPercent;
-    /// @notice The withdrawal phase 2 start timestamp after which withdrawal is allowed without restriction during the open period
-    uint256 withdrawalPhase2StartTimestamp;
-    /// @notice The mapping to track the withdrawal requests per protection seller for this withdrawal cycle.
-    mapping(address => WithdrawalRequest) withdrawalRequests;
-  }
 
   /*** errors ***/
   error LendingPoolNotSupported(address lendingPoolAddress);
@@ -108,7 +89,8 @@ abstract contract IPool {
   error LendingPoolExpired(address lendingPoolAddress);
   error LendingPoolDefaulted(address lendingPoolAddress);
   error ProtectionPurchaseNotAllowed(ProtectionPurchaseParams params);
-  error ExpirationTimeTooShort(uint256 expirationTime);
+  error ProtectionDurationTooShort(uint256 protectionDurationInSeconds);
+  error ProtectionDurationTooLong(uint256 protectionDurationInSeconds);
   error BuyerAccountExists(address msgSender);
   error PoolIsNotOpen(uint256 poolId);
   error PoolLeverageRatioTooHigh(uint256 poolId, uint256 leverageRatio);
@@ -123,15 +105,6 @@ abstract contract IPool {
     uint256 requestedSTokenAmount
   );
   error InsufficientSTokenBalance(address msgSender, uint256 sTokenBalance);
-  error WithdrawalNotAllowed(
-    uint256 totalSTokenUnderlying,
-    uint256 lowestSTokenUnderlyingAllowed
-  );
-  error WithdrawalHigherThanAllowed(
-    address msgSender,
-    uint256 sTokenWithdrawalAmount,
-    uint256 sTokenAllowedWithdrawalAmount
-  );
   error OnlyDefaultStateManager(address msgSender);
 
   /*** events ***/
@@ -152,9 +125,16 @@ abstract contract IPool {
   /// @notice Emitted when a new protection is bought.
   event ProtectionBought(
     address indexed buyer,
-    address lendingPoolAddress,
+    address indexed lendingPoolAddress,
     uint256 protectionAmount,
     uint256 premium
+  );
+
+  /// @notice Emitted when a existing protection is expired.
+  event ProtectionExpired(
+    address indexed buyer,
+    address indexed lendingPoolAddress,
+    uint256 protectionAmount
   );
 
   /// @notice Emitted when premium is accrued from all protections bought for a lending pool.
