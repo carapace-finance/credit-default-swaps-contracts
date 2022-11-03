@@ -34,7 +34,7 @@ const config: HardhatUserConfig = {
     },
     tenderly: {
       chainId: 1, // the chain you fork
-      url: process.env.TENDERLY_FORK_URL
+      url: process.env.TENDERLY_ETH_MAINNET_FORK_URL
     },
     mainnet: {
       url: `https://eth-mainnet.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`,
