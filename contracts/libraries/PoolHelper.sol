@@ -249,6 +249,11 @@ library PoolHelper {
     protectionBuyerAccounts[_buyer].activeProtectionIndexes.remove(
       _protectionIndex
     );
+
+    /// update total protection amount of lending pool
+    lendingPoolDetail.totalProtection -= protectionInfo
+      .purchaseParams
+      .protectionAmount;
   }
 
   /**

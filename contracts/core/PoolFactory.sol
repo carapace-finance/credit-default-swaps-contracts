@@ -5,7 +5,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Counters} from "@openzeppelin/contracts/utils/Counters.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
-import {IPool, PoolParams, PoolInfo, PoolState} from "../interfaces/IPool.sol";
+import {IPool, PoolParams, PoolInfo, PoolPhase} from "../interfaces/IPool.sol";
 import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools} from "../interfaces/IReferenceLendingPools.sol";
 import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
@@ -87,7 +87,7 @@ contract PoolFactory is Ownable {
         params: _poolParameters,
         underlyingToken: _underlyingToken,
         referenceLendingPools: _referenceLendingPools,
-        state: PoolState.DepositOnly
+        currentPhase: PoolPhase.DepositOnly
       }),
       _premiumCalculator,
       poolCycleManager,

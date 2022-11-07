@@ -5,10 +5,10 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {IReferenceLendingPools, ProtectionPurchaseParams} from "./IReferenceLendingPools.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
-enum PoolState {
+enum PoolPhase {
   DepositOnly,
   BuyProtectionOnly,
-  DepositAndBuyProtection
+  Open
 }
 
 /// @notice Contains pool cycle related parameters.
@@ -47,8 +47,8 @@ struct PoolInfo {
   PoolParams params;
   IERC20Metadata underlyingToken;
   IReferenceLendingPools referenceLendingPools;
-  /// @notice A enum indicating current state of the pool.
-  PoolState state;
+  /// @notice A enum indicating current phase of the pool.
+  PoolPhase currentPhase;
 }
 
 struct ProtectionInfo {
@@ -76,6 +76,8 @@ struct LendingPoolDetail {
   uint256 totalPremium;
   /// @notice Set to track all protections bought for specific lending pool, which are active/not expired
   EnumerableSet.UintSet activeProtectionIndexes;
+  /// @notice Track the total amount of protection bought for each lending pool
+  uint256 totalProtection;
 }
 
 /// @notice A struct to store the details of a withdrawal cycle.
@@ -121,6 +123,8 @@ abstract contract IPool {
   );
   error InsufficientSTokenBalance(address msgSender, uint256 sTokenBalance);
   error OnlyDefaultStateManager(address msgSender);
+  error PoolInDepositOnlyPhase(uint256 poolId);
+  error PoolInBuyProtectionOnlyPhase(uint256 poolId);
 
   /*** events ***/
 
@@ -168,6 +172,9 @@ abstract contract IPool {
     uint256 tokenAmount,
     address receiver
   );
+
+  /// @notice Emitted when a pool phase is updated.
+  event PoolPhaseUpdated(uint256 poolId, PoolPhase newState);
 
   /**
    * @notice A buyer can buy protection for a loan in lending pool when lending pool is supported & active (not defaulted or expired).

@@ -8,7 +8,7 @@ import {SToken} from "./SToken.sol";
 import {IPremiumCalculator} from "../../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools, LendingPoolStatus, ProtectionPurchaseParams} from "../../interfaces/IReferenceLendingPools.sol";
 import {IPoolCycleManager, CycleState} from "../../interfaces/IPoolCycleManager.sol";
-import {IPool, EnumerableSet, PoolParams, PoolCycleParams, PoolInfo, ProtectionInfo, LendingPoolDetail, WithdrawalCycleDetail, ProtectionBuyerAccount, PoolState} from "../../interfaces/IPool.sol";
+import {IPool, EnumerableSet, PoolParams, PoolCycleParams, PoolInfo, ProtectionInfo, LendingPoolDetail, WithdrawalCycleDetail, ProtectionBuyerAccount, PoolPhase} from "../../interfaces/IPool.sol";
 import {IDefaultStateManager} from "../../interfaces/IDefaultStateManager.sol";
 
 import "../../libraries/AccruedPremiumCalculator.sol";
@@ -125,7 +125,12 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   function buyProtection(
     ProtectionPurchaseParams calldata _protectionPurchaseParams
   ) external override whenNotPaused nonReentrant {
-    /// Step 1: Verify that user can buy protection
+    /// Step 1: Verify that the pool is not in DepositOnly phase
+    if (poolInfo.currentPhase == PoolPhase.DepositOnly) {
+      revert IPool.PoolInDepositOnlyPhase(poolInfo.poolId);
+    }
+
+    /// Step 2: Verify that user can buy protection
     PoolHelper.verifyUserCanBuyProtection(
       poolCycleManager,
       poolInfo,
@@ -134,23 +139,19 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _protectionPurchaseParams
     );
 
-    /// Step 2: Verify that pool has minimum required capital
-    _verifyMinCapitalRequired();
-
     /// Step 3: Calculate & check the leverage ratio
-    /// When pool is open for trading (deposit & buyProtection),
-    /// ensure that leverage ratio floor is not breached
+    /// Ensure that leverage ratio floor is never breached
     totalProtection += _protectionPurchaseParams.protectionAmount;
     uint256 _leverageRatio = calculateLeverageRatio();
-    if (poolInfo.state == PoolState.DepositAndBuyProtection) {
-      if (_leverageRatio < poolInfo.params.leverageRatioFloor) {
-        revert PoolLeverageRatioTooLow(poolInfo.poolId, _leverageRatio);
-      }
+    if (_leverageRatio < poolInfo.params.leverageRatioFloor) {
+      revert PoolLeverageRatioTooLow(poolInfo.poolId, _leverageRatio);
     }
 
     LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
       _protectionPurchaseParams.lendingPoolAddress
     ];
+    lendingPoolDetail.totalProtection += _protectionPurchaseParams
+      .protectionAmount;
 
     //// Step 4: Calculate the protection premium amount scaled to 18 decimals and scale it to the underlying token decimals.
     (
@@ -236,6 +237,11 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     whenNotPaused
     nonReentrant
   {
+    /// Verify that the pool is not in BuyProtectionOnly phase
+    if (poolInfo.currentPhase == PoolPhase.BuyProtectionOnly) {
+      revert PoolInBuyProtectionOnlyPhase(poolInfo.poolId);
+    }
+
     uint256 _sTokenShares = convertToSToken(_underlyingAmount);
     totalSTokenUnderlying += _underlyingAmount;
     _safeMint(_receiver, _sTokenShares);
@@ -511,8 +517,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
     if (_claimableAmount > 0) {
       console.log(
-        "Pool Balance: %s, claimableAmount: %s",
-        poolInfo.underlyingToken.balanceOf(address(this)),
+        "Total sToken underlying: %s, claimableAmount: %s",
+        totalSTokenUnderlying,
         _claimableAmount
       );
       /// transfer the share of unlocked capital to the receiver
@@ -538,6 +544,29 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   function updateCeiling(uint256 newCeiling) external onlyOwner {
     poolInfo.params.leverageRatioCeiling = newCeiling;
+  }
+
+  /**
+   * @notice Allows the owner to move pool phase after verification
+   * @return _newPhase the new phase of the pool, if the phase is updated
+   */
+  function movePoolPhase() external onlyOwner returns (PoolPhase _newPhase) {
+    PoolPhase _currentPhase = poolInfo.currentPhase;
+
+    /// when the pool is in DepositOnly phase, it can be moved to BuyProtectionOnly phase
+    if (_currentPhase == PoolPhase.DepositOnly && _hasMinRequiredCapital()) {
+      poolInfo.currentPhase = _newPhase = PoolPhase.BuyProtectionOnly;
+      emit PoolPhaseUpdated(poolInfo.poolId, _newPhase);
+    } else if (_currentPhase == PoolPhase.BuyProtectionOnly) {
+      /// when the pool is in BuyProtectionOnly phase, it can be moved to Open phase
+      /// if the leverage ratio is below the ceiling
+      if (calculateLeverageRatio() <= poolInfo.params.leverageRatioCeiling) {
+        poolInfo.currentPhase = _newPhase = PoolPhase.Open;
+        emit PoolPhaseUpdated(poolInfo.poolId, _newPhase);
+      }
+    }
+
+    /// Once the pool is in Open phase, phase can not be updated
   }
 
   /** view functions */
@@ -631,11 +660,16 @@ contract Pool is IPool, SToken, ReentrancyGuard {
    * @param _lendingPoolAddress The address of the lending pool.
    * @return _lastPremiumAccrualTimestamp The timestamp of the last premium accrual.
    * @return _totalPremium The total premium paid for the lending pool.
+   * @return _totalProtection The total protection bought for the lending pool.
    */
   function getLendingPoolDetail(address _lendingPoolAddress)
     external
     view
-    returns (uint256 _lastPremiumAccrualTimestamp, uint256 _totalPremium)
+    returns (
+      uint256 _lastPremiumAccrualTimestamp,
+      uint256 _totalPremium,
+      uint256 _totalProtection
+    )
   {
     LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
       _lendingPoolAddress
@@ -643,6 +677,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     _lastPremiumAccrualTimestamp = lendingPoolDetail
       .lastPremiumAccrualTimestamp;
     _totalPremium = lendingPoolDetail.totalPremium;
+    _totalProtection = lendingPoolDetail.totalProtection;
   }
 
   /**
@@ -723,15 +758,5 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     }
 
     return (_totalCapital * Constants.SCALE_18_DECIMALS) / totalProtection;
-  }
-
-  function _verifyMinCapitalRequired() internal view {
-    /// verify that pool has min capital required
-    if (!_hasMinRequiredCapital()) {
-      revert PoolHasNoMinCapitalRequired(
-        poolInfo.poolId,
-        totalSTokenUnderlying
-      );
-    }
   }
 }
