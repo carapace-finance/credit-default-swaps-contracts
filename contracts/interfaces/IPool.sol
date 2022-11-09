@@ -65,6 +65,7 @@ struct ProtectionInfo {
   /// @notice Lambda is calculated & captured at the time of loan protection purchase
   /// @notice It is used in accrued premium calculation
   int256 lambda;
+  /// @notice The protection purchase parameters such as protection amount, expiry, lending pool etc.
   ProtectionPurchaseParams purchaseParams;
   /// @notice A flag indicating if the protection is expired or not
   bool expired;
@@ -108,7 +109,6 @@ abstract contract IPool {
   error ProtectionPurchaseNotAllowed(ProtectionPurchaseParams params);
   error ProtectionDurationTooShort(uint256 protectionDurationInSeconds);
   error ProtectionDurationTooLong(uint256 protectionDurationInSeconds);
-  error BuyerAccountExists(address msgSender);
   error PoolIsNotOpen(uint256 poolId);
   error PoolLeverageRatioTooHigh(uint256 poolId, uint256 leverageRatio);
   error PoolLeverageRatioTooLow(uint256 poolId, uint256 leverageRatio);
@@ -125,6 +125,7 @@ abstract contract IPool {
   error OnlyDefaultStateManager(address msgSender);
   error PoolInDepositOnlyPhase(uint256 poolId);
   error PoolInBuyProtectionOnlyPhase(uint256 poolId);
+  error BuyerDoesNotHaveExistingActiveProtection();
 
   /*** events ***/
 
@@ -183,6 +184,10 @@ abstract contract IPool {
    * @param _protectionPurchaseParams The protection purchase parameters.
    */
   function buyProtection(
+    ProtectionPurchaseParams calldata _protectionPurchaseParams
+  ) external virtual;
+
+  function extendProtection(
     ProtectionPurchaseParams calldata _protectionPurchaseParams
   ) external virtual;
 
