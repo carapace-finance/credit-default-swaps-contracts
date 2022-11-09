@@ -1,6 +1,6 @@
 import { BigNumber } from "@ethersproject/bignumber";
 import { expect } from "chai";
-import { parseEther, formatEther } from "ethers/lib/utils";
+import { parseEther } from "ethers/lib/utils";
 import {
   PoolParamsStruct,
   PoolCycleParamsStruct
@@ -8,7 +8,7 @@ import {
 import { parseUSDC } from "../utils/usdc";
 
 import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";
-import { getDaysInSeconds, getUnixTimestampAheadByDays } from "../utils/time";
+import { getDaysInSeconds } from "../utils/time";
 
 const testPremiumCalculator: Function = (
   premiumCalculator: PremiumCalculator
@@ -42,10 +42,10 @@ const testPremiumCalculator: Function = (
       const _totalCapital = parseUSDC("15000");
 
       it("... calculates correct premium amount for a period of 180 days", async () => {
-        const _expirationTimestamp = await getUnixTimestampAheadByDays(180);
+        const _protectionDurationInSeconds = getDaysInSeconds(180);
         const premiumAndMinPremiumFlag =
           await premiumCalculator.calculatePremium(
-            _expirationTimestamp,
+            _protectionDurationInSeconds,
             _protectionAmt,
             _protectionBuyerApy,
             _currentLeverageRatio,
@@ -59,11 +59,11 @@ const testPremiumCalculator: Function = (
       });
 
       it("... calculates correct premium amount for a period of 365 days", async () => {
-        const _expirationTimestamp = await getUnixTimestampAheadByDays(365);
+        const _protectionDurationInSeconds = getDaysInSeconds(365);
 
         const premiumAndMinPremiumFlag =
           await premiumCalculator.calculatePremium(
-            _expirationTimestamp,
+            _protectionDurationInSeconds,
             _protectionAmt,
             _protectionBuyerApy,
             _currentLeverageRatio,
@@ -77,14 +77,14 @@ const testPremiumCalculator: Function = (
       });
 
       it("... calculates premium amount without overflow/underflow for a range of leverage ratio from 0.1 to 0.2", async () => {
-        const _expirationTimestamp = await getUnixTimestampAheadByDays(365 * 2); // 2 years
+        const _protectionDurationInSeconds = getDaysInSeconds(365 * 2); // 2 years
 
         let leverageRatio = _leverageRatioFloor;
         let protectionAmount = _protectionAmt;
         let protectionBuyerApy = parseEther("0.1");
         while (leverageRatio.lte(_leverageRatioCeiling)) {
           await premiumCalculator.calculatePremium(
-            _expirationTimestamp,
+            _protectionDurationInSeconds,
             protectionAmount,
             protectionBuyerApy,
             leverageRatio,
@@ -101,12 +101,11 @@ const testPremiumCalculator: Function = (
     describe("calculatePremium with min carapace premium rate", () => {
       it("... calculates correct premium amount when leverage ratio is less than floor", async () => {
         const _totalCapital = parseUSDC("500000");
-        const _totalProtection = parseUSDC("100000000");
-        const _expirationTimestamp = await getUnixTimestampAheadByDays(180);
+        const _protectionDurationInSeconds = getDaysInSeconds(180);
 
         const premiumAndMinPremiumFlag =
           await premiumCalculator.calculatePremium(
-            _expirationTimestamp,
+            _protectionDurationInSeconds,
             _protectionAmt,
             _protectionBuyerApy,
             _leverageRatioFloor.sub(parseEther("0.05")), // leverage ratio(0.05) is less than floor
@@ -121,12 +120,11 @@ const testPremiumCalculator: Function = (
 
       it("... calculates correct premium amount when leverage ratio is higher than ceiling", async () => {
         const _totalCapital = parseUSDC("15000");
-        const _totalProtection = parseUSDC("60000");
-        const _expirationTimestamp = await getUnixTimestampAheadByDays(180);
+        const _protectionDurationInSeconds = getDaysInSeconds(180);
 
         const premiumAndMinPremiumFlag =
           await premiumCalculator.calculatePremium(
-            _expirationTimestamp,
+            _protectionDurationInSeconds,
             _protectionAmt,
             _protectionBuyerApy,
             _leverageRatioCeiling.add(parseEther("0.05")), // leverage ratio(0.25) is higher than ceiling
@@ -141,11 +139,11 @@ const testPremiumCalculator: Function = (
 
       it("... calculates correct premium amount when total capital is lower than min required capital", async () => {
         const _totalCapital = _minRequiredCapital.sub(parseUSDC("1"));
-        const _expirationTimestamp = await getUnixTimestampAheadByDays(180);
+        const _protectionDurationInSeconds = getDaysInSeconds(180);
 
         const premiumAndMinPremiumFlag =
           await premiumCalculator.calculatePremium(
-            _expirationTimestamp,
+            _protectionDurationInSeconds,
             _protectionAmt,
             _protectionBuyerApy,
             0,
@@ -160,11 +158,11 @@ const testPremiumCalculator: Function = (
 
       it("... calculates correct premium amount when total protection is lower than min required protection", async () => {
         const _totalCapital = _minRequiredCapital.add(parseUSDC("1"));
-        const _expirationTimestamp = await getUnixTimestampAheadByDays(180);
+        const _protectionDurationInSeconds = getDaysInSeconds(180);
 
         const premiumAndMinPremiumFlag =
           await premiumCalculator.calculatePremium(
-            _expirationTimestamp,
+            _protectionDurationInSeconds,
             _protectionAmt,
             _protectionBuyerApy,
             0,

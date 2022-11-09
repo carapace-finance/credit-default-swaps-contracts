@@ -574,6 +574,20 @@ const testPool: Function = (
           ).to.be.revertedWith("ProtectionPurchaseNotAllowed");
         });
 
+        it("...fails when protection expiry is after next pool cycle's end", async () => {
+          // we are at day 1 of in cycle 1(30 days), so max possible expiry is 59 days from now
+          await expect(
+            pool.connect(_protectionBuyer1).buyProtection({
+              lendingPoolAddress: _lendingPool2,
+              nftLpTokenId: 590,
+              protectionAmount: parseUSDC("50000"),
+              protectionExpirationTimestamp: await getUnixTimestampAheadByDays(
+                60
+              )
+            })
+          ).to.be.revertedWith("ProtectionDurationTooLong");
+        });
+
         it("...1st buy protection is successful", async () => {
           const _initialBuyerAccountId: BigNumber = BigNumber.from(1);
           const _initialPremiumAmountOfAccount: BigNumber = BigNumber.from(0);
