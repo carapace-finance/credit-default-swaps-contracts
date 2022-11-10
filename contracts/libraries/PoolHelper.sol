@@ -26,11 +26,9 @@ library PoolHelper {
   function verifyProtection(
     IPoolCycleManager poolCycleManager,
     PoolInfo storage poolInfo,
-    mapping(address => ProtectionBuyerAccount) storage protectionBuyerAccounts,
-    ProtectionInfo[] storage protectionInfos,
     uint256 _protectionStartTimestamp,
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
-    bool isExtension
+    bool _isExtension
   ) external {
     /// Verify that the pool is not in DepositOnly phase
     if (poolInfo.currentPhase == PoolPhase.DepositOnly) {
@@ -44,7 +42,7 @@ library PoolHelper {
       poolInfo.poolId,
       _protectionStartTimestamp,
       _protectionPurchaseParams.protectionDurationInSeconds,
-      isExtension
+      _isExtension
         ? Constants.SECONDS_IN_DAY_UINT
         : poolInfo.params.minProtectionDurationInSeconds
     );
@@ -55,25 +53,11 @@ library PoolHelper {
       _protectionPurchaseParams.lendingPoolAddress
     );
 
-    bool _buyerHaveActiveProtection;
-    if (isExtension) {
-      _buyerHaveActiveProtection = true;
-    } else {
-      /// Verify that buyer can buy the protection
-      /// doesBuyerHaveActiveProtection verifies whether a buyer has active protection for the same position in the same lending pool.
-      /// If s/he has, then we allow to buy protection even when protection purchase limit is passed.
-      (_buyerHaveActiveProtection, ) = doesBuyerHaveActiveProtection(
-        protectionBuyerAccounts,
-        protectionInfos,
-        _protectionPurchaseParams
-      );
-    }
-
     if (
       !poolInfo.referenceLendingPools.canBuyProtection(
         msg.sender,
         _protectionPurchaseParams,
-        _buyerHaveActiveProtection
+        _isExtension
       )
     ) {
       revert IPool.ProtectionPurchaseNotAllowed(_protectionPurchaseParams);

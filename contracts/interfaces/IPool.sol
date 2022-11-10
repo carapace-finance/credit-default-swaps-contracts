@@ -178,15 +178,22 @@ abstract contract IPool {
   event PoolPhaseUpdated(uint256 poolId, PoolPhase newState);
 
   /**
-   * @notice A buyer can buy protection for a loan in lending pool when lending pool is supported & active (not defaulted or expired).
+   * @notice A buyer can buy protection for a position in lending pool when lending pool is supported & active (not defaulted or expired).
    * Buyer must have a position in the lending pool & principal must be less or equal to the protection amount.
    * Buyer must approve underlying tokens to pay the expected premium.
-   * @param _protectionPurchaseParams The protection purchase parameters.
+   * @param _protectionPurchaseParams The protection purchase parameters such as protection amount, duration, lending pool etc.
    */
   function buyProtection(
     ProtectionPurchaseParams calldata _protectionPurchaseParams
   ) external virtual;
 
+  /**
+   * @notice A buyer can extend protection for a position in lending pool when lending pool is supported & active (not defaulted or expired).
+   * Buyer must have a existing active protection for the same lending position, meaning same lending pool & nft token id.
+   * Protection extension's duration must not exceed the end time of next pool cycle.
+   * Buyer must approve underlying tokens to pay the expected premium.
+   * @param _protectionPurchaseParams The protection purchase parameters such as protection amount, duration, lending pool etc.
+   */
   function extendProtection(
     ProtectionPurchaseParams calldata _protectionPurchaseParams
   ) external virtual;

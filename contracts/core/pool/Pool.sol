@@ -658,17 +658,15 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   function _verifyAndCreateProtection(
     uint256 _protectionStartTimestamp,
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
-    bool isExtension
+    bool _isExtension
   ) internal {
     /// Verify that user can buy protection
     PoolHelper.verifyProtection(
       poolCycleManager,
       poolInfo,
-      protectionBuyerAccounts,
-      protectionInfos,
       _protectionStartTimestamp,
       _protectionPurchaseParams,
-      isExtension
+      _isExtension
     );
 
     /// Step 1: Calculate & check the leverage ratio
