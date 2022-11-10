@@ -7,7 +7,7 @@ import { parseUSDC } from "../utils/usdc";
 import { ITranchedPool } from "../../typechain-types/contracts/external/goldfinch/ITranchedPool";
 import { ethers } from "hardhat";
 import { BigNumber } from "@ethersproject/bignumber";
-import { getLatestBlockTimestamp } from "../utils/time";
+import { getDaysInSeconds, getLatestBlockTimestamp } from "../utils/time";
 import { toBytes32, setStorageAt, getStorageAt } from "../utils/storage";
 
 const GOLDFINCH_ALMAVEST_BASKET_6_ADDRESS =
@@ -133,7 +133,7 @@ const testGoldfinchV2Adapter: Function = (
           lendingPoolAddress: GOLDFINCH_ALMAVEST_BASKET_6_ADDRESS,
           nftLpTokenId: 452,
           protectionAmount: parseUSDC("100"),
-          protectionExpirationTimestamp: 1740068036
+          protectionDurationInSeconds: getDaysInSeconds(30)
         };
       });
 

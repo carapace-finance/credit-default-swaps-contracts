@@ -152,9 +152,12 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     }
 
     /// Verify that user can extend protection
-    uint256 _protectionStartTimestamp = protectionInfos[
+    ProtectionInfo storage existingProtectionInfo = protectionInfos[
       _existingProtectionIndex
-    ].purchaseParams.protectionExpirationTimestamp + 1;
+    ];
+    uint256 _protectionStartTimestamp = existingProtectionInfo.startTimestamp +
+      existingProtectionInfo.purchaseParams.protectionDurationInSeconds +
+      1;
 
     _verifyAndCreateProtection(
       _protectionStartTimestamp,
@@ -692,7 +695,6 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         protectionBuyerAccounts,
         poolInfo,
         lendingPoolDetail,
-        _protectionStartTimestamp,
         _protectionPurchaseParams,
         totalSTokenUnderlying,
         _leverageRatio
@@ -707,9 +709,9 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     );
 
     /// Step 4: Calculate protection in days and scale it to 18 decimals.
-    uint256 _protectionDurationInDaysScaled = ((_protectionPurchaseParams
-      .protectionExpirationTimestamp - block.timestamp) *
-      Constants.SCALE_18_DECIMALS) / uint256(Constants.SECONDS_IN_DAY);
+    uint256 _protectionDurationInDaysScaled = ((
+      _protectionPurchaseParams.protectionDurationInSeconds
+    ) * Constants.SCALE_18_DECIMALS) / uint256(Constants.SECONDS_IN_DAY);
 
     console.log(
       "protectionDurationInDays: %s, protectionPremium: %s, leverageRatio: ",

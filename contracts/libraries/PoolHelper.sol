@@ -43,7 +43,7 @@ library PoolHelper {
       poolCycleManager,
       poolInfo.poolId,
       _protectionStartTimestamp,
-      _protectionPurchaseParams.protectionExpirationTimestamp,
+      _protectionPurchaseParams.protectionDurationInSeconds,
       isExtension
         ? Constants.SECONDS_IN_DAY_UINT
         : poolInfo.params.minProtectionDurationInSeconds
@@ -88,7 +88,6 @@ library PoolHelper {
     mapping(address => ProtectionBuyerAccount) storage protectionBuyerAccounts,
     PoolInfo storage poolInfo,
     LendingPoolDetail storage lendingPoolDetail,
-    uint256 _protectionStartTimestamp,
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
     uint256 totalSTokenUnderlying,
     uint256 _leverageRatio
@@ -105,8 +104,7 @@ library PoolHelper {
     (_premiumAmountIn18Decimals, _isMinPremium) = premiumCalculator
       .calculatePremium(
         /// the protection duration in seconds
-        _protectionPurchaseParams.protectionExpirationTimestamp -
-          _protectionStartTimestamp,
+        _protectionPurchaseParams.protectionDurationInSeconds,
         /// the protection amount scaled to 18 decimals
         scaleUnderlyingAmtTo18Decimals(
           _protectionPurchaseParams.protectionAmount,
@@ -162,9 +160,8 @@ library PoolHelper {
      * secondsUntilLastPremiumAccrual is the second elapsed since the last accrual timestamp.
      * secondsUntilLatestPayment is the second elapsed until latest payment is made.
      */
-    uint256 _expirationTimestamp = protectionInfo
-      .purchaseParams
-      .protectionExpirationTimestamp;
+    uint256 _expirationTimestamp = protectionInfo.startTimestamp +
+      protectionInfo.purchaseParams.protectionDurationInSeconds;
 
     // When premium is accrued for the first time, the _secondsUntilLastPremiumAccrual is 0.
     uint256 _secondsUntilLastPremiumAccrual;
@@ -331,12 +328,11 @@ library PoolHelper {
     IPoolCycleManager poolCycleManager,
     uint256 _poolId,
     uint256 _protectionStartTimestamp,
-    uint256 _protectionExpirationTimestamp,
+    uint256 _protectionDurationInSeconds,
     uint256 _minProtectionDurationInSeconds
   ) internal {
-    uint256 _protectionDurationInSeconds = _protectionExpirationTimestamp -
-      _protectionStartTimestamp;
-
+    uint256 _protectionExpirationTimestamp = _protectionStartTimestamp +
+      _protectionDurationInSeconds;
     /// protection duration must be longer than specified minimum
     if (_protectionDurationInSeconds < _minProtectionDurationInSeconds) {
       revert IPool.ProtectionDurationTooShort(_protectionDurationInSeconds);

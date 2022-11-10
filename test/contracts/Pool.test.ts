@@ -9,6 +9,7 @@ import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool
 import { ProtectionPurchaseParamsStruct } from "../../typechain-types/contracts/interfaces/IReferenceLendingPools";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
 import {
+  getDaysInSeconds,
   getLatestBlockTimestamp,
   getUnixTimestampAheadByDays,
   moveForwardTimeByDays
@@ -412,9 +413,7 @@ const testPool: Function = (
               lendingPoolAddress: _lendingPool2,
               nftLpTokenId: 590,
               protectionAmount: parseUSDC("101"),
-              protectionExpirationTimestamp: await getUnixTimestampAheadByDays(
-                30
-              )
+              protectionDurationInSeconds: getDaysInSeconds(30)
             })
           ).to.be.revertedWith(`PoolInDepositOnlyPhase(${poolInfo.poolId})`);
         });
@@ -466,7 +465,7 @@ const testPool: Function = (
               lendingPoolAddress: _notSupportedLendingPool,
               nftLpTokenId: 91,
               protectionAmount: parseUSDC("100"),
-              protectionExpirationTimestamp: getUnixTimestampAheadByDays(30)
+              protectionDurationInSeconds: getDaysInSeconds(30)
             })
           ).to.be.revertedWith(
             `LendingPoolNotSupported("${_notSupportedLendingPool}")`
@@ -484,9 +483,7 @@ const testPool: Function = (
               lendingPoolAddress: _lendingPool2,
               nftLpTokenId: 583,
               protectionAmount: parseUSDC("101"),
-              protectionExpirationTimestamp: await getUnixTimestampAheadByDays(
-                10
-              )
+              protectionDurationInSeconds: getDaysInSeconds(10)
             })
           ).to.be.revertedWith("Pausable: paused");
         });
@@ -508,9 +505,7 @@ const testPool: Function = (
               lendingPoolAddress: _lendingPool2,
               nftLpTokenId: 590,
               protectionAmount: parseUSDC("101"),
-              protectionExpirationTimestamp: await getUnixTimestampAheadByDays(
-                30
-              )
+              protectionDurationInSeconds: getDaysInSeconds(30)
             })
           ).to.be.revertedWith("ERC20: transfer amount exceeds allowance");
         });
@@ -539,9 +534,7 @@ const testPool: Function = (
               lendingPoolAddress: "0x759f097f3153f5d62ff1c2d82ba78b6350f223e3",
               nftLpTokenId: 590,
               protectionAmount: parseUSDC("101"),
-              protectionExpirationTimestamp: await getUnixTimestampAheadByDays(
-                30
-              )
+              protectionDurationInSeconds: getDaysInSeconds(30)
             })
           ).to.be.revertedWith(
             `LendingPoolNotSupported("0x759f097f3153f5d62FF1C2D82bA78B6350F223e3")`
@@ -554,9 +547,7 @@ const testPool: Function = (
               lendingPoolAddress: _lendingPool2,
               nftLpTokenId: 591,
               protectionAmount: parseUSDC("101"),
-              protectionExpirationTimestamp: await getUnixTimestampAheadByDays(
-                30
-              )
+              protectionDurationInSeconds: getDaysInSeconds(30)
             })
           ).to.be.revertedWith("ProtectionPurchaseNotAllowed");
         });
@@ -567,9 +558,7 @@ const testPool: Function = (
               lendingPoolAddress: _lendingPool2,
               nftLpTokenId: 590,
               protectionAmount: parseUSDC("500000"),
-              protectionExpirationTimestamp: await getUnixTimestampAheadByDays(
-                30
-              )
+              protectionDurationInSeconds: getDaysInSeconds(30)
             })
           ).to.be.revertedWith("ProtectionPurchaseNotAllowed");
         });
@@ -581,9 +570,7 @@ const testPool: Function = (
               lendingPoolAddress: _lendingPool2,
               nftLpTokenId: 590,
               protectionAmount: parseUSDC("50000"),
-              protectionExpirationTimestamp: await getUnixTimestampAheadByDays(
-                60
-              )
+              protectionDurationInSeconds: getDaysInSeconds(60)
             })
           ).to.be.revertedWith("ProtectionDurationTooLong");
         });
@@ -595,14 +582,14 @@ const testPool: Function = (
             await pool.getLendingPoolDetail(_lendingPool2)
           )[0];
           const _premiumTotalBefore: BigNumber = await pool.totalPremium();
-          const _expectedPremiumAmount = parseUSDC("2186.178896");
+          const _expectedPremiumAmount = parseUSDC("2186.178950");
 
           const _protectionAmount = parseUSDC("100000"); // 100,000 USDC
           _purchaseParams = {
             lendingPoolAddress: _lendingPool2,
             nftLpTokenId: 590,
             protectionAmount: _protectionAmount,
-            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(40)
+            protectionDurationInSeconds: getDaysInSeconds(40)
           };
 
           const _poolUsdcBalanceBefore = await USDC.balanceOf(pool.address);
@@ -713,7 +700,7 @@ const testPool: Function = (
             lendingPoolAddress: _lendingPool2,
             nftLpTokenId: 615,
             protectionAmount: parseUSDC("20000"),
-            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(11)
+            protectionDurationInSeconds: getDaysInSeconds(11)
           });
           expect(
             (
@@ -728,7 +715,7 @@ const testPool: Function = (
             lendingPoolAddress: _lendingPool2,
             nftLpTokenId: 579,
             protectionAmount: parseUSDC("30000"),
-            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(30)
+            protectionDurationInSeconds: getDaysInSeconds(30)
           });
           expect(
             (
@@ -779,7 +766,7 @@ const testPool: Function = (
             lendingPoolAddress: _goldfinchLendingPools[0],
             nftLpTokenId: 645,
             protectionAmount: parseUSDC("50000"),
-            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(35)
+            protectionDurationInSeconds: getDaysInSeconds(35)
           });
           expect(
             (
@@ -1092,7 +1079,7 @@ const testPool: Function = (
             // see: https://lark.market/tokenDetail?tokenId=590
             nftLpTokenId: 590, // this token has 420K principal for buyer 1
             protectionAmount: parseUSDC("10000"),
-            protectionExpirationTimestamp: getUnixTimestampAheadByDays(15)
+            protectionDurationInSeconds: getDaysInSeconds(15)
           });
 
           expect(await getActiveProtections()).to.have.lengthOf(3);
@@ -1169,7 +1156,7 @@ const testPool: Function = (
             lendingPoolAddress: _lendingPool1,
             nftLpTokenId: 645,
             protectionAmount: parseUSDC("70000"),
-            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(35)
+            protectionDurationInSeconds: getDaysInSeconds(35)
           });
 
           await USDC.connect(_protectionBuyer1).approve(
@@ -1180,7 +1167,7 @@ const testPool: Function = (
             lendingPoolAddress: _lendingPool2,
             nftLpTokenId: 590,
             protectionAmount: parseUSDC("50000"),
-            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(20)
+            protectionDurationInSeconds: getDaysInSeconds(20)
           });
 
           expect((await pool.getAllProtections()).length).to.be.eq(2);
@@ -1425,7 +1412,7 @@ const testPool: Function = (
             lendingPoolAddress: _lendingPool2,
             nftLpTokenId: 590,
             protectionAmount: parseUSDC("101"),
-            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(20)
+            protectionDurationInSeconds: getDaysInSeconds(20)
           })
         ).to.be.revertedWith(
           `LendingPoolHasLatePayment("0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf")`
@@ -1584,7 +1571,7 @@ const testPool: Function = (
             lendingPoolAddress: _lendingPool2,
             nftLpTokenId: 579,
             protectionAmount: parseUSDC("30000"),
-            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(30)
+            protectionDurationInSeconds: getDaysInSeconds(30)
           })
         ).to.be.revertedWith("ProtectionPurchaseNotAllowed");
       });
@@ -1604,7 +1591,7 @@ const testPool: Function = (
             lendingPoolAddress: _lendingPool2,
             nftLpTokenId: 591,
             protectionAmount: parseUSDC("101"),
-            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(11)
+            protectionDurationInSeconds: getDaysInSeconds(11)
           })
         ).to.be.revertedWith("ProtectionPurchaseNotAllowed");
       });
@@ -1629,7 +1616,7 @@ const testPool: Function = (
             lendingPoolAddress: _lendingPool1,
             nftLpTokenId: 590,
             protectionAmount: parseUSDC("101"),
-            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(11)
+            protectionDurationInSeconds: getDaysInSeconds(11)
           })
         ).to.be.revertedWith("ProtectionPurchaseNotAllowed");
       });
@@ -1652,7 +1639,7 @@ const testPool: Function = (
             lendingPoolAddress: _lendingPool2,
             nftLpTokenId: 590,
             protectionAmount: parseUSDC("101"),
-            protectionExpirationTimestamp: await getUnixTimestampAheadByDays(11)
+            protectionDurationInSeconds: getDaysInSeconds(11)
           })
         ).to.be.revertedWith("PoolLeverageRatioTooLow");
       });
@@ -1683,7 +1670,7 @@ const testPool: Function = (
           lendingPoolAddress: _lendingPool2,
           nftLpTokenId: 590,
           protectionAmount: parseUSDC("10000"),
-          protectionExpirationTimestamp: await getUnixTimestampAheadByDays(11)
+          protectionDurationInSeconds: getDaysInSeconds(11)
         });
 
         expect(

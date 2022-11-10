@@ -35,8 +35,8 @@ struct ProtectionPurchaseParams {
   uint256 nftLpTokenId;
   /// @notice the protection amount in underlying tokens
   uint256 protectionAmount;
-  /// @notice the protection's expiration timestamp in unix epoch seconds
-  uint256 protectionExpirationTimestamp;
+  /// @notice the protection duration in seconds
+  uint256 protectionDurationInSeconds;
 }
 
 /**
@@ -51,7 +51,7 @@ abstract contract IReferenceLendingPools {
     address indexed lendingPoolAddress,
     LendingProtocol indexed lendingPoolProtocol,
     uint256 addedTimestamp,
-    uint256 protectionExpirationTimestamp
+    uint256 protectionPurchaseLimitTimestamp
   );
 
   /** errors */
