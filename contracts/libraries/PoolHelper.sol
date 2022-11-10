@@ -148,9 +148,12 @@ library PoolHelper {
   ) external view returns (uint256 _accruedPremiumInUnderlying, bool _expired) {
     uint256 _startTimestamp = protectionInfo.startTimestamp;
 
-    /// This means no payment has been made after the protection is bought,
+    /// This means no payment has been made after the protection is bought or protection starts in the future.
     /// so no premium needs to be accrued.
-    if (_latestPaymentTimestamp < _startTimestamp) {
+    if (
+      _latestPaymentTimestamp < _startTimestamp ||
+      _startTimestamp > block.timestamp
+    ) {
       return (0, false);
     }
 
@@ -324,6 +327,9 @@ library PoolHelper {
     }
   }
 
+  /**
+   * @dev Verify that the protection duration is valid, otherwise revert.
+   */
   function _verifyProtectionDuration(
     IPoolCycleManager poolCycleManager,
     uint256 _poolId,
