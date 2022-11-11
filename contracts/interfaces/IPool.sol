@@ -240,10 +240,17 @@ abstract contract IPool {
 
   /**
    * @notice Accrues the premium from all existing protections and updates the total premium accrued.
-   * This method accrues premium from the last accrual timestamp to the latest payment timestamp of the underlying lending pool.
-   * This method also removes expired protections.
+   * This function accrues premium from the last accrual timestamp to the latest payment timestamp of the underlying lending pool.
+   * This function  also marks protections expired when duration is over.
+   * @param _lendingPools The lending pools for which premium needs to be accrued and protections need to be marked expired.
+   * This is optional parameter. If not provided, premium will be accrued for all reference lending pools.
+   *
+   * NOTE: This function iterates over all active protections and may run into gas cost limit,
+   * so optional parameter is provided to limit the number of protections iterated.
    */
-  function accruePremiumAndExpireProtections() external virtual;
+  function accruePremiumAndExpireProtections(address[] memory _lendingPools)
+    external
+    virtual;
 
   /**
    * @notice Returns various parameters and other pool related info.

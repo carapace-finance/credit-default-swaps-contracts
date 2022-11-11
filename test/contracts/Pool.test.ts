@@ -969,7 +969,7 @@ const testPool: Function = (
       describe("accruePremiumAndExpireProtections", async () => {
         it("...should NOT accrue premium", async () => {
           // no premium should be accrued because there is no new payment
-          await expect(pool.accruePremiumAndExpireProtections()).to.not.emit(
+          await expect(pool.accruePremiumAndExpireProtections([])).to.not.emit(
             pool,
             "PremiumAccrued"
           );
@@ -988,7 +988,7 @@ const testPool: Function = (
           await payToLendingPoolAddress(_lendingPool1, "100000", USDC);
 
           // accrue premium
-          expect(await pool.accruePremiumAndExpireProtections())
+          expect(await pool.accruePremiumAndExpireProtections([]))
             .to.emit(pool, "PremiumAccrued")
             .to.emit(pool, "ProtectionExpired");
 
@@ -1583,7 +1583,7 @@ const testPool: Function = (
         it("...accrue premium and expire protections", async () => {
           // should expire 2 protections
           expect((await getActiveProtections()).length).to.eq(2);
-          await pool.accruePremiumAndExpireProtections();
+          await pool.accruePremiumAndExpireProtections([]);
           expect((await getActiveProtections()).length).to.eq(0);
         });
 

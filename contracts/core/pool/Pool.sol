@@ -292,10 +292,13 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   }
 
   /// @inheritdoc IPool
-  function accruePremiumAndExpireProtections() external override {
-    address[] memory _lendingPools = poolInfo
-      .referenceLendingPools
-      .getLendingPools();
+  function accruePremiumAndExpireProtections(address[] memory _lendingPools)
+    external
+    override
+  {
+    if (_lendingPools.length == 0) {
+      _lendingPools = poolInfo.referenceLendingPools.getLendingPools();
+    }
 
     /// Iterate all lending pools of this protection pool to check if there is new payment after last premium accrual
     uint256 length = _lendingPools.length;
@@ -310,71 +313,69 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         .referenceLendingPools
         .getLatestPaymentTimestamp(_lendingPool);
 
-      /// If there is payment made after the last premium accrual, then accrue premium
       uint256 _lastPremiumAccrualTimestamp = lendingPoolDetail
         .lastPremiumAccrualTimestamp;
+
       console.log(
         "lendingPool: %s, lastPremiumAccrualTimestamp: %s, latestPaymentTimestamp: %s",
         _lendingPool,
         _lastPremiumAccrualTimestamp,
         _latestPaymentTimestamp
       );
-      if (_latestPaymentTimestamp > _lastPremiumAccrualTimestamp) {
-        uint256[] memory _protectionIndexes = lendingPoolDetail
-          .activeProtectionIndexes
-          .values();
 
-        /// Iterate all protections for this lending pool and accrue premium for each
-        uint256 _accruedPremiumForLendingPool;
-        uint256 _length = _protectionIndexes.length;
-        for (uint256 j; j < _length; ) {
-          uint256 _protectionIndex = _protectionIndexes[j];
-          ProtectionInfo storage protectionInfo = protectionInfos[
+      uint256[] memory _protectionIndexes = lendingPoolDetail
+        .activeProtectionIndexes
+        .values();
+
+      /// Iterate all protections for this lending pool
+      uint256 _accruedPremiumForLendingPool;
+      uint256 _length = _protectionIndexes.length;
+      for (uint256 j; j < _length; ) {
+        uint256 _protectionIndex = _protectionIndexes[j];
+        ProtectionInfo storage protectionInfo = protectionInfos[
+          _protectionIndex
+        ];
+
+        /// Verify & accrue premium for the protection and
+        /// if the protection is expired, then mark it as expired
+        (uint256 _accruedPremiumInUnderlying, bool _expired) = PoolHelper
+          .verifyAndAccruePremium(
+            poolInfo,
+            protectionInfo,
+            _lastPremiumAccrualTimestamp,
+            _latestPaymentTimestamp
+          );
+        totalPremiumAccrued += _accruedPremiumInUnderlying;
+        totalSTokenUnderlying += _accruedPremiumInUnderlying;
+        _accruedPremiumForLendingPool += _accruedPremiumInUnderlying;
+
+        if (_expired) {
+          /// Reduce the total protection amount of this protection pool
+          totalProtection -= protectionInfo.purchaseParams.protectionAmount;
+
+          PoolHelper.expireProtection(
+            protectionBuyerAccounts,
+            protectionInfo,
+            lendingPoolDetail,
             _protectionIndex
-          ];
-
-          /// Accrue premium for the loan protection and
-          /// if the protection is expired, then mark it as expired
-          (uint256 _accruedPremiumInUnderlying, bool _expired) = PoolHelper
-            .accruePremium(
-              poolInfo,
-              protectionInfo,
-              _lastPremiumAccrualTimestamp,
-              _latestPaymentTimestamp
-            );
-          totalPremiumAccrued += _accruedPremiumInUnderlying;
-          totalSTokenUnderlying += _accruedPremiumInUnderlying;
-          _accruedPremiumForLendingPool += _accruedPremiumInUnderlying;
-
-          if (_expired) {
-            /// Reduce the total protection amount of this protection pool
-            totalProtection -= protectionInfo.purchaseParams.protectionAmount;
-
-            PoolHelper.expireProtection(
-              protectionBuyerAccounts,
-              protectionInfo,
-              lendingPoolDetail,
-              _protectionIndex
-            );
-            emit ProtectionExpired(
-              protectionInfo.buyer,
-              protectionInfo.purchaseParams.lendingPoolAddress,
-              protectionInfo.purchaseParams.protectionAmount
-            );
-          }
-
-          unchecked {
-            ++j;
-          }
+          );
+          emit ProtectionExpired(
+            protectionInfo.buyer,
+            protectionInfo.purchaseParams.lendingPoolAddress,
+            protectionInfo.purchaseParams.protectionAmount
+          );
         }
 
-        if (_accruedPremiumForLendingPool > 0) {
-          /// Persist the latest payment timestamp for the lending pool
-          lendingPoolDetail
-            .lastPremiumAccrualTimestamp = _latestPaymentTimestamp;
-
-          emit PremiumAccrued(_lendingPool, _latestPaymentTimestamp);
+        unchecked {
+          ++j;
         }
+      }
+
+      if (_accruedPremiumForLendingPool > 0) {
+        /// Persist the latest payment timestamp for the lending pool
+        lendingPoolDetail.lastPremiumAccrualTimestamp = _latestPaymentTimestamp;
+
+        emit PremiumAccrued(_lendingPool, _latestPaymentTimestamp);
       }
 
       unchecked {
