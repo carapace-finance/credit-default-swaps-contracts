@@ -35,7 +35,8 @@ const testPremiumCalculator: Function = (
       minCarapaceRiskPremiumPercent: parseEther("0.02"), // 2%
       underlyingRiskPremiumPercent: parseEther("0.1"), // 10%
       minProtectionDurationInSeconds: getDaysInSeconds(10),
-      poolCycleParams: poolCycleParams
+      poolCycleParams: poolCycleParams,
+      protectionExtensionGracePeriodInSeconds: getDaysInSeconds(10)
     };
 
     describe("calculatePremium", () => {

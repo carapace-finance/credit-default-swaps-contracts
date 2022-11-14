@@ -39,6 +39,8 @@ struct PoolParams {
   uint256 minProtectionDurationInSeconds;
   /// @notice pool cycle related parameters
   PoolCycleParams poolCycleParams;
+  /// @notice the maximum duration in seconds during which a protection can be extended after it expires
+  uint256 protectionExtensionGracePeriodInSeconds;
 }
 
 /// @notice Contains pool information
@@ -96,6 +98,9 @@ struct ProtectionBuyerAccount {
   mapping(address => uint256) lendingPoolToPremium;
   /// @notice Set to track all protections bought by a buyer, which are active/not-expired.
   EnumerableSet.UintSet activeProtectionIndexes;
+  /// @notice Mapping to track last expired protection index of given lending pool by nft token id.
+  /// @dev a lending pool address to NFT id to the last expired protection index
+  mapping(address => mapping(uint256 => uint256)) expiredProtectionIndexByLendingPool;
 }
 
 abstract contract IPool {
@@ -125,7 +130,8 @@ abstract contract IPool {
   error OnlyDefaultStateManager(address msgSender);
   error PoolInDepositOnlyPhase(uint256 poolId);
   error PoolInBuyProtectionOnlyPhase(uint256 poolId);
-  error BuyerDoesNotHaveExistingActiveProtection();
+  error NoExpiredProtectionToExtend();
+  error CanNotExtendProtectionAfterGracePeriod();
 
   /*** events ***/
 

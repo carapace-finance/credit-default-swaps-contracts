@@ -201,7 +201,8 @@ const deployContracts: Function = async () => {
       minCarapaceRiskPremiumPercent: parseEther("0.02"),
       underlyingRiskPremiumPercent: parseEther("0.1"),
       minProtectionDurationInSeconds: getDaysInSeconds(10),
-      poolCycleParams: _poolCycleParams
+      poolCycleParams: _poolCycleParams,
+      protectionExtensionGracePeriodInSeconds: getDaysInSeconds(14) // 2 weeks
     };
 
     // Create a pool using PoolFactory instead of deploying new pool directly to mimic the prod behavior

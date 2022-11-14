@@ -117,6 +117,9 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       poolInfo.underlyingToken,
       poolInfo.referenceLendingPools
     );
+
+    /// dummy protection info to make index 0 invalid
+    protectionInfos.push();
   }
 
   /*** state-changing functions ***/
@@ -125,10 +128,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   function buyProtection(
     ProtectionPurchaseParams calldata _protectionPurchaseParams
   ) external override whenNotPaused nonReentrant {
-    uint256 _protectionStartTimestamp = block.timestamp;
-
     _verifyAndCreateProtection(
-      _protectionStartTimestamp,
+      block.timestamp,
       _protectionPurchaseParams,
       false
     );
@@ -138,29 +139,16 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   function extendProtection(
     ProtectionPurchaseParams calldata _protectionPurchaseParams
   ) external override whenNotPaused nonReentrant {
-    (
-      bool _buyerHasActiveProtection,
-      uint256 _existingProtectionIndex
-    ) = PoolHelper.doesBuyerHaveActiveProtection(
-        protectionBuyerAccounts,
-        protectionInfos,
-        _protectionPurchaseParams
-      );
-
-    if (!_buyerHasActiveProtection) {
-      revert BuyerDoesNotHaveExistingActiveProtection();
-    }
-
     /// Verify that user can extend protection
-    ProtectionInfo storage existingProtectionInfo = protectionInfos[
-      _existingProtectionIndex
-    ];
-    uint256 _protectionStartTimestamp = existingProtectionInfo.startTimestamp +
-      existingProtectionInfo.purchaseParams.protectionDurationInSeconds +
-      1;
+    PoolHelper.verifyBuyerCanExtendProtection(
+      protectionBuyerAccounts,
+      protectionInfos,
+      _protectionPurchaseParams,
+      poolInfo.params.protectionExtensionGracePeriodInSeconds
+    );
 
     _verifyAndCreateProtection(
-      _protectionStartTimestamp,
+      block.timestamp,
       _protectionPurchaseParams,
       true
     );
@@ -516,8 +504,24 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /**
    * @notice Returns all the protections bought from the pool, active & expired.
    */
-  function getAllProtections() external view returns (ProtectionInfo[] memory) {
-    return protectionInfos;
+  function getAllProtections()
+    external
+    view
+    returns (ProtectionInfo[] memory _protections)
+  {
+    uint256 _length = protectionInfos.length;
+    _protections = new ProtectionInfo[](_length - 1);
+    uint256 _index;
+
+    /// skip the first element in the array, as it is dummy/empty
+    for (uint256 i = 1; i < _length; ) {
+      _protections[_index] = protectionInfos[i];
+
+      unchecked {
+        ++i;
+        ++_index;
+      }
+    }
   }
 
   /// @inheritdoc IPool

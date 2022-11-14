@@ -205,7 +205,7 @@ library PoolHelper {
   }
 
   /**
-   * @notice Marks the given protection as expired and removes it from active protection indexes.
+   * @notice Marks the given protection as expired and moves it from active to expired protection indexes.
    */
   function expireProtection(
     mapping(address => ProtectionBuyerAccount) storage protectionBuyerAccounts,
@@ -218,9 +218,16 @@ library PoolHelper {
     /// remove expired protection index from activeProtectionIndexes of lendingPool & buyer account
     address _buyer = protectionInfo.buyer;
     lendingPoolDetail.activeProtectionIndexes.remove(_protectionIndex);
-    protectionBuyerAccounts[_buyer].activeProtectionIndexes.remove(
-      _protectionIndex
-    );
+    ProtectionBuyerAccount storage buyerAccount = protectionBuyerAccounts[
+      _buyer
+    ];
+    buyerAccount.activeProtectionIndexes.remove(_protectionIndex);
+
+    ProtectionPurchaseParams storage purchaseParams = protectionInfo
+      .purchaseParams;
+    buyerAccount.expiredProtectionIndexByLendingPool[
+      purchaseParams.lendingPoolAddress
+    ][purchaseParams.nftLpTokenId] = _protectionIndex;
 
     /// update total protection amount of lending pool
     lendingPoolDetail.totalProtection -= protectionInfo
@@ -251,10 +258,11 @@ library PoolHelper {
   }
 
   /**
-   * @dev Verifies whether a buyer has active protection for same lending position
-   * in the same lending pool specified in the protection purchase params.
+   * @dev Verifies whether a buyer can extend protection for same lending position
+   * in the same lending pool specified in the protection purchase params, otherwise reverts.
+   * Protection can be extended only within grace period after the protection is expired.
    */
-  function doesBuyerHaveActiveProtection(
+  function verifyBuyerCanExtendProtection(
     mapping(address => ProtectionBuyerAccount) storage protectionBuyerAccounts,
     ProtectionInfo[] storage protectionInfos,
     ProtectionPurchaseParams calldata _protectionPurchaseParams
@@ -276,18 +284,12 @@ library PoolHelper {
 
       /// This means a buyer has active protection for the same position in the same lending pool
       if (
-        existingProtectionPurchaseParams.lendingPoolAddress ==
-        _protectionPurchaseParams.lendingPoolAddress &&
-        existingProtectionPurchaseParams.nftLpTokenId ==
-        _protectionPurchaseParams.nftLpTokenId
+        block.timestamp >
+        (expiredProtectionInfo.startTimestamp +
+          expiredProtectionPurchaseParams.protectionDurationInSeconds +
+          _extensionGracePeriodInSeconds)
       ) {
-        _buyerHasActiveProtection = true;
-        _existingProtectionIndex = _protectionIndex;
-        break;
-      }
-
-      unchecked {
-        ++i;
+        revert IPool.CanNotExtendProtectionAfterGracePeriod();
       }
     }
   }
