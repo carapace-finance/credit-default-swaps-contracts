@@ -265,24 +265,33 @@ library PoolHelper {
   function verifyBuyerCanExtendProtection(
     mapping(address => ProtectionBuyerAccount) storage protectionBuyerAccounts,
     ProtectionInfo[] storage protectionInfos,
-    ProtectionPurchaseParams calldata _protectionPurchaseParams
-  )
-    public
-    view
-    returns (bool _buyerHasActiveProtection, uint256 _existingProtectionIndex)
-  {
-    EnumerableSet.UintSet
-      storage activeProtectionIndexes = protectionBuyerAccounts[msg.sender]
-        .activeProtectionIndexes;
-    uint256 _length = activeProtectionIndexes.length();
-    for (uint256 i; i < _length; ) {
-      uint256 _protectionIndex = activeProtectionIndexes.at(i);
-      ProtectionPurchaseParams
-        storage existingProtectionPurchaseParams = protectionInfos[
-          _protectionIndex
-        ].purchaseParams;
+    ProtectionPurchaseParams calldata _protectionPurchaseParams,
+    uint256 _extensionGracePeriodInSeconds
+  ) public view {
+    uint256 _expiredProtectionIndex = protectionBuyerAccounts[msg.sender]
+      .expiredProtectionIndexByLendingPool[
+        _protectionPurchaseParams.lendingPoolAddress
+      ][_protectionPurchaseParams.nftLpTokenId];
 
-      /// This means a buyer has active protection for the same position in the same lending pool
+    if (_expiredProtectionIndex == 0) {
+      revert IPool.NoExpiredProtectionToExtend();
+    }
+
+    ProtectionInfo storage expiredProtectionInfo = protectionInfos[
+      _expiredProtectionIndex
+    ];
+    ProtectionPurchaseParams
+      storage expiredProtectionPurchaseParams = expiredProtectionInfo
+        .purchaseParams;
+
+    /// This means a buyer has expired protection for the same lending position
+    if (
+      expiredProtectionPurchaseParams.lendingPoolAddress ==
+      _protectionPurchaseParams.lendingPoolAddress &&
+      expiredProtectionPurchaseParams.nftLpTokenId ==
+      _protectionPurchaseParams.nftLpTokenId
+    ) {
+      /// If we are NOT within grace period after the protection is expired, then revert
       if (
         block.timestamp >
         (expiredProtectionInfo.startTimestamp +
