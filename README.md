@@ -17,6 +17,7 @@ I encourage you to declare environment variables in your `.bash_profile`(or .zpr
 ```bash
 export ALCHEMY_API_KEY = <alchemy_api_key>
 export INFURA_API_KEY = <infura_api_key>
+export TENDERLY_ETH_MAINNET_FORK_URL = <tenderly_fork_url>
 export DEPLOYMENT_ACCOUNT_PRIVATE_KEY = <deployment_account_private_key>
 export MNEMONIC_WORDS = <mnemonic_words>
 export WALLET_INITIAL_INDEX = "0"

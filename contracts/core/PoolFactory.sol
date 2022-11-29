@@ -87,7 +87,7 @@ contract PoolFactory is Ownable {
         params: _poolParameters,
         underlyingToken: _underlyingToken,
         referenceLendingPools: _referenceLendingPools,
-        currentPhase: PoolPhase.DepositOnly
+        currentPhase: PoolPhase.OpenToSellers
       }),
       _premiumCalculator,
       poolCycleManager,
