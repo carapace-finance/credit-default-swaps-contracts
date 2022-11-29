@@ -30,9 +30,9 @@ library PoolHelper {
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
     bool _isExtension
   ) external {
-    /// Verify that the pool is not in DepositOnly phase
-    if (poolInfo.currentPhase == PoolPhase.DepositOnly) {
-      revert IPool.PoolInDepositOnlyPhase(poolInfo.poolId);
+    /// Verify that the pool is not in OpenToSellers phase
+    if (poolInfo.currentPhase == PoolPhase.OpenToSellers) {
+      revert IPool.PoolInOpenToSellersPhase(poolInfo.poolId);
     }
 
     /// a buyer needs to buy protection longer than min protection duration specified in the pool params

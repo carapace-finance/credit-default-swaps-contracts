@@ -440,7 +440,7 @@ const testPool: Function = (
               protectionAmount: parseUSDC("101"),
               protectionDurationInSeconds: getDaysInSeconds(30)
             })
-          ).to.be.revertedWith(`PoolInDepositOnlyPhase(${poolInfo.poolId})`);
+          ).to.be.revertedWith(`PoolInOpenToSellersPhase(${poolInfo.poolId})`);
         });
       });
 
@@ -470,9 +470,7 @@ const testPool: Function = (
         it("...should fail", async () => {
           await expect(
             pool.deposit(parseUSDC("1001"), deployerAddress)
-          ).to.be.revertedWith(
-            `PoolInBuyProtectionOnlyPhase(${poolInfo.poolId})`
-          );
+          ).to.be.revertedWith(`PoolInOpenToBuyersPhase(${poolInfo.poolId})`);
         });
       });
 
