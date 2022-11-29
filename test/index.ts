@@ -37,7 +37,9 @@ import { PoolCycleManager } from "../typechain-types/contracts/core/PoolCycleMan
 
 describe("start testing", () => {
   before("deploy contracts", async () => {
+    const start = Date.now();
     await deployContracts();
+    console.log(`Deployed contracts in ${(Date.now() - start) / 1000} seconds`);
   });
 
   describe("run all the tests", () => {

@@ -5,6 +5,12 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {IReferenceLendingPools, ProtectionPurchaseParams} from "./IReferenceLendingPools.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
+enum PoolPhase {
+  OpenToSellers,
+  OpenToBuyers,
+  Open
+}
+
 /// @notice Contains pool cycle related parameters.
 struct PoolCycleParams {
   /// @notice Time duration for which cycle is OPEN, meaning deposit & withdraw from pool is allowed.
@@ -23,8 +29,6 @@ struct PoolParams {
   uint256 leverageRatioBuffer;
   /// @notice the minimum capital required capital in the pool in underlying tokens
   uint256 minRequiredCapital;
-  /// @notice the minimum protection required in the pool in underlying tokens
-  uint256 minRequiredProtection;
   /// @notice curvature used in risk premium calculation scaled to 18 decimals
   uint256 curvature;
   /// @notice the minimum premium rate in percent paid by a protection buyer scaled to 18 decimals
@@ -43,6 +47,8 @@ struct PoolInfo {
   PoolParams params;
   IERC20Metadata underlyingToken;
   IReferenceLendingPools referenceLendingPools;
+  /// @notice A enum indicating current phase of the pool.
+  PoolPhase currentPhase;
 }
 
 struct ProtectionInfo {
@@ -70,6 +76,8 @@ struct LendingPoolDetail {
   uint256 totalPremium;
   /// @notice Set to track all protections bought for specific lending pool, which are active/not expired
   EnumerableSet.UintSet activeProtectionIndexes;
+  /// @notice Track the total amount of protection bought for each lending pool
+  uint256 totalProtection;
 }
 
 /// @notice A struct to store the details of a withdrawal cycle.
@@ -115,6 +123,8 @@ abstract contract IPool {
   );
   error InsufficientSTokenBalance(address msgSender, uint256 sTokenBalance);
   error OnlyDefaultStateManager(address msgSender);
+  error PoolInOpenToSellersPhase(uint256 poolId);
+  error PoolInOpenToBuyersPhase(uint256 poolId);
 
   /*** events ***/
 
@@ -162,6 +172,9 @@ abstract contract IPool {
     uint256 tokenAmount,
     address receiver
   );
+
+  /// @notice Emitted when a pool phase is updated.
+  event PoolPhaseUpdated(uint256 poolId, PoolPhase newState);
 
   /**
    * @notice A buyer can buy protection for a loan in lending pool when lending pool is supported & active (not defaulted or expired).

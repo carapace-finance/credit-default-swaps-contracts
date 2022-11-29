@@ -160,9 +160,18 @@ const deployContracts: Function = async () => {
       goldfinchV2AdapterInstance.address
     );
 
+    // Deploy PoolHelper library contract
+    const poolHelperFactory = await contractFactory("PoolHelper", {
+      AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address
+    });
+    const poolHelperInstance = await poolHelperFactory.deploy();
+    await poolHelperInstance.deployed();
+    console.log("PoolHelper lib deployed to:", poolHelperInstance.address);
+
     // Deploy PoolFactory
     const _poolFactoryFactory = await contractFactory("PoolFactory", {
-      AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address
+      AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address,
+      PoolHelper: poolHelperInstance.address
     });
     poolFactoryInstance = await _poolFactoryFactory.deploy();
     await poolFactoryInstance.deployed();
@@ -184,11 +193,10 @@ const deployContracts: Function = async () => {
     };
 
     const _poolParams: PoolParamsStruct = {
-      leverageRatioFloor: parseEther("0.1"),
-      leverageRatioCeiling: parseEther("0.2"),
+      leverageRatioFloor: parseEther("0.5"),
+      leverageRatioCeiling: parseEther("1"),
       leverageRatioBuffer: parseEther("0.05"),
-      minRequiredCapital: parseUSDC("5000"),
-      minRequiredProtection: parseUSDC("200000"),
+      minRequiredCapital: parseUSDC("100000"), // 100k
       curvature: parseEther("0.05"),
       minCarapaceRiskPremiumPercent: parseEther("0.02"),
       underlyingRiskPremiumPercent: parseEther("0.1"),

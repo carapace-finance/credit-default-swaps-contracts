@@ -25,4 +25,22 @@ const impersonateCircle: Function = async (): Promise<Signer> => {
   return await ethers.getImpersonatedSigner(CIRCLE_ACCOUNT_ADDRESS);
 };
 
-export { formatUSDC, parseUSDC, getUsdcContract, impersonateCircle };
+const transferAndApproveUsdc = async (
+  _approver: Signer,
+  _amount: BigNumber,
+  _receiver: string
+) => {
+  const _circleAccount = await impersonateCircle();
+  const _usdcContract = getUsdcContract(_circleAccount);
+
+  await _usdcContract.transfer(await _approver.getAddress(), _amount);
+  await _usdcContract.connect(_approver).approve(_receiver, _amount);
+};
+
+export {
+  formatUSDC,
+  parseUSDC,
+  getUsdcContract,
+  impersonateCircle,
+  transferAndApproveUsdc
+};

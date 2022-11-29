@@ -56,7 +56,6 @@ const testPoolFactory: Function = (
         leverageRatioCeiling: _ceiling,
         leverageRatioBuffer: BigNumber.from(5),
         minRequiredCapital: parseUSDC("10000"),
-        minRequiredProtection: parseUSDC("20000"),
         curvature: BigNumber.from(5),
         minCarapaceRiskPremiumPercent: parseEther("0.02"),
         underlyingRiskPremiumPercent: parseEther("0.1"),

@@ -86,30 +86,24 @@ library RiskFactorCalculator {
   /**
    * @notice Determine whether the risk factor can be calculated or not.
    * Risk factor can not be calculated in following scenarios.
-   * 1) total capital is less than minimum capital
-   * 2) total protection less than min protection
-   * 3) leverage ratio is not between floor and ceiling
+   * 1) total capital is less than minimum required capital
+   * 2) leverage ratio is not between floor and ceiling
    * @param _totalCapital the total capital of the pool scaled to 18 decimals
-   * @param _totalProtection the total protection of the pool scaled to underlying decimals
    * @param _leverageRatio the current leverage ratio of the pool scaled to underlying decimals
    * @param _leverageRatioFloor the minimum leverage ratio allowed in the pool scaled to 18 decimals
    * @param _leverageRatioCeiling the maximum leverage ratio allowed in the pool scaled to 18 decimals
    * @param _minRequiredCapital the minimum required capital in the pool scaled to underlying decimals
-   * @param _minRequiredProtection the minimum required protection in the pool scaled to underlying decimals
    * @return canCalculate true if risk factor can be calculated, false otherwise
    */
   function canCalculateRiskFactor(
     uint256 _totalCapital,
-    uint256 _totalProtection,
     uint256 _leverageRatio,
     uint256 _leverageRatioFloor,
     uint256 _leverageRatioCeiling,
-    uint256 _minRequiredCapital,
-    uint256 _minRequiredProtection
+    uint256 _minRequiredCapital
   ) external pure returns (bool canCalculate) {
     if (
       _totalCapital < _minRequiredCapital ||
-      _totalProtection < _minRequiredProtection ||
       _leverageRatio < _leverageRatioFloor ||
       _leverageRatio > _leverageRatioCeiling
     ) {

@@ -5,7 +5,11 @@ import { ZERO_ADDRESS } from "../utils/constants";
 import { Pool } from "../../typechain-types/contracts/core/pool/Pool";
 import { PoolFactory } from "../../typechain-types/contracts/core/PoolFactory";
 import { ethers } from "hardhat";
-import { parseUSDC, getUsdcContract } from "../utils/usdc";
+import {
+  parseUSDC,
+  getUsdcContract,
+  transferAndApproveUsdc
+} from "../utils/usdc";
 import {
   getUnixTimestampAheadByDays,
   moveForwardTimeByDays
@@ -129,9 +133,11 @@ const testDefaultStateManager: Function = (
         _depositAmount: BigNumber
       ) => {
         const _accountAddress = await _account.getAddress();
-        await usdcContract
-          .connect(_account)
-          .approve(poolInstance.address, _depositAmount);
+        await transferAndApproveUsdc(
+          _account,
+          _depositAmount,
+          poolInstance.address
+        );
         await poolInstance
           .connect(_account)
           .deposit(_depositAmount, _accountAddress);
@@ -139,12 +145,17 @@ const testDefaultStateManager: Function = (
 
       before(async () => {
         // deposit capital into pool
-        await depositToPool(seller, parseUSDC("5000"));
-        await depositToPool(account1, parseUSDC("5000"));
+        await depositToPool(seller, parseUSDC("50000"));
+        await depositToPool(account1, parseUSDC("50000"));
 
         expect(await poolInstance.totalSTokenUnderlying()).to.equal(
-          parseUSDC("10000")
+          parseUSDC("100000")
         );
+
+        // we need to movePoolPhase
+        await poolInstance.connect(deployer).movePoolPhase();
+        // Pool should be in OpenToBuyers phase
+        expect((await poolInstance.getPoolInfo()).currentPhase).to.eq(1);
 
         // Buy protection
         const _protection_buyer = await getGoldfinchLender1();
@@ -178,10 +189,8 @@ const testDefaultStateManager: Function = (
         expect(lockedCapitalsLendingPool2.length).to.eq(1);
         expect(lockedCapitalsLendingPool2[0].snapshotId).to.eq(2);
 
-        // pool doesn't have enough capital, so total sTokenUnderlying is locked
-        expect(lockedCapitalsLendingPool2[0].amount).to.be.gt(
-          parseUSDC("1000")
-        );
+        // locked capital amount should be same as total protection bought from lending pool 2
+        expect(lockedCapitalsLendingPool2[0].amount).to.eq(parseUSDC("20000"));
         expect(lockedCapitalsLendingPool2[0].locked).to.eq(true);
       });
     });
@@ -206,31 +215,35 @@ const testDefaultStateManager: Function = (
           ).to.eq(0);
         });
 
-        it("...should return 5000 claimable amount for seller from pool 1", async () => {
+        it("...should return 10K claimable amount for seller from pool 1", async () => {
+          // seller should be able claim 50% of the locked capital = 10K (50% of 20K)
           expect(
             await defaultStateManager.calculateClaimableUnlockedAmount(
               pool1,
               sellerAddress
             )
-          ).to.be.eq(parseUSDC("5000"));
+          ).to.be.eq(parseUSDC("10000"));
         });
 
-        it("...should return 5000 claimable amount for account 1 from pool 1", async () => {
+        it("...should return 10K claimable amount for account 1 from pool 1", async () => {
+          // Account 1 should be able claim 50% of the locked capital = 10K (50% of 20K)
           expect(
             await defaultStateManager.calculateClaimableUnlockedAmount(
               pool1,
               await account1.getAddress()
             )
-          ).to.be.eq(parseUSDC("5000"));
+          ).to.be.eq(parseUSDC("10000"));
         });
       });
 
       describe("calculateAndClaimUnlockedCapital", async () => {
         it("...should revert when called from non-pool address", async () => {
           await expect(
-            defaultStateManager.calculateAndClaimUnlockedCapital(sellerAddress)
+            defaultStateManager
+              .connect(deployer)
+              .calculateAndClaimUnlockedCapital(sellerAddress)
           ).to.be.revertedWith(
-            `PoolNotRegistered("0x71b09d2eD6Bd3eC16e7a44c2afb1F111878Ea97E")`
+            `PoolNotRegistered("${await deployer.getAddress()}")`
           );
         });
       });
