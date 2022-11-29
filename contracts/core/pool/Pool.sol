@@ -125,9 +125,9 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   function buyProtection(
     ProtectionPurchaseParams calldata _protectionPurchaseParams
   ) external override whenNotPaused nonReentrant {
-    /// Step 1: Verify that the pool is not in DepositOnly phase
-    if (poolInfo.currentPhase == PoolPhase.DepositOnly) {
-      revert IPool.PoolInDepositOnlyPhase(poolInfo.poolId);
+    /// Step 1: Verify that the pool is not in OpenToSellers phase
+    if (poolInfo.currentPhase == PoolPhase.OpenToSellers) {
+      revert IPool.PoolInOpenToSellersPhase(poolInfo.poolId);
     }
 
     /// Step 2: Verify that user can buy protection
@@ -237,9 +237,9 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     whenNotPaused
     nonReentrant
   {
-    /// Verify that the pool is not in BuyProtectionOnly phase
-    if (poolInfo.currentPhase == PoolPhase.BuyProtectionOnly) {
-      revert PoolInBuyProtectionOnlyPhase(poolInfo.poolId);
+    /// Verify that the pool is not in OpenToBuyers phase
+    if (poolInfo.currentPhase == PoolPhase.OpenToBuyers) {
+      revert PoolInOpenToBuyersPhase(poolInfo.poolId);
     }
 
     uint256 _sTokenShares = convertToSToken(_underlyingAmount);
@@ -553,12 +553,12 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   function movePoolPhase() external onlyOwner returns (PoolPhase _newPhase) {
     PoolPhase _currentPhase = poolInfo.currentPhase;
 
-    /// when the pool is in DepositOnly phase, it can be moved to BuyProtectionOnly phase
-    if (_currentPhase == PoolPhase.DepositOnly && _hasMinRequiredCapital()) {
-      poolInfo.currentPhase = _newPhase = PoolPhase.BuyProtectionOnly;
+    /// when the pool is in OpenToSellers phase, it can be moved to OpenToBuyers phase
+    if (_currentPhase == PoolPhase.OpenToSellers && _hasMinRequiredCapital()) {
+      poolInfo.currentPhase = _newPhase = PoolPhase.OpenToBuyers;
       emit PoolPhaseUpdated(poolInfo.poolId, _newPhase);
-    } else if (_currentPhase == PoolPhase.BuyProtectionOnly) {
-      /// when the pool is in BuyProtectionOnly phase, it can be moved to Open phase
+    } else if (_currentPhase == PoolPhase.OpenToBuyers) {
+      /// when the pool is in OpenToBuyers phase, it can be moved to Open phase
       /// if the leverage ratio is below the ceiling
       if (calculateLeverageRatio() <= poolInfo.params.leverageRatioCeiling) {
         poolInfo.currentPhase = _newPhase = PoolPhase.Open;

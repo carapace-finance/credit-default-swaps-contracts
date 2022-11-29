@@ -84,13 +84,13 @@ library PoolHelper {
     }
 
     /// Verify that buyer can buy the protection
-    /// _doesBuyerHaveActiveProtection verifies whether a buyer has active protection for the same position in the same lending pool.
+    /// doesBuyerHaveActiveProtection verifies whether a buyer has active protection for the same position in the same lending pool.
     /// If s/he has, then we allow to buy protection even when protection purchase limit is passed.
     if (
       !poolInfo.referenceLendingPools.canBuyProtection(
         msg.sender,
         _protectionPurchaseParams,
-        _doesBuyerHaveActiveProtection(
+        doesBuyerHaveActiveProtection(
           protectionBuyerAccounts,
           protectionInfos,
           _protectionPurchaseParams,
@@ -282,7 +282,7 @@ library PoolHelper {
    * @dev Verifies whether a buyer has active protection for same lending position
    * in the same lending pool specified in the protection purchase params.
    */
-  function _doesBuyerHaveActiveProtection(
+  function doesBuyerHaveActiveProtection(
     mapping(address => ProtectionBuyerAccount) storage protectionBuyerAccounts,
     ProtectionInfo[] storage protectionInfos,
     ProtectionPurchaseParams calldata _protectionPurchaseParams,

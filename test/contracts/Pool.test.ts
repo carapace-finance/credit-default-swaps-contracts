@@ -273,7 +273,7 @@ const testPool: Function = (
         );
       });
 
-      it("...set the pool state to be DepositOnly", async () => {
+      it("...set the pool state to be OpenToSellers", async () => {
         expect((await pool.getPoolInfo()).currentPhase).to.eq(0); // 0 = Deposit Only
       });
     });
@@ -375,7 +375,7 @@ const testPool: Function = (
           expect(await calculateTotalSellerDeposit()).to.eq(_underlyingAmount);
         });
 
-        it("...movePoolPhase should not move to BuyProtectionOnly state when pool does NOT have min capital required", async () => {
+        it("...movePoolPhase should not move to OpenToBuyers state when pool does NOT have min capital required", async () => {
           await expect(pool.connect(deployer).movePoolPhase()).to.not.emit(
             pool,
             "PoolPhaseUpdated"
@@ -405,7 +405,7 @@ const testPool: Function = (
         });
       });
 
-      describe("...buyProtection when pool is in DepositOnly phase", () => {
+      describe("...buyProtection when pool is in OpenToSellers phase", () => {
         it("...should fail", async () => {
           await expect(
             pool.connect(_protectionBuyer1).buyProtection({
@@ -416,7 +416,7 @@ const testPool: Function = (
                 30
               )
             })
-          ).to.be.revertedWith(`PoolInDepositOnlyPhase(${poolInfo.poolId})`);
+          ).to.be.revertedWith(`PoolInOpenToSellersPhase(${poolInfo.poolId})`);
         });
       });
 
@@ -430,7 +430,7 @@ const testPool: Function = (
         it("...should succeed if caller is owner and pool has min capital required", async () => {
           await expect(pool.connect(deployer).movePoolPhase())
             .to.emit(pool, "PoolPhaseUpdated")
-            .withArgs(poolInfo.poolId, 1); // 1 = BuyProtectionOnly
+            .withArgs(poolInfo.poolId, 1); // 1 = OpenToBuyers
 
           expect((await pool.getPoolInfo()).currentPhase).to.eq(1);
         });
@@ -442,12 +442,12 @@ const testPool: Function = (
         });
       });
 
-      describe("Deposit after pool is in BuyProtectionOnly phase", () => {
+      describe("Deposit after pool is in OpenToBuyers phase", () => {
         it("...should fail", async () => {
           await expect(
             pool.deposit(parseUSDC("1001"), deployerAddress)
           ).to.be.revertedWith(
-            `PoolInBuyProtectionOnlyPhase(${poolInfo.poolId})`
+            `PoolInOpenToBuyersPhase(${poolInfo.poolId})`
           );
         });
       });
@@ -679,7 +679,7 @@ const testPool: Function = (
         });
 
         it("...should not move to Open phase when leverage ratio is NOT below ceiling", async () => {
-          expect((await pool.getPoolInfo()).currentPhase).to.eq(1); // 1 = BuyProtectionOnly
+          expect((await pool.getPoolInfo()).currentPhase).to.eq(1); // 1 = OpenToBuyers
           expect(await pool.calculateLeverageRatio()).to.be.gt(
             poolInfo.params.leverageRatioCeiling
           );
@@ -689,7 +689,7 @@ const testPool: Function = (
             "PoolPhaseUpdated"
           );
 
-          expect((await pool.getPoolInfo()).currentPhase).to.eq(1); // 1 = BuyProtectionOnly
+          expect((await pool.getPoolInfo()).currentPhase).to.eq(1); // 1 = OpenToBuyers
         });
 
         it("...add 2nd & 3rd protections", async () => {

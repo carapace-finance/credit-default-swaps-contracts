@@ -6,8 +6,8 @@ import {IReferenceLendingPools, ProtectionPurchaseParams} from "./IReferenceLend
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 enum PoolPhase {
-  DepositOnly,
-  BuyProtectionOnly,
+  OpenToSellers,
+  OpenToBuyers,
   Open
 }
 
@@ -123,8 +123,8 @@ abstract contract IPool {
   );
   error InsufficientSTokenBalance(address msgSender, uint256 sTokenBalance);
   error OnlyDefaultStateManager(address msgSender);
-  error PoolInDepositOnlyPhase(uint256 poolId);
-  error PoolInBuyProtectionOnlyPhase(uint256 poolId);
+  error PoolInOpenToSellersPhase(uint256 poolId);
+  error PoolInOpenToBuyersPhase(uint256 poolId);
 
   /*** events ***/
 

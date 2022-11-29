@@ -154,7 +154,7 @@ const testDefaultStateManager: Function = (
 
         // we need to movePoolPhase
         await poolInstance.connect(deployer).movePoolPhase();
-        // Pool should be in BuyProtectionOnly phase
+        // Pool should be in OpenToBuyers phase
         expect((await poolInstance.getPoolInfo()).currentPhase).to.eq(1);
 
         // Buy protection
