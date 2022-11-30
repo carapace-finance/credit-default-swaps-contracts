@@ -117,6 +117,9 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       poolInfo.underlyingToken,
       poolInfo.referenceLendingPools
     );
+
+    /// dummy protection info to make index 0 invalid
+    protectionInfos.push();
   }
 
   /*** state-changing functions ***/
@@ -125,108 +128,29 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   function buyProtection(
     ProtectionPurchaseParams calldata _protectionPurchaseParams
   ) external override whenNotPaused nonReentrant {
-    /// Step 1: Verify that the pool is not in OpenToSellers phase
-    if (poolInfo.currentPhase == PoolPhase.OpenToSellers) {
-      revert IPool.PoolInOpenToSellersPhase(poolInfo.poolId);
-    }
+    _verifyAndCreateProtection(
+      block.timestamp,
+      _protectionPurchaseParams,
+      false
+    );
+  }
 
-    /// Step 2: Verify that user can buy protection
-    PoolHelper.verifyUserCanBuyProtection(
-      poolCycleManager,
-      poolInfo,
+  /// @inheritdoc IPool
+  function extendProtection(
+    ProtectionPurchaseParams calldata _protectionPurchaseParams
+  ) external override whenNotPaused nonReentrant {
+    /// Verify that user can extend protection
+    PoolHelper.verifyBuyerCanExtendProtection(
       protectionBuyerAccounts,
       protectionInfos,
-      _protectionPurchaseParams
+      _protectionPurchaseParams,
+      poolInfo.params.protectionExtensionGracePeriodInSeconds
     );
 
-    /// Step 3: Calculate & check the leverage ratio
-    /// Ensure that leverage ratio floor is never breached
-    totalProtection += _protectionPurchaseParams.protectionAmount;
-    uint256 _leverageRatio = calculateLeverageRatio();
-    if (_leverageRatio < poolInfo.params.leverageRatioFloor) {
-      revert PoolLeverageRatioTooLow(poolInfo.poolId, _leverageRatio);
-    }
-
-    LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
-      _protectionPurchaseParams.lendingPoolAddress
-    ];
-    lendingPoolDetail.totalProtection += _protectionPurchaseParams
-      .protectionAmount;
-
-    //// Step 4: Calculate the protection premium amount scaled to 18 decimals and scale it to the underlying token decimals.
-    (
-      uint256 _premiumAmountIn18Decimals,
-      uint256 _premiumAmount,
-      bool _isMinPremium
-    ) = PoolHelper.calculateAndTrackPremium(
-        premiumCalculator,
-        protectionBuyerAccounts,
-        poolInfo,
-        lendingPoolDetail,
-        _protectionPurchaseParams,
-        totalSTokenUnderlying,
-        _leverageRatio
-      );
-    totalPremium += _premiumAmount;
-
-    /// Step 5: transfer premium amount from buyer to pool & track the premium amount
-    poolInfo.underlyingToken.safeTransferFrom(
-      msg.sender,
-      address(this),
-      _premiumAmount
-    );
-
-    /// Step 6: Calculate protection in days and scale it to 18 decimals.
-    uint256 _protectionDurationInDaysScaled = ((_protectionPurchaseParams
-      .protectionExpirationTimestamp - block.timestamp) *
-      Constants.SCALE_18_DECIMALS) / uint256(Constants.SECONDS_IN_DAY);
-
-    console.log(
-      "protectionDurationInDays: %s, protectionPremium: %s, leverageRatio: ",
-      _protectionDurationInDaysScaled,
-      _premiumAmount,
-      _leverageRatio
-    );
-
-    /// Step 7: Capture loan protection data for premium accrual calculation
-    // solhint-disable-next-line
-    (int256 _k, int256 _lambda) = AccruedPremiumCalculator.calculateKAndLambda(
-      _premiumAmountIn18Decimals,
-      _protectionDurationInDaysScaled,
-      _leverageRatio,
-      poolInfo.params.leverageRatioFloor,
-      poolInfo.params.leverageRatioCeiling,
-      poolInfo.params.leverageRatioBuffer,
-      poolInfo.params.curvature,
-      _isMinPremium ? poolInfo.params.minCarapaceRiskPremiumPercent : 0
-    );
-
-    /// Step 8: Add protection to the pool & emit an event
-    protectionInfos.push(
-      ProtectionInfo({
-        buyer: msg.sender,
-        protectionPremium: _premiumAmount,
-        startTimestamp: block.timestamp,
-        K: _k,
-        lambda: _lambda,
-        purchaseParams: _protectionPurchaseParams,
-        expired: false
-      })
-    );
-
-    /// Step 9: Track all loan protections for a lending pool to calculate
-    // the total locked amount for the lending pool, when/if pool is late for payment
-    uint256 _protectionIndex = protectionInfos.length - 1;
-    lendingPoolDetail.activeProtectionIndexes.add(_protectionIndex);
-    protectionBuyerAccounts[msg.sender].activeProtectionIndexes.add(
-      _protectionIndex
-    );
-
-    emit ProtectionBought(
-      msg.sender,
-      _protectionPurchaseParams.lendingPoolAddress,
-      _protectionPurchaseParams.protectionAmount,
-      _premiumAmount
+    _verifyAndCreateProtection(
+      block.timestamp,
+      _protectionPurchaseParams,
+      true
     );
   }
 
@@ -356,10 +280,13 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   }
 
   /// @inheritdoc IPool
-  function accruePremiumAndExpireProtections() external override {
-    address[] memory _lendingPools = poolInfo
-      .referenceLendingPools
-      .getLendingPools();
+  function accruePremiumAndExpireProtections(address[] memory _lendingPools)
+    external
+    override
+  {
+    if (_lendingPools.length == 0) {
+      _lendingPools = poolInfo.referenceLendingPools.getLendingPools();
+    }
 
     /// Iterate all lending pools of this protection pool to check if there is new payment after last premium accrual
     uint256 length = _lendingPools.length;
@@ -374,71 +301,69 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         .referenceLendingPools
         .getLatestPaymentTimestamp(_lendingPool);
 
-      /// If there is payment made after the last premium accrual, then accrue premium
       uint256 _lastPremiumAccrualTimestamp = lendingPoolDetail
         .lastPremiumAccrualTimestamp;
+
       console.log(
         "lendingPool: %s, lastPremiumAccrualTimestamp: %s, latestPaymentTimestamp: %s",
         _lendingPool,
         _lastPremiumAccrualTimestamp,
         _latestPaymentTimestamp
       );
-      if (_latestPaymentTimestamp > _lastPremiumAccrualTimestamp) {
-        uint256[] memory _protectionIndexes = lendingPoolDetail
-          .activeProtectionIndexes
-          .values();
 
-        /// Iterate all protections for this lending pool and accrue premium for each
-        uint256 _accruedPremiumForLendingPool;
-        uint256 _length = _protectionIndexes.length;
-        for (uint256 j; j < _length; ) {
-          uint256 _protectionIndex = _protectionIndexes[j];
-          ProtectionInfo storage protectionInfo = protectionInfos[
+      uint256[] memory _protectionIndexes = lendingPoolDetail
+        .activeProtectionIndexes
+        .values();
+
+      /// Iterate all protections for this lending pool
+      uint256 _accruedPremiumForLendingPool;
+      uint256 _length = _protectionIndexes.length;
+      for (uint256 j; j < _length; ) {
+        uint256 _protectionIndex = _protectionIndexes[j];
+        ProtectionInfo storage protectionInfo = protectionInfos[
+          _protectionIndex
+        ];
+
+        /// Verify & accrue premium for the protection and
+        /// if the protection is expired, then mark it as expired
+        (uint256 _accruedPremiumInUnderlying, bool _expired) = PoolHelper
+          .verifyAndAccruePremium(
+            poolInfo,
+            protectionInfo,
+            _lastPremiumAccrualTimestamp,
+            _latestPaymentTimestamp
+          );
+        totalPremiumAccrued += _accruedPremiumInUnderlying;
+        totalSTokenUnderlying += _accruedPremiumInUnderlying;
+        _accruedPremiumForLendingPool += _accruedPremiumInUnderlying;
+
+        if (_expired) {
+          /// Reduce the total protection amount of this protection pool
+          totalProtection -= protectionInfo.purchaseParams.protectionAmount;
+
+          PoolHelper.expireProtection(
+            protectionBuyerAccounts,
+            protectionInfo,
+            lendingPoolDetail,
             _protectionIndex
-          ];
-
-          /// Accrue premium for the loan protection and
-          /// if the protection is expired, then mark it as expired
-          (uint256 _accruedPremiumInUnderlying, bool _expired) = PoolHelper
-            .accruePremium(
-              poolInfo,
-              protectionInfo,
-              _lastPremiumAccrualTimestamp,
-              _latestPaymentTimestamp
-            );
-          totalPremiumAccrued += _accruedPremiumInUnderlying;
-          totalSTokenUnderlying += _accruedPremiumInUnderlying;
-          _accruedPremiumForLendingPool += _accruedPremiumInUnderlying;
-
-          if (_expired) {
-            /// Reduce the total protection amount of this protection pool
-            totalProtection -= protectionInfo.purchaseParams.protectionAmount;
-
-            PoolHelper.expireProtection(
-              protectionBuyerAccounts,
-              protectionInfo,
-              lendingPoolDetail,
-              _protectionIndex
-            );
-            emit ProtectionExpired(
-              protectionInfo.buyer,
-              protectionInfo.purchaseParams.lendingPoolAddress,
-              protectionInfo.purchaseParams.protectionAmount
-            );
-          }
-
-          unchecked {
-            ++j;
-          }
+          );
+          emit ProtectionExpired(
+            protectionInfo.buyer,
+            protectionInfo.purchaseParams.lendingPoolAddress,
+            protectionInfo.purchaseParams.protectionAmount
+          );
         }
 
-        if (_accruedPremiumForLendingPool > 0) {
-          /// Persist the latest payment timestamp for the lending pool
-          lendingPoolDetail
-            .lastPremiumAccrualTimestamp = _latestPaymentTimestamp;
-
-          emit PremiumAccrued(_lendingPool, _latestPaymentTimestamp);
+        unchecked {
+          ++j;
         }
+      }
+
+      if (_accruedPremiumForLendingPool > 0) {
+        /// Persist the latest payment timestamp for the lending pool
+        lendingPoolDetail.lastPremiumAccrualTimestamp = _latestPaymentTimestamp;
+
+        emit PremiumAccrued(_lendingPool, _latestPaymentTimestamp);
       }
 
       unchecked {
@@ -579,8 +504,24 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /**
    * @notice Returns all the protections bought from the pool, active & expired.
    */
-  function getAllProtections() external view returns (ProtectionInfo[] memory) {
-    return protectionInfos;
+  function getAllProtections()
+    external
+    view
+    returns (ProtectionInfo[] memory _protections)
+  {
+    uint256 _length = protectionInfos.length;
+    _protections = new ProtectionInfo[](_length - 1);
+    uint256 _index;
+
+    /// skip the first element in the array, as it is dummy/empty
+    for (uint256 i = 1; i < _length; ) {
+      _protections[_index] = protectionInfos[i];
+
+      unchecked {
+        ++i;
+        ++_index;
+      }
+    }
   }
 
   /// @inheritdoc IPool
@@ -718,6 +659,111 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   }
 
   /*** internal functions */
+
+  function _verifyAndCreateProtection(
+    uint256 _protectionStartTimestamp,
+    ProtectionPurchaseParams calldata _protectionPurchaseParams,
+    bool _isExtension
+  ) internal {
+    /// Verify that user can buy protection
+    PoolHelper.verifyProtection(
+      poolCycleManager,
+      poolInfo,
+      _protectionStartTimestamp,
+      _protectionPurchaseParams,
+      _isExtension
+    );
+
+    /// Step 1: Calculate & check the leverage ratio
+    /// Ensure that leverage ratio floor is never breached
+    totalProtection += _protectionPurchaseParams.protectionAmount;
+    uint256 _leverageRatio = calculateLeverageRatio();
+    if (_leverageRatio < poolInfo.params.leverageRatioFloor) {
+      revert PoolLeverageRatioTooLow(poolInfo.poolId, _leverageRatio);
+    }
+
+    LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
+      _protectionPurchaseParams.lendingPoolAddress
+    ];
+    lendingPoolDetail.totalProtection += _protectionPurchaseParams
+      .protectionAmount;
+
+    //// Step 2: Calculate the protection premium amount scaled to 18 decimals and scale it to the underlying token decimals.
+    (
+      uint256 _premiumAmountIn18Decimals,
+      uint256 _premiumAmount,
+      bool _isMinPremium
+    ) = PoolHelper.calculateAndTrackPremium(
+        premiumCalculator,
+        protectionBuyerAccounts,
+        poolInfo,
+        lendingPoolDetail,
+        _protectionPurchaseParams,
+        totalSTokenUnderlying,
+        _leverageRatio
+      );
+    totalPremium += _premiumAmount;
+
+    /// Step 3: transfer premium amount from buyer to pool & track the premium amount
+    poolInfo.underlyingToken.safeTransferFrom(
+      msg.sender,
+      address(this),
+      _premiumAmount
+    );
+
+    /// Step 4: Calculate protection in days and scale it to 18 decimals.
+    uint256 _protectionDurationInDaysScaled = ((
+      _protectionPurchaseParams.protectionDurationInSeconds
+    ) * Constants.SCALE_18_DECIMALS) / uint256(Constants.SECONDS_IN_DAY);
+
+    console.log(
+      "protectionDurationInDays: %s, protectionPremium: %s, leverageRatio: ",
+      _protectionDurationInDaysScaled,
+      _premiumAmount,
+      _leverageRatio
+    );
+
+    /// Step 5: Capture loan protection data for premium accrual calculation
+    // solhint-disable-next-line
+    (int256 _k, int256 _lambda) = AccruedPremiumCalculator.calculateKAndLambda(
+      _premiumAmountIn18Decimals,
+      _protectionDurationInDaysScaled,
+      _leverageRatio,
+      poolInfo.params.leverageRatioFloor,
+      poolInfo.params.leverageRatioCeiling,
+      poolInfo.params.leverageRatioBuffer,
+      poolInfo.params.curvature,
+      _isMinPremium ? poolInfo.params.minCarapaceRiskPremiumPercent : 0
+    );
+
+    /// Step 6: Add protection to the pool & emit an event
+    protectionInfos.push(
+      ProtectionInfo({
+        buyer: msg.sender,
+        protectionPremium: _premiumAmount,
+        startTimestamp: _protectionStartTimestamp,
+        K: _k,
+        lambda: _lambda,
+        purchaseParams: _protectionPurchaseParams,
+        expired: false
+      })
+    );
+
+    /// Step 7: Track all loan protections for a lending pool to calculate
+    // the total locked amount for the lending pool, when/if pool is late for payment
+    uint256 _protectionIndex = protectionInfos.length - 1;
+    lendingPoolDetail.activeProtectionIndexes.add(_protectionIndex);
+    protectionBuyerAccounts[msg.sender].activeProtectionIndexes.add(
+      _protectionIndex
+    );
+
+    emit ProtectionBought(
+      msg.sender,
+      _protectionPurchaseParams.lendingPoolAddress,
+      _protectionPurchaseParams.protectionAmount,
+      _premiumAmount
+    );
+  }
 
   /**
    * @dev the exchange rate = total capital / total SToken supply

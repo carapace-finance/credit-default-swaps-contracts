@@ -11,6 +11,7 @@ import {
   transferAndApproveUsdc
 } from "../utils/usdc";
 import {
+  getDaysInSeconds,
   getUnixTimestampAheadByDays,
   moveForwardTimeByDays
 } from "../utils/time";
@@ -166,7 +167,7 @@ const testDefaultStateManager: Function = (
           lendingPoolAddress: lendingPools[1],
           nftLpTokenId: 590,
           protectionAmount: parseUSDC("20000"),
-          protectionExpirationTimestamp: await getUnixTimestampAheadByDays(20)
+          protectionDurationInSeconds: getDaysInSeconds(20)
         });
       });
 

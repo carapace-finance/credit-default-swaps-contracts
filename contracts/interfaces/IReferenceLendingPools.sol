@@ -35,8 +35,8 @@ struct ProtectionPurchaseParams {
   uint256 nftLpTokenId;
   /// @notice the protection amount in underlying tokens
   uint256 protectionAmount;
-  /// @notice the protection's expiration timestamp in unix epoch seconds
-  uint256 protectionExpirationTimestamp;
+  /// @notice the protection duration in seconds
+  uint256 protectionDurationInSeconds;
 }
 
 /**
@@ -51,7 +51,7 @@ abstract contract IReferenceLendingPools {
     address indexed lendingPoolAddress,
     LendingProtocol indexed lendingPoolProtocol,
     uint256 addedTimestamp,
-    uint256 protectionExpirationTimestamp
+    uint256 protectionPurchaseLimitTimestamp
   );
 
   /** errors */
@@ -102,13 +102,13 @@ abstract contract IReferenceLendingPools {
    * protection amount is less than or equal to the lent amount.
    * @param _buyer the address of the buyer
    * @param _purchaseParams the protection purchase parameters
-   * @param _buyerHasActiveProtection whether the buyer has active protection for the same lending position in the specified lending pool or not
+   * @param _isExtension flag to indicate whether the buyer is extending existing  protection or not
    * @return true if the buyer can buy protection, false otherwise
    */
   function canBuyProtection(
     address _buyer,
     ProtectionPurchaseParams calldata _purchaseParams,
-    bool _buyerHasActiveProtection
+    bool _isExtension
   ) external view virtual returns (bool);
 
   /**

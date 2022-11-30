@@ -147,7 +147,7 @@ contract ReferenceLendingPools is
   function canBuyProtection(
     address _buyer,
     ProtectionPurchaseParams calldata _purchaseParams,
-    bool _buyerHasActiveProtection
+    bool _isExtension
   )
     external
     view
@@ -159,13 +159,13 @@ contract ReferenceLendingPools is
       _purchaseParams.lendingPoolAddress
     ];
 
-    /// When buyer does not have active protection and
+    /// When buyer is not extending existing protection and
     /// the protection purchase is NOT within purchase limit duration after
     /// a lending pool added, the buyer cannot purchase protection.
     /// i.e. if the purchase limit is 90 days, the buyer cannot purchase protection
     /// after 90 days of lending pool added to the basket
     if (
-      !_buyerHasActiveProtection &&
+      !_isExtension &&
       block.timestamp > lendingPoolInfo.protectionPurchaseLimitTimestamp
     ) {
       return false;

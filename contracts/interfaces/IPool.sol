@@ -39,6 +39,8 @@ struct PoolParams {
   uint256 minProtectionDurationInSeconds;
   /// @notice pool cycle related parameters
   PoolCycleParams poolCycleParams;
+  /// @notice the maximum duration in seconds during which a protection can be extended after it expires
+  uint256 protectionExtensionGracePeriodInSeconds;
 }
 
 /// @notice Contains pool information
@@ -65,6 +67,7 @@ struct ProtectionInfo {
   /// @notice Lambda is calculated & captured at the time of loan protection purchase
   /// @notice It is used in accrued premium calculation
   int256 lambda;
+  /// @notice The protection purchase parameters such as protection amount, expiry, lending pool etc.
   ProtectionPurchaseParams purchaseParams;
   /// @notice A flag indicating if the protection is expired or not
   bool expired;
@@ -95,6 +98,9 @@ struct ProtectionBuyerAccount {
   mapping(address => uint256) lendingPoolToPremium;
   /// @notice Set to track all protections bought by a buyer, which are active/not-expired.
   EnumerableSet.UintSet activeProtectionIndexes;
+  /// @notice Mapping to track last expired protection index of given lending pool by nft token id.
+  /// @dev a lending pool address to NFT id to the last expired protection index
+  mapping(address => mapping(uint256 => uint256)) expiredProtectionIndexByLendingPool;
 }
 
 abstract contract IPool {
@@ -108,7 +114,6 @@ abstract contract IPool {
   error ProtectionPurchaseNotAllowed(ProtectionPurchaseParams params);
   error ProtectionDurationTooShort(uint256 protectionDurationInSeconds);
   error ProtectionDurationTooLong(uint256 protectionDurationInSeconds);
-  error BuyerAccountExists(address msgSender);
   error PoolIsNotOpen(uint256 poolId);
   error PoolLeverageRatioTooHigh(uint256 poolId, uint256 leverageRatio);
   error PoolLeverageRatioTooLow(uint256 poolId, uint256 leverageRatio);
@@ -125,6 +130,8 @@ abstract contract IPool {
   error OnlyDefaultStateManager(address msgSender);
   error PoolInOpenToSellersPhase(uint256 poolId);
   error PoolInOpenToBuyersPhase(uint256 poolId);
+  error NoExpiredProtectionToExtend();
+  error CanNotExtendProtectionAfterGracePeriod();
 
   /*** events ***/
 
@@ -177,12 +184,23 @@ abstract contract IPool {
   event PoolPhaseUpdated(uint256 poolId, PoolPhase newState);
 
   /**
-   * @notice A buyer can buy protection for a loan in lending pool when lending pool is supported & active (not defaulted or expired).
+   * @notice A buyer can buy protection for a position in lending pool when lending pool is supported & active (not defaulted or expired).
    * Buyer must have a position in the lending pool & principal must be less or equal to the protection amount.
    * Buyer must approve underlying tokens to pay the expected premium.
-   * @param _protectionPurchaseParams The protection purchase parameters.
+   * @param _protectionPurchaseParams The protection purchase parameters such as protection amount, duration, lending pool etc.
    */
   function buyProtection(
+    ProtectionPurchaseParams calldata _protectionPurchaseParams
+  ) external virtual;
+
+  /**
+   * @notice A buyer can extend protection for a position in lending pool when lending pool is supported & active (not defaulted or expired).
+   * Buyer must have a existing active protection for the same lending position, meaning same lending pool & nft token id.
+   * Protection extension's duration must not exceed the end time of next pool cycle.
+   * Buyer must approve underlying tokens to pay the expected premium.
+   * @param _protectionPurchaseParams The protection purchase parameters such as protection amount, duration, lending pool etc.
+   */
+  function extendProtection(
     ProtectionPurchaseParams calldata _protectionPurchaseParams
   ) external virtual;
 
@@ -228,10 +246,17 @@ abstract contract IPool {
 
   /**
    * @notice Accrues the premium from all existing protections and updates the total premium accrued.
-   * This method accrues premium from the last accrual timestamp to the latest payment timestamp of the underlying lending pool.
-   * This method also removes expired protections.
+   * This function accrues premium from the last accrual timestamp to the latest payment timestamp of the underlying lending pool.
+   * This function  also marks protections expired when duration is over.
+   * @param _lendingPools The lending pools for which premium needs to be accrued and protections need to be marked expired.
+   * This is optional parameter. If not provided, premium will be accrued for all reference lending pools.
+   *
+   * NOTE: This function iterates over all active protections and may run into gas cost limit,
+   * so optional parameter is provided to limit the number of protections iterated.
    */
-  function accruePremiumAndExpireProtections() external virtual;
+  function accruePremiumAndExpireProtections(address[] memory _lendingPools)
+    external
+    virtual;
 
   /**
    * @notice Returns various parameters and other pool related info.

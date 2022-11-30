@@ -6,7 +6,7 @@ import {IPool, PoolParams} from "./IPool.sol";
 abstract contract IPremiumCalculator {
   /**
    * @notice Calculates the premium amount and specifies whether returned premium is a minimum premium or not.
-   * @param _protectionExpirationTimestamp the expiration timestamp of the protection as seconds since unix epoch.
+   * @param _protectionDurationInSeconds the protection duration in seconds since unix epoch.
    * @param _protectionAmount the protection amount scaled to 18 decimals
    * @param _protectionBuyerApy the protection buyer's APY scaled to 18 decimals
    * @param _leverageRatio the leverage ratio of the pool scaled to 18 decimals
@@ -16,7 +16,7 @@ abstract contract IPremiumCalculator {
    * @return isMinPremium indicates whether the returned premium is the minimum premium or not
    */
   function calculatePremium(
-    uint256 _protectionExpirationTimestamp,
+    uint256 _protectionDurationInSeconds,
     uint256 _protectionAmount,
     uint256 _protectionBuyerApy,
     uint256 _leverageRatio,

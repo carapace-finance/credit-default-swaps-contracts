@@ -16,7 +16,7 @@ contract PremiumCalculator is IPremiumCalculator {
 
   /// @inheritdoc IPremiumCalculator
   function calculatePremium(
-    uint256 _protectionExpirationTimestamp,
+    uint256 _protectionDurationInSeconds,
     uint256 _protectionAmount,
     uint256 _protectionBuyerApy,
     uint256 _leverageRatio,
@@ -24,15 +24,15 @@ contract PremiumCalculator is IPremiumCalculator {
     PoolParams calldata _poolParameters
   ) external view override returns (uint256 premiumAmount, bool isMinPremium) {
     console.log(
-      "Calculating premium... expiration time: %s, protection amount: %s, leverage ratio: %s",
-      _protectionExpirationTimestamp,
+      "Calculating premium... protection duration in seconds: %s, protection amount: %s, leverage ratio: %s",
+      _protectionDurationInSeconds,
       _protectionAmount,
       _leverageRatio
     );
 
     int256 carapacePremiumRate;
     uint256 durationInYears = calculateDurationInYears(
-      _protectionExpirationTimestamp
+      _protectionDurationInSeconds
     );
 
     if (
@@ -58,7 +58,7 @@ contract PremiumCalculator is IPremiumCalculator {
       );
       console.logInt(carapacePremiumRate);
     } else {
-      /// Min capital or protection  not met or leverage ratio out of range. Premium is the minimum premium
+      /// Min capital or protection not met or leverage ratio out of range. Premium is the minimum premium
       isMinPremium = true;
     }
 
@@ -129,45 +129,17 @@ contract PremiumCalculator is IPremiumCalculator {
   }
 
   /**
-   * @dev calculate min premium rate scaled to 18 decimals.
-   * @dev Formula: minPremiumRate = _minRiskPremiumPercent + underlyingPremiumRate
-   * @param _protectionExpirationTimestamp protection expiration timestamp.
-   * @param _protectionBuyerApy protection buyer APY scaled to 18 decimals.
-   * @param _minCarapaceRiskPremiumPercent min carapace risk premium percent scaled to 18 decimals.
-   * @param _underlyingRiskPremiumPercent underlying risk premium percent scaled to 18 decimals.
-   */
-  function calculateMinPremiumRate(
-    uint256 _protectionExpirationTimestamp,
-    uint256 _protectionBuyerApy,
-    uint256 _minCarapaceRiskPremiumPercent,
-    uint256 _underlyingRiskPremiumPercent
-  ) internal view returns (uint256) {
-    uint256 durationInYears = calculateDurationInYears(
-      _protectionExpirationTimestamp
-    );
-    uint256 underlyingPremiumRate = _calculateUnderlyingPremiumRate(
-      durationInYears,
-      _protectionBuyerApy,
-      _underlyingRiskPremiumPercent
-    );
-
-    return _minCarapaceRiskPremiumPercent + underlyingPremiumRate;
-  }
-
-  /**
    * @dev Calculates protection duration in years scaled to 18 decimals.
-   * Formula used: ((expiration time - current time) / SECONDS_IN_DAY) / 365.24
-   * @param _protectionExpirationTimestamp protection expiration timestamp
+   * Formula used: (_protectionDurationInSeconds / SECONDS_IN_DAY) / 365.24
+   * @param _protectionDurationInSeconds protection duration in seconds.
    */
-  function calculateDurationInYears(uint256 _protectionExpirationTimestamp)
+  function calculateDurationInYears(uint256 _protectionDurationInSeconds)
     internal
-    view
+    pure
     returns (uint256)
   {
     return
-      ((_protectionExpirationTimestamp - block.timestamp) *
-        100 *
-        Constants.SCALE_18_DECIMALS) /
+      (_protectionDurationInSeconds * 100 * Constants.SCALE_18_DECIMALS) /
       (uint256(Constants.SECONDS_IN_DAY) * 36524);
   }
 }
