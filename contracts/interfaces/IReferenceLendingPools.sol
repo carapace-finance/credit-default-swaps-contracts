@@ -8,6 +8,7 @@ enum LendingPoolStatus {
   NotSupported,
   Active,
   Expired,
+  LateWithinGracePeriod,
   Late,
   Defaulted
 }

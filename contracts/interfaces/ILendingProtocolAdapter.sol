@@ -86,4 +86,14 @@ abstract contract ILendingProtocolAdapter {
     view
     virtual
     returns (uint256);
+
+  /**
+   * @notice Determines whether the specified lending pool is late for payment but within the specified grace period.
+   * @param _lendingPoolAddress the address of the lending pool
+   * @param _gracePeriodInDays the grace period in days using unscaled value, i.e. 1 day = 1
+   */
+  function isLendingPoolLateWithinGracePeriod(
+    address _lendingPoolAddress,
+    uint256 _gracePeriodInDays
+  ) external view virtual returns (bool);
 }

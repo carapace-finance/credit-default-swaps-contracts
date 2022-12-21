@@ -5,9 +5,15 @@ import { GoldfinchV2Adapter } from "../../typechain-types/contracts/adapters/Gol
 import { ProtectionPurchaseParamsStruct } from "../../typechain-types/contracts/interfaces/IReferenceLendingPools";
 import { parseUSDC } from "../utils/usdc";
 import { ITranchedPool } from "../../typechain-types/contracts/external/goldfinch/ITranchedPool";
-import { ethers } from "hardhat";
+import { ethers, network } from "hardhat";
 import { BigNumber } from "@ethersproject/bignumber";
-import { getDaysInSeconds, getLatestBlockTimestamp } from "../utils/time";
+import {
+  getDaysInSeconds,
+  getLatestBlockTimestamp,
+  moveForwardTime,
+  moveForwardTimeByDays,
+  setNextBlockTimestamp
+} from "../utils/time";
 import { toBytes32, setStorageAt, getStorageAt } from "../utils/storage";
 
 const GOLDFINCH_ALMAVEST_BASKET_6_ADDRESS =
@@ -20,6 +26,19 @@ const testGoldfinchV2Adapter: Function = (
   goldfinchV2Adapter: GoldfinchV2Adapter
 ) => {
   describe("GoldfinchV2Adapter", () => {
+    let _snapshotId: string;
+
+    before(async () => {
+      _snapshotId = await network.provider.send("evm_snapshot", []);
+    });
+
+    after(async () => {
+      // Some specs move time forward, revert the state to the snapshot
+      expect(await network.provider.send("evm_revert", [_snapshotId])).to.eq(
+        true
+      );
+    });
+
     describe("constructor", () => {
       it("...should set the correct goldfinch config", async () => {
         expect(await goldfinchV2Adapter.goldfinchConfig()).to.equal(
@@ -201,6 +220,128 @@ const testGoldfinchV2Adapter: Function = (
             591
           )
         ).to.eq(0);
+      });
+    });
+
+    describe("isLendingPoolLateWithinGracePeriod", () => {
+      it("...should return false when payment is not late", async () => {
+        // Payment is not late, so should return false
+        expect(
+          await goldfinchV2Adapter.isLendingPoolLateWithinGracePeriod(
+            "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf",
+            1
+          )
+        ).to.eq(false);
+
+        // Move time forward by 30 days from last payment timestamp
+        const lastPaymentTimestamp =
+          await goldfinchV2Adapter.getLatestPaymentTimestamp(
+            "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf"
+          );
+        await setNextBlockTimestamp(
+          lastPaymentTimestamp.add(getDaysInSeconds(30))
+        );
+
+        // This means, payment is still not late and should return false
+        expect(
+          await goldfinchV2Adapter.isLendingPoolLateWithinGracePeriod(
+            "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf",
+            1
+          )
+        ).to.eq(false);
+      });
+
+      it("...should return true when payment is late but within grace period", async () => {
+        // Move time forward by 1 second
+        await moveForwardTime(BigNumber.from(1));
+
+        // Payment is late, so should return true
+        expect(
+          await goldfinchV2Adapter.isLendingPoolLate(
+            "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf"
+          )
+        ).to.eq(true);
+
+        // Lending pool is late but within grace period, so should return true
+        expect(
+          await goldfinchV2Adapter.isLendingPoolLateWithinGracePeriod(
+            "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf",
+            1
+          )
+        ).to.eq(true);
+      });
+
+      it("...should return false when payment is late and after grace period", async () => {
+        // Move time forward by a day
+        await moveForwardTime(getDaysInSeconds(1));
+
+        // Payment is late, so should return true
+        expect(
+          await goldfinchV2Adapter.isLendingPoolLate(
+            "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf"
+          )
+        ).to.eq(true);
+
+        // Lending pool is late and after grace period, so should return false
+        expect(
+          await goldfinchV2Adapter.isLendingPoolLateWithinGracePeriod(
+            "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf",
+            1
+          )
+        ).to.eq(false);
+      });
+
+      it("...should return false when payment is late and after grace period", async () => {
+        // Move time forward by a day
+        await moveForwardTime(getDaysInSeconds(1));
+
+        // Payment is late, so should return true
+        expect(
+          await goldfinchV2Adapter.isLendingPoolLate(
+            "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf"
+          )
+        ).to.eq(true);
+
+        // Lending pool is late and within longer grace period, so should return true
+        expect(
+          await goldfinchV2Adapter.isLendingPoolLateWithinGracePeriod(
+            "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf",
+            1
+          )
+        ).to.eq(false);
+      });
+
+      it("...should return true when payment is late and within longer grace period", async () => {
+        // Lending pool is late and within longer grace period, so should return true
+        // Total time elapsed since last payment = 30 days + 2 days + 1 second
+        expect(
+          await goldfinchV2Adapter.isLendingPoolLateWithinGracePeriod(
+            "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf",
+            3
+          )
+        ).to.eq(true);
+      });
+
+      it("...should return false when payment is late and after longer grace period", async () => {
+        // Move time forward by another 2 days
+        await moveForwardTime(getDaysInSeconds(2));
+
+        // Total time elapsed since last payment = 30 days + 4 days + 1 second
+        // Lending pool is late and after grace period of 4 days, so should return false
+        expect(
+          await goldfinchV2Adapter.isLendingPoolLateWithinGracePeriod(
+            "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf",
+            4
+          )
+        ).to.eq(false);
+
+        // Lending pool is late but longer grace period of 5 days, so should return true
+        expect(
+          await goldfinchV2Adapter.isLendingPoolLateWithinGracePeriod(
+            "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf",
+            5
+          )
+        ).to.eq(true);
       });
     });
   });

@@ -136,6 +136,15 @@ contract ReferenceLendingPools is
       return LendingPoolStatus.Expired;
     }
 
+    if (
+      _adapter.isLendingPoolLateWithinGracePeriod(
+        _lendingPoolAddress,
+        Constants.LATE_PAYMENT_GRACE_PERIOD_IN_DAYS
+      )
+    ) {
+      return LendingPoolStatus.LateWithinGracePeriod;
+    }
+
     if (_adapter.isLendingPoolLate(_lendingPoolAddress)) {
       return LendingPoolStatus.Late;
     }
