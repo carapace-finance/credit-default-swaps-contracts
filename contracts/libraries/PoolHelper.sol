@@ -318,7 +318,10 @@ library PoolHelper {
       revert IPool.LendingPoolNotSupported(_lendingPoolAddress);
     }
 
-    if (poolStatus == LendingPoolStatus.Late) {
+    if (
+      poolStatus == LendingPoolStatus.LateWithinGracePeriod ||
+      poolStatus == LendingPoolStatus.Late
+    ) {
       revert IPool.LendingPoolHasLatePayment(_lendingPoolAddress);
     }
 

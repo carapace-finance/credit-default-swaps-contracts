@@ -15,7 +15,8 @@ import {
   getDaysInSeconds,
   getLatestBlockTimestamp,
   getUnixTimestampAheadByDays,
-  moveForwardTimeByDays
+  moveForwardTimeByDays,
+  setNextBlockTimestamp
 } from "../utils/time";
 import {
   parseUSDC,
@@ -1857,6 +1858,76 @@ const testPool: Function = (
           expect(
             _totalSTokenUnderlyingAfter.sub(_totalSTokenUnderlyingBefore)
           ).to.be.eq(_depositAmount);
+        });
+      });
+
+      describe("buyProtection after after adding new lending pool", async () => {
+        const _lendingPool3 = "0x89d7c618a4eef3065da8ad684859a547548e6169";
+        const _protectionBuyerAddress =
+          "0x3371E5ff5aE3f1979074bE4c5828E71dF51d299c";
+        let _protectionBuyer: Signer;
+
+        before(async () => {
+          _protectionBuyer = await ethers.getImpersonatedSigner(
+            _protectionBuyerAddress
+          );
+
+          // Ensure lending pool is current on payment
+          await payToLendingPoolAddress(_lendingPool3, "3000000", USDC);
+          await referenceLendingPools
+            .connect(deployer)
+            .addReferenceLendingPool(_lendingPool3, 0, 30);
+
+          expect(
+            (await referenceLendingPools.getLendingPools()).length
+          ).to.be.eq(3);
+        });
+
+        it("...buyProtection in new pool should succeed", async () => {
+          expect(
+            (await pool.getActiveProtections(_protectionBuyerAddress)).length
+          ).to.be.eq(0);
+
+          await deployer.sendTransaction({
+            to: _protectionBuyerAddress,
+            value: ethers.utils.parseEther("10")
+          });
+
+          await transferAndApproveUsdcToPool(
+            _protectionBuyer,
+            parseUSDC("1000")
+          );
+          await pool.connect(_protectionBuyer).buyProtection({
+            lendingPoolAddress: _lendingPool3,
+            nftLpTokenId: 717,
+            protectionAmount: parseUSDC("30000"),
+            protectionDurationInSeconds: getDaysInSeconds(30)
+          });
+
+          expect(
+            (await pool.getActiveProtections(_protectionBuyerAddress)).length
+          ).to.be.eq(1);
+        });
+
+        it("...buyProtection in new pool should fail when pool is in LateWithinGracePeriod state", async () => {
+          // Ensure lending pool is late on payment
+          const lastPaymentTimestamp =
+            await referenceLendingPools.getLatestPaymentTimestamp(
+              _lendingPool3
+            );
+
+          await setNextBlockTimestamp(
+            lastPaymentTimestamp.add(getDaysInSeconds(30).add(60 * 60)) // late by 1 hour
+          );
+
+          await expect(
+            pool.connect(_protectionBuyer).buyProtection({
+              lendingPoolAddress: _lendingPool3,
+              nftLpTokenId: 717,
+              protectionAmount: parseUSDC("30000"),
+              protectionDurationInSeconds: getDaysInSeconds(30)
+            })
+          ).to.be.revertedWith("LendingPoolHasLatePayment");
         });
       });
     });
