@@ -461,7 +461,7 @@ const testReferenceLendingPools: Function = (
             await referenceLendingPoolsInstance.getLendingPoolStatus(
               "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf"
             )
-          ).to.eq(3); // LateWithinGracePeriod
+          ).to.eq(2); // LateWithinGracePeriod
         });
 
         it("...should return false when payment is late and after grace period", async () => {
@@ -474,7 +474,7 @@ const testReferenceLendingPools: Function = (
             await referenceLendingPoolsInstance.getLendingPoolStatus(
               "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf"
             )
-          ).to.eq(4); // Late
+          ).to.eq(3); // Late
         });
       });
     });

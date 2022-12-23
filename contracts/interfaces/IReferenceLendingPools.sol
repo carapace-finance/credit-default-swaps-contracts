@@ -4,13 +4,18 @@ pragma solidity ^0.8.13;
 
 /// @notice Enum to represent the status of the lending pool
 enum LendingPoolStatus {
-  /// @notice This means the lending pool is not added to the basket
+  /// @notice This means the lending pool is not added to the basket and the protection can NOT be purchased
   NotSupported,
+  /// @notice This means the lending pool is added to the basket and the protection can be purchased
   Active,
-  Expired,
+  /// @notice This means the lending pool is late for payment but within the grace period and the protection can NOT be purchased
   LateWithinGracePeriod,
+  /// @notice This means the lending pool is late for payment and beyond the grace period and the protection can NOT be purchased
   Late,
-  Defaulted
+  /// @notice This means the lending pool is defaulted and the protection can NOT be purchased
+  Defaulted,
+  /// @notice This means the lending pool is either fully repaid or full term has been completed and the protection can NOT be purchased
+  Expired
 }
 
 enum LendingProtocol {

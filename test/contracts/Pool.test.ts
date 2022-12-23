@@ -1800,7 +1800,7 @@ const testPool: Function = (
         });
       });
 
-      describe("buyProtection after purchase limit", async () => {
+      describe("buyProtection after protection purchase limit", async () => {
         it("...should fail because of protection purchase limit for new buyer", async () => {
           // make lending pool payment current, so buyProtection should NOT fail for late payment,
           // but it should fail for NEW buyer because of protection purchase limit: past 60 days

@@ -232,7 +232,10 @@ contract DefaultStateManager is IDefaultStateManager {
         poolState.lendingPoolStatuses[_lendingPool] = _currentStatus;
       }
 
+      /// No action required for state transition from Active -> LateWithinGracePeriod
+
       /// step 2: Initiate actions for pools when lending pool status changed from Active -> Late
+      /// or LateWithinGracePeriod -> Late
       if (
         (_previousStatus == LendingPoolStatus.Active ||
           _previousStatus == LendingPoolStatus.LateWithinGracePeriod) &&
