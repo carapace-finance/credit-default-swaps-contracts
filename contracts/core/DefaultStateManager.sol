@@ -234,7 +234,8 @@ contract DefaultStateManager is IDefaultStateManager {
 
       /// step 2: Initiate actions for pools when lending pool status changed from Active -> Late
       if (
-        _previousStatus == LendingPoolStatus.Active &&
+        (_previousStatus == LendingPoolStatus.Active ||
+          _previousStatus == LendingPoolStatus.LateWithinGracePeriod) &&
         _currentStatus == LendingPoolStatus.Late
       ) {
         _moveFromActiveToLockedState(poolState, _lendingPool);

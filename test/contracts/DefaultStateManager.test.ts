@@ -12,13 +12,15 @@ import {
 } from "../utils/usdc";
 import {
   getDaysInSeconds,
-  getUnixTimestampAheadByDays,
-  moveForwardTimeByDays
+  getLatestBlockTimestamp,
+  moveForwardTimeByDays,
+  setNextBlockTimestamp
 } from "../utils/time";
 import { ITranchedPool } from "../../typechain-types/contracts/external/goldfinch/ITranchedPool";
 import { payToLendingPool } from "../utils/goldfinch";
 import { BigNumber } from "@ethersproject/bignumber";
 import { getGoldfinchLender1 } from "../utils/goldfinch";
+import { ReferenceLendingPools } from "../../typechain-types/contracts/core/Pool";
 
 const testDefaultStateManager: Function = (
   deployer: Signer,
@@ -35,6 +37,7 @@ const testDefaultStateManager: Function = (
     let pool1: string;
     let pool2: string;
     let sellerAddress: string;
+    let referenceLendingPoolsInstance: ReferenceLendingPools;
 
     before(async () => {
       lendingPool2 = (await ethers.getContractAt(
@@ -46,6 +49,13 @@ const testDefaultStateManager: Function = (
       pool1 = poolInstance.address;
       pool2 = await poolFactory.getPoolAddress(2);
       sellerAddress = await seller.getAddress();
+
+      referenceLendingPoolsInstance = (await ethers.getContractAt(
+        "ReferenceLendingPools",
+        (
+          await poolInstance.getPoolInfo()
+        ).referenceLendingPools
+      )) as ReferenceLendingPools;
     });
 
     describe("constructor", async () => {
@@ -169,13 +179,48 @@ const testDefaultStateManager: Function = (
           protectionAmount: parseUSDC("20000"),
           protectionDurationInSeconds: getDaysInSeconds(20)
         });
+
+        // await moveForwardTimeByDays(30);
+        // Move time forward by 30 days from last payment timestamp
+
+        // 1663351858 = Fri Sep 16 2022 13:10:58 GMT-0500 (Central Daylight Time)
+        const lastPaymentTimestamp1 =
+          await referenceLendingPoolsInstance.getLatestPaymentTimestamp(
+            lendingPools[0]
+          );
+
+        // 1663899496 = Thu Sep 22 2022 21:18:16 GMT-0500 (Central Daylight Time)
+        const lastPaymentTimestamp2 =
+          await referenceLendingPoolsInstance.getLatestPaymentTimestamp(
+            lendingPools[1]
+          );
+        console.log(
+          "lastPaymentTimestamp for lending pool 2",
+          lastPaymentTimestamp2.toString()
+        );
+
+        // 1666491496
+        const lastPaymentTimestamp = lastPaymentTimestamp1.gt(
+          lastPaymentTimestamp2
+        )
+          ? lastPaymentTimestamp1
+          : lastPaymentTimestamp2;
+
+        // 1666491497
+        await setNextBlockTimestamp(
+          lastPaymentTimestamp.add(getDaysInSeconds(30).add(1)) // late by 1 second
+        );
+
+        console.log(
+          "latest block timestamp: ",
+          (await getLatestBlockTimestamp()).toString()
+        );
+
+        await defaultStateManager.assessStates();
       });
 
-      it("...should lock capital for both lending pools in pool 1", async () => {
-        await moveForwardTimeByDays(30);
-        await defaultStateManager.assessStates();
-
-        // Verify that both lending pools in Pool 1 are in late state and has locked capital instances
+      it("...should lock capital for 1st lending pool in protection pool 1", async () => {
+        // Verify that 1st lending pool has locked capital instance
         const lockedCapitalsLendingPool1 =
           await defaultStateManager.getLockedCapitals(pool1, lendingPools[0]);
 
@@ -183,7 +228,23 @@ const testDefaultStateManager: Function = (
         expect(lockedCapitalsLendingPool1[0].snapshotId).to.eq(1);
         expect(lockedCapitalsLendingPool1[0].amount).to.eq(0);
         expect(lockedCapitalsLendingPool1[0].locked).to.eq(true);
+      });
 
+      it("...should NOT lock capital for 2nd lending pool in protection pool 1", async () => {
+        // Verify that 2nd lending pool has NO locked capital instance because it is in LateWithinGracePeriod state
+        const lockedCapitalsLendingPool2 =
+          await defaultStateManager.getLockedCapitals(pool1, lendingPools[1]);
+
+        expect(lockedCapitalsLendingPool2.length).to.eq(0);
+      });
+
+      it("...should lock capital for 2nd lending pool in protection pool 1", async () => {
+        // Move time forward by 1 day + 1 second last payment timestamp
+        // 2nd lending pool should mover from LateWithinGracePeriod to Late state
+        await moveForwardTimeByDays(1);
+        await defaultStateManager.assessStates();
+
+        // Verify that 2nd lending pool in Pool 1 is in late state and has locked capital instances
         const lockedCapitalsLendingPool2 =
           await defaultStateManager.getLockedCapitals(pool1, lendingPools[1]);
 
