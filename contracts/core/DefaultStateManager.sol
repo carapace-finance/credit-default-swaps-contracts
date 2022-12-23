@@ -6,7 +6,7 @@ import {ERC20Snapshot} from "@openzeppelin/contracts/token/ERC20/extensions/ERC2
 import {IReferenceLendingPools, LendingPoolStatus} from "../interfaces/IReferenceLendingPools.sol";
 import {ILendingProtocolAdapter} from "../interfaces/ILendingProtocolAdapter.sol";
 import {IPool} from "../interfaces/IPool.sol";
-import {IDefaultStateManager, PoolState, LockedCapital} from "../interfaces/IDefaultStateManager.sol";
+import {IDefaultStateManager, PoolState, LockedCapital, LendingPoolStateDetail} from "../interfaces/IDefaultStateManager.sol";
 
 import "hardhat/console.sol";
 
@@ -216,9 +216,10 @@ contract DefaultStateManager is IDefaultStateManager {
     uint256 length = _lendingPools.length;
     for (uint256 _lendingPoolIndex; _lendingPoolIndex < length; ) {
       address _lendingPool = _lendingPools[_lendingPoolIndex];
-      LendingPoolStatus _previousStatus = poolState.lendingPoolStatuses[
-        _lendingPool
-      ];
+      LendingPoolStateDetail storage lendingPoolStateDetail = poolState
+        .lendingPoolStateDetails[_lendingPool];
+
+      LendingPoolStatus _previousStatus = lendingPoolStateDetail.currentStatus;
       LendingPoolStatus _currentStatus = _currentStatuses[_lendingPoolIndex];
 
       /// step 1: update the status of the lending pool in the storage when it changes
@@ -229,7 +230,7 @@ contract DefaultStateManager is IDefaultStateManager {
           uint256(_previousStatus),
           uint256(_currentStatus)
         );
-        poolState.lendingPoolStatuses[_lendingPool] = _currentStatus;
+        lendingPoolStateDetail.currentStatus = _currentStatus;
       }
 
       /// No action required for state transition from Active -> LateWithinGracePeriod
@@ -242,6 +243,9 @@ contract DefaultStateManager is IDefaultStateManager {
         _currentStatus == LendingPoolStatus.Late
       ) {
         _moveFromActiveToLockedState(poolState, _lendingPool);
+
+        /// capture the missed payment due timestamp
+        lendingPoolStateDetail.lastLateTimestamp = block.timestamp;
       }
 
       /// step 3: Initiate actions for pools when lending pool status changed from Late -> Active (current)
@@ -249,7 +253,12 @@ contract DefaultStateManager is IDefaultStateManager {
         _previousStatus == LendingPoolStatus.Late &&
         _currentStatus == LendingPoolStatus.Active
       ) {
-        _moveFromLockedToActiveState(poolState, _lendingPool);
+        /// wait until lending pool has 2 consecutive payments on time
+        uint256 waitTimeInSeconds = lendingPoolStateDetail.lastLateTimestamp +
+          60 days;
+        if (block.timestamp > waitTimeInSeconds) {
+          _moveFromLockedToActiveState(poolState, _lendingPool);
+        }
       }
 
       /// step 4: Initiate actions for pools when lending pool status changed from Late -> Defaulted

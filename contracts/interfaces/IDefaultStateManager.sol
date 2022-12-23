@@ -11,14 +11,20 @@ struct LockedCapital {
   bool locked;
 }
 
+struct LendingPoolStateDetail {
+  LendingPoolStatus currentStatus;
+  uint256 lastLateTimestamp;
+}
+
 struct PoolState {
   /// @notice the protection pool for which state is being tracked
   IPool protectionPool;
   /// @notice the timestamp at which the last time pool state was updated
   uint256 updatedTimestamp;
-  /// @notice the mapping to track all lending pools referenced by the protection pool to its current status (Active, Expired, Late, Defaulted)
+  /// @notice the mapping to track all lending pools referenced by the protection pool to its state details,
+  /// which includes current status (Active, Expired, Late, Defaulted)
   /// @dev this is used to track state transitions: active -> late, late -> active, late -> defaulted
-  mapping(address => LendingPoolStatus) lendingPoolStatuses;
+  mapping(address => LendingPoolStateDetail) lendingPoolStateDetails;
   /// We need an array as some users may not have claimed their locked capital and another state change(active -> late) may occur.
   /// For each lending pool, every active -> late state change creates a new instance of the locked capital.
   /// Last item in the array represents the latest state change.
