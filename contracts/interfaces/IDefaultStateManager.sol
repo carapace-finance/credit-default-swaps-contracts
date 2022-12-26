@@ -13,7 +13,7 @@ struct LockedCapital {
 
 struct LendingPoolStateDetail {
   LendingPoolStatus currentStatus;
-  uint256 lastLateTimestamp;
+  uint256 waitToBeActiveTimestamp;
 }
 
 struct PoolState {

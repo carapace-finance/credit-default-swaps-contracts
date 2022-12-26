@@ -186,6 +186,16 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
   }
 
   /// @inheritdoc ILendingProtocolAdapter
+  function getPaymentPeriodInDays(address _lendingPool)
+    public
+    view
+    override
+    returns (uint256)
+  {
+    return _getCreditLine(_lendingPool).paymentPeriodInDays();
+  }
+
+  /// @inheritdoc ILendingProtocolAdapter
   function getLatestPaymentTimestamp(address _lendingPool)
     public
     view

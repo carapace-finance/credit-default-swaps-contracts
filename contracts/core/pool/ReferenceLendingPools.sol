@@ -253,6 +253,19 @@ contract ReferenceLendingPools is
       );
   }
 
+  /// @inheritdoc IReferenceLendingPools
+  function getPaymentPeriodInDays(address _lendingPool)
+    public
+    view
+    override
+    returns (uint256)
+  {
+    return
+      _getLendingProtocolAdapter(_lendingPool).getPaymentPeriodInDays(
+        _lendingPool
+      );
+  }
+
   /** internal functions */
 
   /**

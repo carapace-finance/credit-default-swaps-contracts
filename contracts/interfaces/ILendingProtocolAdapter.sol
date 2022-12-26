@@ -96,4 +96,13 @@ abstract contract ILendingProtocolAdapter {
     address _lendingPoolAddress,
     uint256 _gracePeriodInDays
   ) external view virtual returns (bool);
+
+  /**
+   * @notice Returns the payment period of the specified lending pool in days
+   */
+  function getPaymentPeriodInDays(address _lendingPool)
+    public
+    view
+    virtual
+    returns (uint256);
 }

@@ -7,6 +7,7 @@ import {IReferenceLendingPools, LendingPoolStatus} from "../interfaces/IReferenc
 import {ILendingProtocolAdapter} from "../interfaces/ILendingProtocolAdapter.sol";
 import {IPool} from "../interfaces/IPool.sol";
 import {IDefaultStateManager, PoolState, LockedCapital, LendingPoolStateDetail} from "../interfaces/IDefaultStateManager.sol";
+import "../libraries/Constants.sol";
 
 import "hardhat/console.sol";
 
@@ -212,7 +213,7 @@ contract DefaultStateManager is IDefaultStateManager {
         .referenceLendingPools
         .assessState();
 
-    /// update the status of each lending pool
+    /// Compare previous and current status of each lending pool and perform the required state transition
     uint256 length = _lendingPools.length;
     for (uint256 _lendingPoolIndex; _lendingPoolIndex < length; ) {
       address _lendingPool = _lendingPools[_lendingPoolIndex];
@@ -222,50 +223,77 @@ contract DefaultStateManager is IDefaultStateManager {
       LendingPoolStatus _previousStatus = lendingPoolStateDetail.currentStatus;
       LendingPoolStatus _currentStatus = _currentStatuses[_lendingPoolIndex];
 
-      /// step 1: update the status of the lending pool in the storage when it changes
       if (_previousStatus != _currentStatus) {
         console.log(
-          "Lending pool %s status changed from %s to  %s",
+          "Lending pool %s status is changed from %s to  %s",
           _lendingPool,
           uint256(_previousStatus),
           uint256(_currentStatus)
         );
-        lendingPoolStateDetail.currentStatus = _currentStatus;
       }
 
-      /// No action required for state transition from Active -> LateWithinGracePeriod
-
-      /// step 2: Initiate actions for pools when lending pool status changed from Active -> Late
-      /// or LateWithinGracePeriod -> Late
+      /// State transition 1: NotSupported -> Active
+      /// This is to mark the status of the lending pool as Active, when state is being assessed for the first time
       if (
+        _previousStatus == LendingPoolStatus.NotSupported &&
+        _currentStatus == LendingPoolStatus.Active
+      ) {
+        lendingPoolStateDetail.currentStatus = LendingPoolStatus.Active;
+        /// No action required for this state transition
+      }
+      /// State transition 2: Active -> LateWithinGracePeriod
+      else if (
+        _previousStatus == LendingPoolStatus.Active &&
+        _currentStatus == LendingPoolStatus.LateWithinGracePeriod
+      ) {
+        lendingPoolStateDetail.currentStatus = LendingPoolStatus
+          .LateWithinGracePeriod;
+        /// No action required for this state transition
+      }
+      /// State transition 3: Active -> Late or LateWithinGracePeriod -> Late
+      else if (
         (_previousStatus == LendingPoolStatus.Active ||
           _previousStatus == LendingPoolStatus.LateWithinGracePeriod) &&
         _currentStatus == LendingPoolStatus.Late
       ) {
+        lendingPoolStateDetail.currentStatus = LendingPoolStatus.Late;
         _moveFromActiveToLockedState(poolState, _lendingPool);
 
-        /// capture the missed payment due timestamp
-        lendingPoolStateDetail.lastLateTimestamp = block.timestamp;
-      }
+        /// Lending pool can now only become active after lending pool has 2 consecutive payments on time
+        uint256 _paymentPeriodInDays = poolState
+          .protectionPool
+          .getPoolInfo()
+          .referenceLendingPools
+          .getPaymentPeriodInDays(_lendingPool);
+        uint256 waitTimeInSeconds = (_paymentPeriodInDays * 2) *
+          Constants.SECONDS_IN_DAY_UINT;
 
-      /// step 3: Initiate actions for pools when lending pool status changed from Late -> Active (current)
-      if (
+        /// Capture the timestamp when the lending pool can become active again
+        lendingPoolStateDetail.waitToBeActiveTimestamp =
+          block.timestamp +
+          waitTimeInSeconds;
+
+        console.log(
+          "Lending pool: %s can not be active again until: %s",
+          _lendingPool,
+          block.timestamp + waitTimeInSeconds
+        );
+      }
+      /// State transition 4: Late -> Active
+      else if (
+        block.timestamp > lendingPoolStateDetail.waitToBeActiveTimestamp &&
         _previousStatus == LendingPoolStatus.Late &&
         _currentStatus == LendingPoolStatus.Active
       ) {
-        /// wait until lending pool has 2 consecutive payments on time
-        uint256 waitTimeInSeconds = lendingPoolStateDetail.lastLateTimestamp +
-          60 days;
-        if (block.timestamp > waitTimeInSeconds) {
-          _moveFromLockedToActiveState(poolState, _lendingPool);
-        }
+        lendingPoolStateDetail.currentStatus = LendingPoolStatus.Active;
+        _moveFromLockedToActiveState(poolState, _lendingPool);
       }
-
-      /// step 4: Initiate actions for pools when lending pool status changed from Late -> Defaulted
-      if (
+      /// State transition 5: Late -> Defaulted
+      else if (
         _previousStatus == LendingPoolStatus.Late &&
         _currentStatus == LendingPoolStatus.Defaulted
       ) {
+        lendingPoolStateDetail.currentStatus = LendingPoolStatus.Defaulted;
         // _moveFromLockedToDefaultedState(poolState, _lendingPool);
       }
 

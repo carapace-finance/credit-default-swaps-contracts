@@ -163,4 +163,13 @@ abstract contract IReferenceLendingPools {
     view
     virtual
     returns (uint256);
+
+  /**
+   * @notice Returns the payment period of the specified lending pool in days
+   */
+  function getPaymentPeriodInDays(address _lendingPool)
+    public
+    view
+    virtual
+    returns (uint256);
 }

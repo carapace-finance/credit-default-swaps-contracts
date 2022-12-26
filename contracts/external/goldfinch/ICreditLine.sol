@@ -27,6 +27,7 @@ interface ICreditLine {
    * Comments copied from GoldfinchFactory.createPool: https://github.com/goldfinch-eng/mono/blob/88f0e3f94f6dd23ebae429fe09e2511650df893a/packages/protocol/contracts/protocol/core/GoldfinchFactory.sol#L73
    * How many days in each payment period.
    * ie. the frequency with which they need to make payments.
+   * Note: This is basic unscaled integer. i.e. 30 days is represented as 30
    */
   function paymentPeriodInDays() external view returns (uint256);
 

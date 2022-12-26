@@ -259,12 +259,20 @@ const testDefaultStateManager: Function = (
 
     describe("state transition from late -> active", async () => {
       before(async () => {
-        // payment to lending pool
-        await payToLendingPool(lendingPool2, "100000", usdcContract);
+        // Make 2 consecutive payments to 2nd lending pool
+        for (let i = 0; i < 2; i++) {
+          await moveForwardTimeByDays(30);
+          await payToLendingPool(lendingPool2, "300000", usdcContract);
 
-        await expect(defaultStateManager.assessStates())
-          .to.emit(defaultStateManager, "PoolStatesAssessed")
-          .to.emit(defaultStateManager, "LendingPoolUnlocked");
+          if (i === 0) {
+            await defaultStateManager.assessStates();
+          } else {
+            // after second payment, 2nd lending pool should move from Late to Active state
+            await expect(defaultStateManager.assessStates())
+              .to.emit(defaultStateManager, "PoolStatesAssessed")
+              .to.emit(defaultStateManager, "LendingPoolUnlocked");
+          }
+        }
       });
 
       describe("calculateClaimableUnlockedAmount", async () => {
