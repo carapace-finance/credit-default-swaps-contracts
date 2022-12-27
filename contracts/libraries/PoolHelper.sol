@@ -8,6 +8,7 @@ import {ProtectionPurchaseParams, LendingPoolStatus, IReferenceLendingPools} fro
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {PoolInfo, ProtectionInfo, ProtectionBuyerAccount, IPool, LendingPoolDetail, PoolPhase} from "../interfaces/IPool.sol";
 import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
+import {IDefaultStateManager} from "../interfaces/IDefaultStateManager.sol";
 import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
 
 import "hardhat/console.sol";
@@ -21,10 +22,11 @@ library PoolHelper {
   /**
    * @notice Verifies that the status of the lending pool is ACTIVE and protection can be bought,
    * otherwise reverts with the appropriate error message.
-   * @param _protectionPurchaseParams The protection purchase params such as lending pool address, protection amount, duration etc
    */
   function verifyProtection(
     IPoolCycleManager poolCycleManager,
+    IDefaultStateManager defaultStateManager,
+    address _protectionPool,
     PoolInfo storage poolInfo,
     uint256 _protectionStartTimestamp,
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
@@ -49,7 +51,8 @@ library PoolHelper {
 
     /// Verify that the lending pool is active
     _verifyLendingPoolIsActive(
-      poolInfo.referenceLendingPools,
+      defaultStateManager,
+      _protectionPool,
       _protectionPurchaseParams.lendingPoolAddress
     );
 
@@ -307,10 +310,12 @@ library PoolHelper {
    * @dev Verify that the lending pool is active, otherwise revert.
    */
   function _verifyLendingPoolIsActive(
-    IReferenceLendingPools referenceLendingPools,
+    IDefaultStateManager defaultStateManager,
+    address _protectionPoolAddress,
     address _lendingPoolAddress
   ) internal view {
-    LendingPoolStatus poolStatus = referenceLendingPools.getLendingPoolStatus(
+    LendingPoolStatus poolStatus = defaultStateManager.getLendingPoolStatus(
+      _protectionPoolAddress,
       _lendingPoolAddress
     );
 

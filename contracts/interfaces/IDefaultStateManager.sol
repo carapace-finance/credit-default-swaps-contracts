@@ -70,6 +70,17 @@ abstract contract IDefaultStateManager {
   function registerPool(IPool _protectionPool) external virtual;
 
   /**
+   * @notice Provides the current status of the specified lending pool of given protection pool.
+   * @param _protectionPoolAddress address of the protection pool
+   * @param _lendingPoolAddress address of the lending pool
+   * @return the status of the lending pool
+   */
+  function getLendingPoolStatus(
+    address _protectionPoolAddress,
+    address _lendingPoolAddress
+  ) public view virtual returns (LendingPoolStatus);
+
+  /**
    * @notice assess states of all registered pools and initiate state changes & related actions as needed.
    */
   function assessStates() external virtual;

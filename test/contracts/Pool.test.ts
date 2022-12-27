@@ -1460,22 +1460,6 @@ const testPool: Function = (
         });
       });
 
-      describe("buyProtection failures with time restrictions", async () => {
-        it("...fails when lending pool is late for payment", async () => {
-          // day 42: time has moved forward by more than 30 days, so lending pool is late for payment
-          await expect(
-            pool.connect(_protectionBuyer1).buyProtection({
-              lendingPoolAddress: _lendingPool2,
-              nftLpTokenId: 590,
-              protectionAmount: parseUSDC("101"),
-              protectionDurationInSeconds: getDaysInSeconds(20)
-            })
-          ).to.be.revertedWith(
-            `LendingPoolHasLatePayment("0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf")`
-          );
-        });
-      });
-
       describe("claimUnlockedCapital", async () => {
         let lendingPool2: ITranchedPool;
         let _expectedLockedCapital: BigNumber;
@@ -1535,6 +1519,20 @@ const testPool: Function = (
           await expect(defaultStateManager.assessStates())
             .to.emit(defaultStateManager, "PoolStatesAssessed")
             .to.emit(defaultStateManager, "LendingPoolLocked");
+        });
+
+        it("...buyProtection fails when lending pool is late for payment", async () => {
+          // day 42: time has moved forward by more than 30 days, so lending pool is late for payment
+          await expect(
+            pool.connect(_protectionBuyer1).buyProtection({
+              lendingPoolAddress: _lendingPool2,
+              nftLpTokenId: 590,
+              protectionAmount: parseUSDC("101"),
+              protectionDurationInSeconds: getDaysInSeconds(20)
+            })
+          ).to.be.revertedWith(
+            `LendingPoolHasLatePayment("0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf")`
+          );
         });
 
         it("...should have locked capital for lending pool 2 after missing a payment", async () => {
@@ -1918,6 +1916,8 @@ const testPool: Function = (
           expect(
             (await referenceLendingPools.getLendingPools()).length
           ).to.be.eq(3);
+
+          await defaultStateManager.assessStates();
         });
 
         it("...buyProtection in new pool should succeed", async () => {
@@ -1957,6 +1957,7 @@ const testPool: Function = (
             lastPaymentTimestamp.add(getDaysInSeconds(30).add(60 * 60)) // late by 1 hour
           );
 
+          await defaultStateManager.assessStates();
           await expect(
             pool.connect(_protectionBuyer).buyProtection({
               lendingPoolAddress: _lendingPool3,

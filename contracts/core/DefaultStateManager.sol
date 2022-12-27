@@ -71,6 +71,17 @@ contract DefaultStateManager is IDefaultStateManager {
   }
 
   /// @inheritdoc IDefaultStateManager
+  function getLendingPoolStatus(
+    address _protectionPoolAddress,
+    address _lendingPoolAddress
+  ) public view override returns (LendingPoolStatus) {
+    return
+      poolStates[poolStateIndex[_protectionPoolAddress]]
+        .lendingPoolStateDetails[_lendingPoolAddress]
+        .currentStatus;
+  }
+
+  /// @inheritdoc IDefaultStateManager
   function assessStates() external override {
     /// gas optimizations:
     /// 1. capture length in memory & don't read from storage for each iteration
