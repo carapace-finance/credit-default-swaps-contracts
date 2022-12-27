@@ -12,14 +12,12 @@ import {
 } from "../utils/usdc";
 import {
   getDaysInSeconds,
-  getLatestBlockTimestamp,
   moveForwardTimeByDays,
   setNextBlockTimestamp
 } from "../utils/time";
 import { ITranchedPool } from "../../typechain-types/contracts/external/goldfinch/ITranchedPool";
-import { payToLendingPool } from "../utils/goldfinch";
+import { payToLendingPool, payToLendingPoolAddress } from "../utils/goldfinch";
 import { BigNumber } from "@ethersproject/bignumber";
-import { getGoldfinchLender1 } from "../utils/goldfinch";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/Pool";
 
 const testDefaultStateManager: Function = (
@@ -96,6 +94,183 @@ const testDefaultStateManager: Function = (
       });
     });
 
+    describe("state transition from active -> late", async () => {
+      const depositToPool = async (
+        _account: Signer,
+        _depositAmount: BigNumber
+      ) => {
+        const _accountAddress = await _account.getAddress();
+        await transferAndApproveUsdc(
+          _account,
+          _depositAmount,
+          poolInstance.address
+        );
+        await poolInstance
+          .connect(_account)
+          .deposit(_depositAmount, _accountAddress);
+      };
+
+      before(async () => {
+        // State of the pool 1 after pool tests
+        // 70K protection in lending pool 3: 0xb26B42Dd5771689D0a7faEea32825ff9710b9c11
+        // 50K protection in lending pool 3: 0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf
+        // total sToken underlying = 100,200
+        // total protection: 120,000
+        expect(await poolInstance.totalSTokenUnderlying()).to.equal(
+          parseUSDC("100200")
+        );
+
+        expect(await poolInstance.totalProtection()).to.equal(
+          parseUSDC("120000")
+        );
+
+        // deposit capital into pool
+        await depositToPool(seller, parseUSDC("19800"));
+
+        // Pool should be in Open phase
+        expect((await poolInstance.getPoolInfo()).currentPhase).to.eq(2);
+
+        // Make lending pool 1 and 2 active
+        await payToLendingPoolAddress(lendingPools[0], "300000", usdcContract);
+        await payToLendingPoolAddress(lendingPools[1], "300000", usdcContract);
+
+        await defaultStateManager.assessStates();
+
+        // Move time forward by 30 days from last payment timestamp
+        const lastPaymentTimestamp1 =
+          await referenceLendingPoolsInstance.getLatestPaymentTimestamp(
+            lendingPools[0]
+          );
+
+        const lastPaymentTimestamp2 =
+          await referenceLendingPoolsInstance.getLatestPaymentTimestamp(
+            lendingPools[1]
+          );
+
+        const lastPaymentTimestamp = lastPaymentTimestamp1.gt(
+          lastPaymentTimestamp2
+        )
+          ? lastPaymentTimestamp1
+          : lastPaymentTimestamp2;
+
+        await setNextBlockTimestamp(
+          lastPaymentTimestamp.add(getDaysInSeconds(30).add(1)) // late by 1 second
+        );
+
+        await defaultStateManager.assessStates();
+      });
+
+      it("...should lock capital for 1st lending pool in protection pool 1", async () => {
+        // Verify that 1st lending pool has locked capital instance because it is in Late state
+        const lockedCapitalsLendingPool1 =
+          await defaultStateManager.getLockedCapitals(pool1, lendingPools[0]);
+
+        expect(lockedCapitalsLendingPool1.length).to.eq(1);
+        expect(lockedCapitalsLendingPool1[0].snapshotId).to.eq(1);
+        expect(lockedCapitalsLendingPool1[0].amount).to.eq(parseUSDC("70000"));
+        expect(lockedCapitalsLendingPool1[0].locked).to.eq(true);
+      });
+
+      it("...should NOT lock capital for 2nd lending pool in protection pool 1", async () => {
+        // Verify that 2nd lending pool has NO locked capital instance because it is in LateWithinGracePeriod state
+        const lockedCapitalsLendingPool2 =
+          await defaultStateManager.getLockedCapitals(pool1, lendingPools[1]);
+
+        expect(lockedCapitalsLendingPool2.length).to.eq(0);
+      });
+
+      it("...should lock capital for 2nd lending pool in protection pool 1", async () => {
+        // Move time forward by 1 day + 1 second last payment timestamp
+        // 2nd lending pool should mover from LateWithinGracePeriod to Late state
+        await moveForwardTimeByDays(1);
+        await defaultStateManager.assessStates();
+
+        // Verify that 2nd lending pool in Pool 1 is in late state and has locked capital instances
+        const lockedCapitalsLendingPool2 =
+          await defaultStateManager.getLockedCapitals(pool1, lendingPools[1]);
+
+        expect(lockedCapitalsLendingPool2.length).to.eq(1);
+        expect(lockedCapitalsLendingPool2[0].snapshotId).to.eq(2);
+
+        // locked capital amount should be same as total protection bought from lending pool 2
+        expect(lockedCapitalsLendingPool2[0].amount).to.eq(parseUSDC("50000"));
+        expect(lockedCapitalsLendingPool2[0].locked).to.eq(true);
+      });
+    });
+
+    describe("state transition from late -> active", async () => {
+      before(async () => {
+        // Make 2 consecutive payments to 2nd lending pool
+        for (let i = 0; i < 2; i++) {
+          await moveForwardTimeByDays(30);
+          await payToLendingPool(lendingPool2, "300000", usdcContract);
+
+          if (i === 0) {
+            await defaultStateManager.assessStates();
+          } else {
+            // after second payment, 2nd lending pool should move from Late to Active state
+            await expect(defaultStateManager.assessStates())
+              .to.emit(defaultStateManager, "PoolStatesAssessed")
+              .to.emit(defaultStateManager, "LendingPoolUnlocked");
+          }
+        }
+      });
+
+      it("...1st lending pool in protection pool 1 should stay locked", async () => {
+        // Verify that 1st lending pool is still locked
+        const lockedCapitalsLendingPool1 =
+          await defaultStateManager.getLockedCapitals(pool1, lendingPools[0]);
+
+        expect(lockedCapitalsLendingPool1.length).to.eq(1);
+        expect(lockedCapitalsLendingPool1[0].snapshotId).to.eq(1);
+        expect(lockedCapitalsLendingPool1[0].amount).to.eq(parseUSDC("70000"));
+        expect(lockedCapitalsLendingPool1[0].locked).to.eq(true);
+      });
+
+      describe("calculateClaimableUnlockedAmount", async () => {
+        it("...should return 0 claimable amount for deployer from pool 1", async () => {
+          expect(
+            await defaultStateManager.calculateClaimableUnlockedAmount(
+              pool1,
+              await deployer.getAddress()
+            )
+          ).to.eq(0);
+        });
+
+        it("...should return correct claimable amount for seller from pool 1", async () => {
+          // seller should be able claim 1/3rd of the locked capital = 16.66K (33.33% of 50K)
+          expect(
+            await defaultStateManager.calculateClaimableUnlockedAmount(
+              pool1,
+              sellerAddress
+            )
+          ).to.be.eq(parseUSDC("16666.666666"));
+        });
+
+        it("...should return correct claimable amount for account 1 from pool 1", async () => {
+          // Account 1 should be able claim 1/3rd of the locked capital = 16.66K (33.33% of 50K)
+          expect(
+            await defaultStateManager.calculateClaimableUnlockedAmount(
+              pool1,
+              await account1.getAddress()
+            )
+          ).to.be.eq(parseUSDC("16666.666666"));
+        });
+      });
+
+      describe("calculateAndClaimUnlockedCapital", async () => {
+        it("...should revert when called from non-pool address", async () => {
+          await expect(
+            defaultStateManager
+              .connect(deployer)
+              .calculateAndClaimUnlockedCapital(sellerAddress)
+          ).to.be.revertedWith(
+            `PoolNotRegistered("${await deployer.getAddress()}")`
+          );
+        });
+      });
+    });
+
     describe("assessStates", async () => {
       it("...should update states for registered pools", async () => {
         const pool1UpdateTimestamp =
@@ -135,187 +310,6 @@ const testDefaultStateManager: Function = (
         expect(
           await defaultStateManager.getPoolStateUpdateTimestamp(pool2)
         ).to.be.gt(pool2UpdateTimestamp);
-      });
-    });
-
-    describe("state transition from active -> late", async () => {
-      const depositToPool = async (
-        _account: Signer,
-        _depositAmount: BigNumber
-      ) => {
-        const _accountAddress = await _account.getAddress();
-        await transferAndApproveUsdc(
-          _account,
-          _depositAmount,
-          poolInstance.address
-        );
-        await poolInstance
-          .connect(_account)
-          .deposit(_depositAmount, _accountAddress);
-      };
-
-      before(async () => {
-        // deposit capital into pool
-        await depositToPool(seller, parseUSDC("50000"));
-        await depositToPool(account1, parseUSDC("50000"));
-
-        expect(await poolInstance.totalSTokenUnderlying()).to.equal(
-          parseUSDC("100000")
-        );
-
-        // we need to movePoolPhase
-        await poolInstance.connect(deployer).movePoolPhase();
-        // Pool should be in OpenToBuyers phase
-        expect((await poolInstance.getPoolInfo()).currentPhase).to.eq(1);
-
-        // Buy protection
-        const _protection_buyer = await getGoldfinchLender1();
-        await usdcContract
-          .connect(_protection_buyer)
-          .approve(poolInstance.address, parseUSDC("3000"));
-        await poolInstance.connect(_protection_buyer).buyProtection({
-          lendingPoolAddress: lendingPools[1],
-          nftLpTokenId: 590,
-          protectionAmount: parseUSDC("20000"),
-          protectionDurationInSeconds: getDaysInSeconds(20)
-        });
-
-        // await moveForwardTimeByDays(30);
-        // Move time forward by 30 days from last payment timestamp
-
-        // 1663351858 = Fri Sep 16 2022 13:10:58 GMT-0500 (Central Daylight Time)
-        const lastPaymentTimestamp1 =
-          await referenceLendingPoolsInstance.getLatestPaymentTimestamp(
-            lendingPools[0]
-          );
-
-        // 1663899496 = Thu Sep 22 2022 21:18:16 GMT-0500 (Central Daylight Time)
-        const lastPaymentTimestamp2 =
-          await referenceLendingPoolsInstance.getLatestPaymentTimestamp(
-            lendingPools[1]
-          );
-        console.log(
-          "lastPaymentTimestamp for lending pool 2",
-          lastPaymentTimestamp2.toString()
-        );
-
-        // 1666491496
-        const lastPaymentTimestamp = lastPaymentTimestamp1.gt(
-          lastPaymentTimestamp2
-        )
-          ? lastPaymentTimestamp1
-          : lastPaymentTimestamp2;
-
-        // 1666491497
-        await setNextBlockTimestamp(
-          lastPaymentTimestamp.add(getDaysInSeconds(30).add(1)) // late by 1 second
-        );
-
-        console.log(
-          "latest block timestamp: ",
-          (await getLatestBlockTimestamp()).toString()
-        );
-
-        await defaultStateManager.assessStates();
-      });
-
-      it("...should lock capital for 1st lending pool in protection pool 1", async () => {
-        // Verify that 1st lending pool has locked capital instance
-        const lockedCapitalsLendingPool1 =
-          await defaultStateManager.getLockedCapitals(pool1, lendingPools[0]);
-
-        expect(lockedCapitalsLendingPool1.length).to.eq(1);
-        expect(lockedCapitalsLendingPool1[0].snapshotId).to.eq(1);
-        expect(lockedCapitalsLendingPool1[0].amount).to.eq(0);
-        expect(lockedCapitalsLendingPool1[0].locked).to.eq(true);
-      });
-
-      it("...should NOT lock capital for 2nd lending pool in protection pool 1", async () => {
-        // Verify that 2nd lending pool has NO locked capital instance because it is in LateWithinGracePeriod state
-        const lockedCapitalsLendingPool2 =
-          await defaultStateManager.getLockedCapitals(pool1, lendingPools[1]);
-
-        expect(lockedCapitalsLendingPool2.length).to.eq(0);
-      });
-
-      it("...should lock capital for 2nd lending pool in protection pool 1", async () => {
-        // Move time forward by 1 day + 1 second last payment timestamp
-        // 2nd lending pool should mover from LateWithinGracePeriod to Late state
-        await moveForwardTimeByDays(1);
-        await defaultStateManager.assessStates();
-
-        // Verify that 2nd lending pool in Pool 1 is in late state and has locked capital instances
-        const lockedCapitalsLendingPool2 =
-          await defaultStateManager.getLockedCapitals(pool1, lendingPools[1]);
-
-        expect(lockedCapitalsLendingPool2.length).to.eq(1);
-        expect(lockedCapitalsLendingPool2[0].snapshotId).to.eq(2);
-
-        // locked capital amount should be same as total protection bought from lending pool 2
-        expect(lockedCapitalsLendingPool2[0].amount).to.eq(parseUSDC("20000"));
-        expect(lockedCapitalsLendingPool2[0].locked).to.eq(true);
-      });
-    });
-
-    describe("state transition from late -> active", async () => {
-      before(async () => {
-        // Make 2 consecutive payments to 2nd lending pool
-        for (let i = 0; i < 2; i++) {
-          await moveForwardTimeByDays(30);
-          await payToLendingPool(lendingPool2, "300000", usdcContract);
-
-          if (i === 0) {
-            await defaultStateManager.assessStates();
-          } else {
-            // after second payment, 2nd lending pool should move from Late to Active state
-            await expect(defaultStateManager.assessStates())
-              .to.emit(defaultStateManager, "PoolStatesAssessed")
-              .to.emit(defaultStateManager, "LendingPoolUnlocked");
-          }
-        }
-      });
-
-      describe("calculateClaimableUnlockedAmount", async () => {
-        it("...should return 0 claimable amount for deployer from pool 1", async () => {
-          expect(
-            await defaultStateManager.calculateClaimableUnlockedAmount(
-              pool1,
-              await deployer.getAddress()
-            )
-          ).to.eq(0);
-        });
-
-        it("...should return 10K claimable amount for seller from pool 1", async () => {
-          // seller should be able claim 50% of the locked capital = 10K (50% of 20K)
-          expect(
-            await defaultStateManager.calculateClaimableUnlockedAmount(
-              pool1,
-              sellerAddress
-            )
-          ).to.be.eq(parseUSDC("10000"));
-        });
-
-        it("...should return 10K claimable amount for account 1 from pool 1", async () => {
-          // Account 1 should be able claim 50% of the locked capital = 10K (50% of 20K)
-          expect(
-            await defaultStateManager.calculateClaimableUnlockedAmount(
-              pool1,
-              await account1.getAddress()
-            )
-          ).to.be.eq(parseUSDC("10000"));
-        });
-      });
-
-      describe("calculateAndClaimUnlockedCapital", async () => {
-        it("...should revert when called from non-pool address", async () => {
-          await expect(
-            defaultStateManager
-              .connect(deployer)
-              .calculateAndClaimUnlockedCapital(sellerAddress)
-          ).to.be.revertedWith(
-            `PoolNotRegistered("${await deployer.getAddress()}")`
-          );
-        });
       });
     });
   });
