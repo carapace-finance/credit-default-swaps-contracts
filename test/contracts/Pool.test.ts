@@ -1876,7 +1876,7 @@ const testPool: Function = (
             pool.connect(_protectionBuyer4).buyProtection({
               lendingPoolAddress: _lendingPool1,
               nftLpTokenId: 645,
-              protectionAmount: parseUSDC("10000"),
+              protectionAmount: parseUSDC("60000"),
               protectionDurationInSeconds: getDaysInSeconds(11)
             })
           ).to.be.revertedWith("PoolLeverageRatioTooLow");
