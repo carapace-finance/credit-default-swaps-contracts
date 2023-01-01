@@ -143,7 +143,10 @@ abstract contract IPool {
     IReferenceLendingPools referenceLendingPools
   );
 
-  event ProtectionSold(address protectionSeller, uint256 protectionAmount);
+  event ProtectionSold(
+    address indexed protectionSeller,
+    uint256 protectionAmount
+  );
 
   /// @notice Emitted when a new protection is bought.
   event ProtectionBought(
@@ -168,14 +171,14 @@ abstract contract IPool {
 
   /// @notice Emitted when a withdrawal request is made.
   event WithdrawalRequested(
-    address msgSender,
+    address indexed seller,
     uint256 sTokenAmount,
-    uint256 minPoolCycleIndex
+    uint256 withdrawalCycleIndex // An index of a pool cycle when actual withdrawal can be made
   );
 
   /// @notice Emitted when a withdrawal is made.
   event WithdrawalMade(
-    address msgSender,
+    address indexed seller,
     uint256 tokenAmount,
     address receiver
   );

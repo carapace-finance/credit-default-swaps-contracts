@@ -344,6 +344,16 @@ const testGoldfinchV2Adapter: Function = (
         ).to.eq(true);
       });
     });
+
+    describe("getPaymentPeriodInDays", () => {
+      it("...should return the correct payment period", async () => {
+        expect(
+          await goldfinchV2Adapter.getPaymentPeriodInDays(
+            "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf"
+          )
+        ).to.eq(BigNumber.from(30));
+      });
+    });
   });
 };
 

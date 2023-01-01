@@ -271,6 +271,27 @@ const testDefaultStateManager: Function = (
       });
     });
 
+    // TODO: Discuss with goldfinch team
+    // Why does lending pool not accept large payments?
+    xdescribe("Active -> Expired", async () => {
+      before(async () => {
+        // pay 10M to 2nd lending pool to move it to Expired state
+        await moveForwardTimeByDays(30);
+        await payToLendingPoolAddress(lendingPools[1], "3000000", usdcContract);
+
+        await defaultStateManager.assessStateBatch([pool1]);
+      });
+
+      it("...lending pool 2 should be in Expired state", async () => {
+        expect(
+          await defaultStateManager.getLendingPoolStatus(
+            pool1,
+            lendingPool2.address
+          )
+        ).to.eq(5);
+      });
+    });
+
     describe("assessStates", async () => {
       it("...should update states for registered pools", async () => {
         const pool1UpdateTimestamp =

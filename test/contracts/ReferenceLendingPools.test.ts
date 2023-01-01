@@ -477,6 +477,22 @@ const testReferenceLendingPools: Function = (
           ).to.eq(3); // Late
         });
       });
+
+      describe("getPaymentPeriodInDays", () => {
+        it("...should return the correct payment period", async () => {
+          expect(
+            await referenceLendingPoolsInstance.getPaymentPeriodInDays(
+              "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf"
+            )
+          ).to.eq(BigNumber.from(30));
+
+          expect(
+            await referenceLendingPoolsInstance.getPaymentPeriodInDays(
+              "0xb26b42dd5771689d0a7faeea32825ff9710b9c11"
+            )
+          ).to.eq(BigNumber.from(30));
+        });
+      });
     });
   });
 };

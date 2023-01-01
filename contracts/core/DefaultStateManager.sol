@@ -307,6 +307,10 @@ contract DefaultStateManager is IDefaultStateManager {
         lendingPoolStateDetail.currentStatus = LendingPoolStatus.Defaulted;
         // _moveFromLockedToDefaultedState(poolState, _lendingPool);
       }
+      /// State transition 6: any state -> Expired
+      else if (_currentStatus == LendingPoolStatus.Expired) {
+        lendingPoolStateDetail.currentStatus = LendingPoolStatus.Expired;
+      }
 
       unchecked {
         ++_lendingPoolIndex;
