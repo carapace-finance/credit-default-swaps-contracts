@@ -5,16 +5,6 @@ import {IReferenceLendingPools, ProtectionPurchaseParams} from "./IReferenceLend
 
 abstract contract ILendingProtocolAdapter {
   /**
-   * @notice Determines whether the specified lending pool is defaulted or not.
-   * @param _lendingPoolAddress the address of the lending pool
-   */
-  function isLendingPoolDefaulted(address _lendingPoolAddress)
-    external
-    view
-    virtual
-    returns (bool);
-
-  /**
    * @notice Determines whether the specified lending pool's term has ended or balance has been repaid.
    * @param _lendingPoolAddress the address of the lending pool
    */

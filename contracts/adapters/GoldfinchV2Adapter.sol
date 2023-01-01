@@ -56,17 +56,6 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
   }
 
   /// @inheritdoc ILendingProtocolAdapter
-  function isLendingPoolDefaulted(address _lendingPoolAddress)
-    external
-    view
-    override
-    returns (bool)
-  {
-    /// When “potential default” loan has write down, then lending pool is considered to be in “default” state
-    return _getSeniorPool().writedowns(_lendingPoolAddress) > 0;
-  }
-
-  /// @inheritdoc ILendingProtocolAdapter
   function isLendingPoolLate(address _lendingPoolAddress)
     external
     view

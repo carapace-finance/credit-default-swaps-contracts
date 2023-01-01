@@ -47,16 +47,6 @@ const testGoldfinchV2Adapter: Function = (
       });
     });
 
-    describe("isLendingPoolDefaulted", () => {
-      it("...should return false for a pool with writedown = 0", async () => {
-        expect(
-          await goldfinchV2Adapter.isLendingPoolDefaulted(
-            GOLDFINCH_ALMAVEST_BASKET_6_ADDRESS
-          )
-        ).to.be.false;
-      });
-    });
-
     describe("isLendingPoolLate", () => {
       it("...should return false for a pool current payment", async () => {
         expect(
