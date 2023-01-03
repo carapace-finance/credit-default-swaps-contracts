@@ -11,9 +11,11 @@ struct LockedCapital {
   bool locked;
 }
 
-struct LendingPoolStateDetail {
+struct LendingPoolStatusDetail {
+  /// @notice the current status of the lending pool
   LendingPoolStatus currentStatus;
-  uint256 waitToBeActiveTimestamp;
+  /// @notice the timestamp at which the lending pool was marked as late
+  uint256 lateTimestamp;
 }
 
 struct PoolState {
@@ -21,10 +23,10 @@ struct PoolState {
   IPool protectionPool;
   /// @notice the timestamp at which the last time pool state was updated
   uint256 updatedTimestamp;
-  /// @notice the mapping to track all lending pools referenced by the protection pool to its state details,
+  /// @notice the mapping to track all lending pools referenced by the protection pool to its status details,
   /// which includes current status (Active, Expired, Late, Defaulted)
   /// @dev this is used to track state transitions: active -> late, late -> active, late -> defaulted
-  mapping(address => LendingPoolStateDetail) lendingPoolStateDetails;
+  mapping(address => LendingPoolStatusDetail) lendingPoolStateDetails;
   /// We need an array as some users may not have claimed their locked capital and another state change(active -> late) may occur.
   /// For each lending pool, every active -> late state change creates a new instance of the locked capital.
   /// Last item in the array represents the latest state change.
@@ -70,17 +72,6 @@ abstract contract IDefaultStateManager {
   function registerPool(IPool _protectionPool) external virtual;
 
   /**
-   * @notice Provides the current status of the specified lending pool of given protection pool.
-   * @param _protectionPoolAddress address of the protection pool
-   * @param _lendingPoolAddress address of the lending pool
-   * @return the status of the lending pool
-   */
-  function getLendingPoolStatus(
-    address _protectionPoolAddress,
-    address _lendingPoolAddress
-  ) public view virtual returns (LendingPoolStatus);
-
-  /**
    * @notice assess states of all registered pools and initiate state changes & related actions as needed.
    */
   function assessStates() external virtual;
@@ -112,4 +103,15 @@ abstract contract IDefaultStateManager {
     address _protectionPool,
     address _seller
   ) external view virtual returns (uint256 _claimableUnlockedCapital);
+
+  /**
+   * @notice Provides the current status of the specified lending pool of given protection pool.
+   * @param _protectionPoolAddress address of the protection pool
+   * @param _lendingPoolAddress address of the lending pool
+   * @return the status of the lending pool
+   */
+  function getLendingPoolStatus(
+    address _protectionPoolAddress,
+    address _lendingPoolAddress
+  ) external view virtual returns (LendingPoolStatus);
 }

@@ -6,7 +6,7 @@ import {ERC20Snapshot} from "@openzeppelin/contracts/token/ERC20/extensions/ERC2
 import {IReferenceLendingPools, LendingPoolStatus} from "../interfaces/IReferenceLendingPools.sol";
 import {ILendingProtocolAdapter} from "../interfaces/ILendingProtocolAdapter.sol";
 import {IPool} from "../interfaces/IPool.sol";
-import {IDefaultStateManager, PoolState, LockedCapital, LendingPoolStateDetail} from "../interfaces/IDefaultStateManager.sol";
+import {IDefaultStateManager, PoolState, LockedCapital, LendingPoolStatusDetail} from "../interfaces/IDefaultStateManager.sol";
 import "../libraries/Constants.sol";
 
 import "hardhat/console.sol";
@@ -18,7 +18,7 @@ contract DefaultStateManager is IDefaultStateManager {
 
   /// @notice stores the current state of all pools in the system.
   /// @dev Array is used for enumerating all pools during state assessment.
-  PoolState[] public poolStates;
+  PoolState[] private poolStates;
 
   /// @notice tracks an index of PoolState for each pool in poolStates array.
   mapping(address => uint256) private poolStateIndex;
@@ -68,17 +68,6 @@ contract DefaultStateManager is IDefaultStateManager {
     _assessState(poolStates[newIndex]);
 
     emit PoolRegistered(poolAddress);
-  }
-
-  /// @inheritdoc IDefaultStateManager
-  function getLendingPoolStatus(
-    address _protectionPoolAddress,
-    address _lendingPoolAddress
-  ) public view override returns (LendingPoolStatus) {
-    return
-      poolStates[poolStateIndex[_protectionPoolAddress]]
-        .lendingPoolStateDetails[_lendingPoolAddress]
-        .currentStatus;
   }
 
   /// @inheritdoc IDefaultStateManager
@@ -175,7 +164,7 @@ contract DefaultStateManager is IDefaultStateManager {
   function calculateClaimableUnlockedAmount(
     address _protectionPool,
     address _seller
-  ) public view override returns (uint256 _claimableUnlockedCapital) {
+  ) external view override returns (uint256 _claimableUnlockedCapital) {
     PoolState storage poolState = poolStates[poolStateIndex[_protectionPool]];
 
     /// Calculate the claimable amount only when the pool is registered
@@ -205,6 +194,17 @@ contract DefaultStateManager is IDefaultStateManager {
     }
   }
 
+  /// @inheritdoc IDefaultStateManager
+  function getLendingPoolStatus(
+    address _protectionPoolAddress,
+    address _lendingPoolAddress
+  ) external view override returns (LendingPoolStatus) {
+    return
+      poolStates[poolStateIndex[_protectionPoolAddress]]
+        .lendingPoolStateDetails[_lendingPoolAddress]
+        .currentStatus;
+  }
+
   /** internal functions */
 
   /**
@@ -225,10 +225,10 @@ contract DefaultStateManager is IDefaultStateManager {
         .assessState();
 
     /// Compare previous and current status of each lending pool and perform the required state transition
-    uint256 length = _lendingPools.length;
-    for (uint256 _lendingPoolIndex; _lendingPoolIndex < length; ) {
+    uint256 _length = _lendingPools.length;
+    for (uint256 _lendingPoolIndex; _lendingPoolIndex < _length; ) {
       address _lendingPool = _lendingPools[_lendingPoolIndex];
-      LendingPoolStateDetail storage lendingPoolStateDetail = poolState
+      LendingPoolStatusDetail storage lendingPoolStateDetail = poolState
         .lendingPoolStateDetails[_lendingPool];
 
       LendingPoolStatus _previousStatus = lendingPoolStateDetail.currentStatus;
@@ -236,33 +236,15 @@ contract DefaultStateManager is IDefaultStateManager {
 
       if (_previousStatus != _currentStatus) {
         console.log(
-          "Lending pool %s status is changed from %s to  %s",
+          "DefaultStateManager: Lending pool %s status is changed from %s to  %s",
           _lendingPool,
           uint256(_previousStatus),
           uint256(_currentStatus)
         );
       }
 
-      /// State transition 1: NotSupported -> Active
-      /// This is to mark the status of the lending pool as Active, when state is being assessed for the first time
+      /// State transition 1: Active or LateWithinGracePeriod -> Late
       if (
-        _previousStatus == LendingPoolStatus.NotSupported &&
-        _currentStatus == LendingPoolStatus.Active
-      ) {
-        lendingPoolStateDetail.currentStatus = LendingPoolStatus.Active;
-        /// No action required for this state transition
-      }
-      /// State transition 2: Active -> LateWithinGracePeriod
-      else if (
-        _previousStatus == LendingPoolStatus.Active &&
-        _currentStatus == LendingPoolStatus.LateWithinGracePeriod
-      ) {
-        lendingPoolStateDetail.currentStatus = LendingPoolStatus
-          .LateWithinGracePeriod;
-        /// No action required for this state transition
-      }
-      /// State transition 3: Active -> Late or LateWithinGracePeriod -> Late
-      else if (
         (_previousStatus == LendingPoolStatus.Active ||
           _previousStatus == LendingPoolStatus.LateWithinGracePeriod) &&
         _currentStatus == LendingPoolStatus.Late
@@ -270,46 +252,43 @@ contract DefaultStateManager is IDefaultStateManager {
         lendingPoolStateDetail.currentStatus = LendingPoolStatus.Late;
         _moveFromActiveToLockedState(poolState, _lendingPool);
 
-        /// Lending pool can now only become active after lending pool has 2 consecutive payments on time
-        uint256 _paymentPeriodInDays = poolState
-          .protectionPool
-          .getPoolInfo()
-          .referenceLendingPools
-          .getPaymentPeriodInDays(_lendingPool);
-        uint256 waitTimeInSeconds = (_paymentPeriodInDays * 2) *
-          Constants.SECONDS_IN_DAY_UINT;
+        /// Capture the timestamp when the lending pool became late
+        lendingPoolStateDetail.lateTimestamp = block.timestamp;
+      } else if (_previousStatus == LendingPoolStatus.Late) {
+        /// Once there is a late payment, we wait for 2 payment periods.
+        /// After 2 payment periods are elapsed, either full payment is going to be made or not.
+        /// If all missed payments(full payment) are made, then a pool goes back to active.
+        /// If full payment is not made, then this lending pool is in the default state.
+        if (
+          block.timestamp >
+          (lendingPoolStateDetail.lateTimestamp +
+            _getTwoPaymentPeriodsInSeconds(poolState, _lendingPool))
+        ) {
+          /// State transition 4: Late -> Active
+          if (_currentStatus == LendingPoolStatus.Active) {
+            lendingPoolStateDetail.currentStatus = LendingPoolStatus.Active;
+            _moveFromLockedToActiveState(poolState, _lendingPool);
 
-        /// Capture the timestamp when the lending pool can become active again
-        lendingPoolStateDetail.waitToBeActiveTimestamp =
-          block.timestamp +
-          waitTimeInSeconds;
-
-        console.log(
-          "Lending pool: %s can not be active again until: %s",
-          _lendingPool,
-          block.timestamp + waitTimeInSeconds
-        );
-      }
-      /// State transition 4: Late -> Active
-      else if (
-        block.timestamp > lendingPoolStateDetail.waitToBeActiveTimestamp &&
-        _previousStatus == LendingPoolStatus.Late &&
-        _currentStatus == LendingPoolStatus.Active
+            /// Clear the late timestamp
+            lendingPoolStateDetail.lateTimestamp = 0;
+          }
+          /// State transition 5: Late -> Defaulted
+          else if (_currentStatus == LendingPoolStatus.Late) {
+            lendingPoolStateDetail.currentStatus = LendingPoolStatus.Defaulted;
+            // _moveFromLockedToDefaultedState(poolState, _lendingPool);
+          }
+        }
+      } else if (
+        _previousStatus == LendingPoolStatus.Defaulted ||
+        _previousStatus == LendingPoolStatus.Expired
       ) {
-        lendingPoolStateDetail.currentStatus = LendingPoolStatus.Active;
-        _moveFromLockedToActiveState(poolState, _lendingPool);
-      }
-      /// State transition 5: Late -> Defaulted
-      else if (
-        _previousStatus == LendingPoolStatus.Late &&
-        _currentStatus == LendingPoolStatus.Defaulted
-      ) {
-        lendingPoolStateDetail.currentStatus = LendingPoolStatus.Defaulted;
-        // _moveFromLockedToDefaultedState(poolState, _lendingPool);
-      }
-      /// State transition 6: any state -> Expired
-      else if (_currentStatus == LendingPoolStatus.Expired) {
-        lendingPoolStateDetail.currentStatus = LendingPoolStatus.Expired;
+        /// no state transition for Defaulted or Expired state
+      } else {
+        /// Only update the status in storage if it is changed
+        if (_previousStatus != _currentStatus) {
+          lendingPoolStateDetail.currentStatus = _currentStatus;
+          /// No action required for any other state transition
+        }
       }
 
       unchecked {
@@ -451,5 +430,17 @@ contract DefaultStateManager is IDefaultStateManager {
       _lendingPool
     ];
     _lockedCapital = lockedCapitals[lockedCapitals.length - 1];
+  }
+
+  function _getTwoPaymentPeriodsInSeconds(
+    PoolState storage poolState,
+    address _lendingPool
+  ) internal view returns (uint256) {
+    uint256 _paymentPeriodInDays = poolState
+      .protectionPool
+      .getPoolInfo()
+      .referenceLendingPools
+      .getPaymentPeriodInDays(_lendingPool);
+    return (_paymentPeriodInDays * 2) * Constants.SECONDS_IN_DAY_UINT;
   }
 }

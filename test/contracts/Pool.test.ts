@@ -1563,23 +1563,41 @@ const testPool: Function = (
           expect(_lockedCapitalLP1).to.be.undefined;
         });
 
-        it("...should have unlocked capital after payment for lending pool 2", async () => {
+        it("...should have unlocked capital after 2 consecutive payments for lending pool 2", async () => {
           // Make 2 consecutive payments to 2nd lending pool
           for (let i = 0; i < 2; i++) {
             await moveForwardTimeByDays(30);
-
-            // pay lending pool 1
-            await payToLendingPoolAddress(_lendingPool1, "1000000", USDC);
-
             await payToLendingPool(lendingPool2, "300000", USDC);
 
+            // keep paying lending pool 1
+            await payToLendingPoolAddress(_lendingPool1, "300000", USDC);
+
             if (i === 0) {
-              await defaultStateManager.assessStates();
+              await defaultStateManager.assessStateBatch([
+                poolInstance.address
+              ]);
+
+              // verify that lending pool 2 is still in late state
+              expect(
+                await defaultStateManager.getLendingPoolStatus(
+                  poolInstance.address,
+                  _lendingPool2
+                )
+              ).to.be.eq(3); // Late
             } else {
               // after second payment, 2nd lending pool should move from Late to Active state
-              await expect(defaultStateManager.assessStates())
+              await expect(
+                defaultStateManager.assessStateBatch([poolInstance.address])
+              )
                 .to.emit(defaultStateManager, "PoolStatesAssessed")
                 .to.emit(defaultStateManager, "LendingPoolUnlocked");
+
+              expect(
+                await defaultStateManager.getLendingPoolStatus(
+                  poolInstance.address,
+                  _lendingPool2
+                )
+              ).to.be.eq(1);
             }
           }
 
