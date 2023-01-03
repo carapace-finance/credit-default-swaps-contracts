@@ -114,41 +114,6 @@ contract ReferenceLendingPools is
   }
 
   /// @inheritdoc IReferenceLendingPools
-  function getLendingPoolStatus(address _lendingPoolAddress)
-    public
-    view
-    override
-    returns (LendingPoolStatus)
-  {
-    if (!_isReferenceLendingPoolAdded(_lendingPoolAddress)) {
-      return LendingPoolStatus.NotSupported;
-    }
-
-    ILendingProtocolAdapter _adapter = _getLendingProtocolAdapter(
-      _lendingPoolAddress
-    );
-
-    if (_adapter.isLendingPoolExpired(_lendingPoolAddress)) {
-      return LendingPoolStatus.Expired;
-    }
-
-    if (
-      _adapter.isLendingPoolLateWithinGracePeriod(
-        _lendingPoolAddress,
-        Constants.LATE_PAYMENT_GRACE_PERIOD_IN_DAYS
-      )
-    ) {
-      return LendingPoolStatus.LateWithinGracePeriod;
-    }
-
-    if (_adapter.isLendingPoolLate(_lendingPoolAddress)) {
-      return LendingPoolStatus.Late;
-    }
-
-    return LendingPoolStatus.Active;
-  }
-
-  /// @inheritdoc IReferenceLendingPools
   function canBuyProtection(
     address _buyer,
     ProtectionPurchaseParams calldata _purchaseParams,
@@ -210,7 +175,7 @@ contract ReferenceLendingPools is
     _statues = new LendingPoolStatus[](length);
     for (uint256 i; i < length; ) {
       _lendingPools[i] = lendingPools[i];
-      _statues[i] = getLendingPoolStatus(lendingPools[i]);
+      _statues[i] = _getLendingPoolStatus(lendingPools[i]);
       unchecked {
         ++i;
       }
@@ -302,7 +267,7 @@ contract ReferenceLendingPools is
       );
     }
 
-    LendingPoolStatus _poolStatus = getLendingPoolStatus(_lendingPoolAddress);
+    LendingPoolStatus _poolStatus = _getLendingPoolStatus(_lendingPoolAddress);
     if (_poolStatus != LendingPoolStatus.Active) {
       revert ReferenceLendingPoolIsNotActive(_lendingPoolAddress);
     }
@@ -343,5 +308,38 @@ contract ReferenceLendingPools is
     } else {
       revert LendingProtocolNotSupported(protocol);
     }
+  }
+
+  function _getLendingPoolStatus(address _lendingPoolAddress)
+    internal
+    view
+    returns (LendingPoolStatus)
+  {
+    if (!_isReferenceLendingPoolAdded(_lendingPoolAddress)) {
+      return LendingPoolStatus.NotSupported;
+    }
+
+    ILendingProtocolAdapter _adapter = _getLendingProtocolAdapter(
+      _lendingPoolAddress
+    );
+
+    if (_adapter.isLendingPoolExpired(_lendingPoolAddress)) {
+      return LendingPoolStatus.Expired;
+    }
+
+    if (
+      _adapter.isLendingPoolLateWithinGracePeriod(
+        _lendingPoolAddress,
+        Constants.LATE_PAYMENT_GRACE_PERIOD_IN_DAYS
+      )
+    ) {
+      return LendingPoolStatus.LateWithinGracePeriod;
+    }
+
+    if (_adapter.isLendingPoolLate(_lendingPoolAddress)) {
+      return LendingPoolStatus.Late;
+    }
+
+    return LendingPoolStatus.Active;
   }
 }

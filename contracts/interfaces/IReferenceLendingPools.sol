@@ -90,17 +90,6 @@ abstract contract IReferenceLendingPools {
   function getLendingPools() public view virtual returns (address[] memory);
 
   /**
-   * @notice Provides the status of the specified lending pool.
-   * @param _lendingPoolAddress address of the lending pool
-   * @return the status of the lending pool
-   */
-  function getLendingPoolStatus(address _lendingPoolAddress)
-    public
-    view
-    virtual
-    returns (LendingPoolStatus);
-
-  /**
    * @notice Determines whether a buyer can buy the protection for the specified lending pool or not.
    * 1. A buyer can buy protection only within certain time an underlying lending pool added
    * to the basket of the Carapace eligible loans.
