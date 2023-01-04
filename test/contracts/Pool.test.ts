@@ -192,6 +192,20 @@ const testPool: Function = (
       );
     };
 
+    const verifyMaxAllowedProtectionDuration = async () => {
+      const currentTimestamp = await getLatestBlockTimestamp();
+      const currentPoolCycle = await poolCycleManager.getCurrentPoolCycle(
+        poolInfo.poolId
+      );
+
+      // max duration = next cycle's end timestamp - currentTimestamp
+      expect(await poolInstance.calculateMaxAllowedProtectionDuration()).to.eq(
+        currentPoolCycle.currentCycleStartTime
+          .add(currentPoolCycle.cycleDuration.mul(2))
+          .sub(currentTimestamp)
+      );
+    };
+
     before("setup", async () => {
       deployerAddress = await deployer.getAddress();
       sellerAddress = await seller.getAddress();
@@ -364,6 +378,12 @@ const testPool: Function = (
 
     describe("...1st pool cycle", async () => {
       const currentPoolCycleIndex = 0;
+
+      describe("calculateMaxAllowedProtectionDuration", () => {
+        it("...should return correct duration", async () => {
+          await verifyMaxAllowedProtectionDuration();
+        });
+      });
 
       describe("...deposit", async () => {
         const _depositAmount = "40000";
@@ -1555,13 +1575,20 @@ const testPool: Function = (
 
     describe("...2nd pool cycle", async () => {
       const currentPoolCycleIndex = 1;
-      describe("...open period but no withdrawal", async () => {
-        before(async () => {
-          // Move pool cycle(10 days open period, 30 days total duration) to open state of 2nd cycle
-          // day 31(20 + 11): 1st day of cycle 2
-          await moveForwardTimeByDays(20);
-        });
 
+      before(async () => {
+        // Move pool cycle(10 days open period, 30 days total duration) to open state of 2nd cycle
+        // day 31(20 + 11): 1st day of cycle 2
+        await moveForwardTimeByDays(20);
+      });
+
+      describe("calculateMaxAllowedProtectionDuration", () => {
+        it("...should return correct duration", async () => {
+          await verifyMaxAllowedProtectionDuration();
+        });
+      });
+
+      describe("...open period but no withdrawal", async () => {
         it("...pool cycle should be in open state", async () => {
           await verifyPoolState(currentPoolCycleIndex, 1); // 1 = Open
         });
@@ -1935,13 +1962,19 @@ const testPool: Function = (
     describe("...3rd pool cycle", async () => {
       const currentPoolCycleIndex = 2;
 
-      describe("...open period with withdrawal", async () => {
-        before(async () => {
-          // Move pool cycle(10 days open period, 30 days total duration) to open state (next pool cycle)
-          // day 62(42 + 20): 2nd day of cycle 3
-          await moveForwardTimeByDays(20);
-        });
+      before(async () => {
+        // Move pool cycle(10 days open period, 30 days total duration) to open state (next pool cycle)
+        // day 62(42 + 20): 2nd day of cycle 3
+        await moveForwardTimeByDays(20);
+      });
 
+      describe("calculateMaxAllowedProtectionDuration", () => {
+        it("...should return correct duration", async () => {
+          await verifyMaxAllowedProtectionDuration();
+        });
+      });
+
+      describe("...open period with withdrawal", async () => {
         it("...pool cycle should be in open state", async () => {
           await verifyPoolState(currentPoolCycleIndex, 1); // 1 = Open
         });

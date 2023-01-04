@@ -318,4 +318,14 @@ abstract contract IPool {
     address _lendingPool,
     uint256 _nftLpTokenId
   ) external view virtual returns (uint256 _maxAllowedProtectionAmount);
+
+  /**
+   * @notice Calculates the max protection duration allowed for buying or extending a protection at this moment.
+   * @return _maxAllowedProtectionDurationInSeconds The max allowed protection duration in seconds as unscaled integer.
+   */
+  function calculateMaxAllowedProtectionDuration()
+    external
+    view
+    virtual
+    returns (uint256 _maxAllowedProtectionDurationInSeconds);
 }

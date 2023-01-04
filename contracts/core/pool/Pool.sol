@@ -695,6 +695,18 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       );
   }
 
+  /// @inheritdoc IPool
+  function calculateMaxAllowedProtectionDuration()
+    external
+    view
+    override
+    returns (uint256 _maxAllowedProtectionDurationInSeconds)
+  {
+    _maxAllowedProtectionDurationInSeconds =
+      poolCycleManager.getNextCycleEndTimestamp(poolInfo.poolId) -
+      block.timestamp;
+  }
+
   /*** internal functions */
 
   function _verifyAndCreateProtection(
