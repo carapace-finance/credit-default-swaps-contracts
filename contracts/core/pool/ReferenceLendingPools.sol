@@ -141,10 +141,14 @@ contract ReferenceLendingPools is
       return false;
     }
 
-    /// Verify that protection amount is NOT greater than the amount lent to the underlying lending pool
+    /// Verify that protection amount is less than or equal to the remaining principal that buyer has lent to the underlying lending pool
     return
-      _getLendingProtocolAdapter(_purchaseParams.lendingPoolAddress)
-        .isProtectionAmountValid(_buyer, _purchaseParams);
+      _purchaseParams.protectionAmount <=
+      calculateRemainingPrincipal(
+        _purchaseParams.lendingPoolAddress,
+        _buyer,
+        _purchaseParams.nftLpTokenId
+      );
   }
 
   /// @inheritdoc IReferenceLendingPools
@@ -196,6 +200,7 @@ contract ReferenceLendingPools is
   {
     return
       _getLendingProtocolAdapter(_lendingPool).calculateRemainingPrincipal(
+        _lendingPool,
         _lender,
         _nftLpTokenId
       );

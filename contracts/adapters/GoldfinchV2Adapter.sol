@@ -86,31 +86,6 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
   }
 
   /// @inheritdoc ILendingProtocolAdapter
-  function isProtectionAmountValid(
-    address _buyer,
-    ProtectionPurchaseParams memory _purchaseParams
-  ) external view override returns (bool _isValid) {
-    // Verify that buyer owns the specified token
-    IPoolTokens _poolTokens = _getPoolTokens();
-    bool ownsToken = _poolTokens.ownerOf(_purchaseParams.nftLpTokenId) ==
-      _buyer;
-
-    // Verify that buyer has a junior tranche position in the lending pool
-    IPoolTokens.TokenInfo memory tokenInfo = _poolTokens.getTokenInfo(
-      _purchaseParams.nftLpTokenId
-    );
-    bool hasJuniorTrancheToken = tokenInfo.pool ==
-      _purchaseParams.lendingPoolAddress &&
-      _isJuniorTrancheId(tokenInfo.tranche);
-
-    // Verify that protection amount is less than or equal to the principal amount lent to the lending pool
-    _isValid =
-      ownsToken &&
-      hasJuniorTrancheToken &&
-      _purchaseParams.protectionAmount <= tokenInfo.principalAmount;
-  }
-
-  /// @inheritdoc ILendingProtocolAdapter
   function getLendingPoolTermEndTimestamp(address _lendingPoolAddress)
     external
     view
@@ -154,12 +129,11 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
   }
 
   /// @inheritdoc ILendingProtocolAdapter
-  function calculateRemainingPrincipal(address _lender, uint256 _nftLpTokenId)
-    public
-    view
-    override
-    returns (uint256 _principalRemaining)
-  {
+  function calculateRemainingPrincipal(
+    address _lendingPoolAddress,
+    address _lender,
+    uint256 _nftLpTokenId
+  ) public view override returns (uint256 _principalRemaining) {
     IPoolTokens _poolTokens = _getPoolTokens();
 
     /// If lender owns the NFT, then calculate the remaining principal
@@ -168,9 +142,17 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
       IPoolTokens.TokenInfo memory _tokenInfo = _poolTokens.getTokenInfo(
         _nftLpTokenId
       );
-      _principalRemaining =
-        _tokenInfo.principalAmount -
-        _tokenInfo.principalRedeemed;
+
+      /// If the token is for the specified lending pool and is a junior tranche, then calculate the remaining principal
+      /// otherwise, the remaining principal is zero
+      if (
+        _tokenInfo.pool == _lendingPoolAddress &&
+        _isJuniorTrancheId(_tokenInfo.tranche)
+      ) {
+        _principalRemaining =
+          _tokenInfo.principalAmount -
+          _tokenInfo.principalRedeemed;
+      }
     }
   }
 

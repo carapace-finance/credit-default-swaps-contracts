@@ -324,6 +324,44 @@ const testPool: Function = (
       });
     });
 
+    describe("calculateMaxAllowedProtectionAmount", () => {
+      let buyer: Signer;
+
+      before(async () => {
+        buyer = await ethers.getImpersonatedSigner(
+          "0xcb726f13479963934e91b6f34b6e87ec69c21bb9"
+        );
+      });
+
+      it("...should return the correct remaining principal", async () => {
+        expect(
+          await poolInstance
+            .connect(buyer)
+            .calculateMaxAllowedProtectionAmount(_lendingPool2, 615)
+        ).to.eq(parseUSDC("35000"));
+      });
+
+      it("...should return the 0 remaining principal for non-owner", async () => {
+        // lender doesn't own the NFT
+        expect(
+          await poolInstance
+            .connect(buyer)
+            .calculateMaxAllowedProtectionAmount(_lendingPool2, 590)
+        ).to.eq(0);
+      });
+
+      it("...should return 0 when the buyer owns the NFT for different pool", async () => {
+        // see: https://lark.market/tokenDetail?tokenId=142
+        // Buyer owns this token, but pool for this token is 0x57686612c601cb5213b01aa8e80afeb24bbd01df
+
+        expect(
+          await poolInstance
+            .connect(buyer)
+            .calculateMaxAllowedProtectionAmount(_lendingPool1, 142)
+        ).to.be.eq(0);
+      });
+    });
+
     describe("...1st pool cycle", async () => {
       const currentPoolCycleIndex = 0;
 

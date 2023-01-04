@@ -11,7 +11,6 @@ import {
   getDaysInSeconds,
   getLatestBlockTimestamp,
   moveForwardTime,
-  moveForwardTimeByDays,
   setNextBlockTimestamp
 } from "../utils/time";
 import { toBytes32, setStorageAt, getStorageAt } from "../utils/storage";
@@ -135,68 +134,17 @@ const testGoldfinchV2Adapter: Function = (
       });
     });
 
-    describe("isProtectionAmountValid", () => {
-      let _purchaseParams: ProtectionPurchaseParamsStruct;
-      before("set up", async () => {
-        _purchaseParams = {
-          lendingPoolAddress: GOLDFINCH_ALMAVEST_BASKET_6_ADDRESS,
-          nftLpTokenId: 452,
-          protectionAmount: parseUSDC("100"),
-          protectionDurationInSeconds: getDaysInSeconds(30)
-        };
-      });
-
-      it("...should return true if the protection amount is valid", async () => {
-        // principal amt for the buyer: 3298.142704
-        expect(
-          await goldfinchV2Adapter.isProtectionAmountValid(
-            BUYER1,
-            _purchaseParams
-          )
-        ).to.eq(true);
-      });
-
-      it("...should return false when the protection amount is greater than principal", async () => {
-        // principal amt for the buyer: 3298.142704
-        const _protectionAmount = parseUSDC("5000");
-        _purchaseParams.protectionAmount = _protectionAmount;
-
-        expect(
-          await goldfinchV2Adapter.isProtectionAmountValid(
-            BUYER1,
-            _purchaseParams
-          )
-        ).to.be.false;
-      });
-
-      it("...should return false when the buyer does not own the NFT specified", async () => {
-        expect(
-          await goldfinchV2Adapter.isProtectionAmountValid(
-            BUYER2,
-            _purchaseParams
-          )
-        ).to.be.false;
-      });
-
-      it("...should return false when the buyer owns the NFT for different pool", async () => {
-        _purchaseParams.nftLpTokenId = 142;
-
-        expect(
-          await goldfinchV2Adapter.isProtectionAmountValid(
-            BUYER3,
-            _purchaseParams
-          )
-        ).to.be.false;
-      });
-    });
-
     describe("calculateRemainingPrincipal", () => {
+      const LENDER = "0x008c84421da5527f462886cec43d2717b686a7e4";
+      const LENDING_POOL = "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf";
+
       it("...should return the correct remaining principal", async () => {
         // token info: pool,                           tranche, principal,    principalRedeemed, interestRedeemed
         // 0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf, 2,       420000000000, 223154992,         35191845008
         expect(
           await goldfinchV2Adapter.calculateRemainingPrincipal(
-            "0x008c84421da5527f462886cec43d2717b686a7e4",
+            LENDING_POOL,
+            LENDER,
             590
           )
         ).to.eq(parseUSDC("419776.845008"));
@@ -206,8 +154,19 @@ const testGoldfinchV2Adapter: Function = (
         // lender doesn't own the NFT
         expect(
           await goldfinchV2Adapter.calculateRemainingPrincipal(
-            "0x008c84421da5527f462886cec43d2717b686a7e4",
+            LENDING_POOL,
+            LENDER,
             591
+          )
+        ).to.eq(0);
+      });
+
+      it("...should return 0 when the buyer owns the NFT for different pool", async () => {
+        expect(
+          await goldfinchV2Adapter.calculateRemainingPrincipal(
+            GOLDFINCH_ALMAVEST_BASKET_6_ADDRESS,
+            BUYER3,
+            142
           )
         ).to.eq(0);
       });

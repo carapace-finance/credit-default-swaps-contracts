@@ -306,4 +306,16 @@ abstract contract IPool {
   function calculateProtectionPremium(
     ProtectionPurchaseParams calldata _protectionPurchaseParams
   ) external view virtual returns (uint256 _premiumAmount, bool _isMinPremium);
+
+  /**
+   * @notice Calculates the max protection amount allowed in underlying token for the given lending position.
+   * If buyer does not have matching lending position, then it returns 0.
+   * @param _lendingPool address of the lending pool
+   * @param _nftLpTokenId the id of NFT token representing the lending position of the buyer (msg.sender)
+   * @return _maxAllowedProtectionAmount The max allowed protection amount in underlying token.
+   */
+  function calculateMaxAllowedProtectionAmount(
+    address _lendingPool,
+    uint256 _nftLpTokenId
+  ) external view virtual returns (uint256 _maxAllowedProtectionAmount);
 }

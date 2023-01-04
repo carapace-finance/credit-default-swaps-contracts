@@ -682,6 +682,19 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     );
   }
 
+  /// @inheritdoc IPool
+  function calculateMaxAllowedProtectionAmount(
+    address _lendingPool,
+    uint256 _nftLpTokenId
+  ) external view override returns (uint256 _maxAllowedProtectionAmount) {
+    return
+      poolInfo.referenceLendingPools.calculateRemainingPrincipal(
+        _lendingPool,
+        msg.sender,
+        _nftLpTokenId
+      );
+  }
+
   /*** internal functions */
 
   function _verifyAndCreateProtection(
