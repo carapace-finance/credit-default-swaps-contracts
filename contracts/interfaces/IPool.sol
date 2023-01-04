@@ -132,7 +132,10 @@ abstract contract IPool {
   error PoolInOpenToBuyersPhase(uint256 poolId);
   error NoExpiredProtectionToExtend();
   error CanNotExtendProtectionAfterGracePeriod();
-
+  error PremiumExceedsMaxPremiumAmount(
+    uint256 premiumAmount,
+    uint256 maxPremiumAmount
+  );
   /*** events ***/
 
   /// @notice Emitted when a new pool is created.
@@ -191,9 +194,11 @@ abstract contract IPool {
    * Buyer must have a position in the lending pool & principal must be less or equal to the protection amount.
    * Buyer must approve underlying tokens to pay the expected premium.
    * @param _protectionPurchaseParams The protection purchase parameters such as protection amount, duration, lending pool etc.
+   * @param _maxPremiumAmount the max protection premium in underlying tokens that buyer is willing to pay
    */
   function buyProtection(
-    ProtectionPurchaseParams calldata _protectionPurchaseParams
+    ProtectionPurchaseParams calldata _protectionPurchaseParams,
+    uint256 _maxPremiumAmount
   ) external virtual;
 
   /**
@@ -202,9 +207,11 @@ abstract contract IPool {
    * Protection extension's duration must not exceed the end time of next pool cycle.
    * Buyer must approve underlying tokens to pay the expected premium.
    * @param _protectionPurchaseParams The protection purchase parameters such as protection amount, duration, lending pool etc.
+   * @param _maxPremiumAmount the max protection premium in underlying tokens that buyer is willing to pay
    */
   function extendProtection(
-    ProtectionPurchaseParams calldata _protectionPurchaseParams
+    ProtectionPurchaseParams calldata _protectionPurchaseParams,
+    uint256 _maxPremiumAmount
   ) external virtual;
 
   /**
@@ -289,4 +296,14 @@ abstract contract IPool {
    * @param _receiver The address to receive the underlying token amount.
    */
   function claimUnlockedCapital(address _receiver) external virtual;
+
+  /**
+   * @notice Calculates the premium amount for the given protection purchase params.
+   * @param _protectionPurchaseParams The protection purchase parameters such as protection amount, duration, lending pool etc.
+   * @return _premiumAmount The premium amount in underlying token.
+   * @return _isMinPremium Whether the premium amount is minimum premium or not.
+   */
+  function calculateProtectionPremium(
+    ProtectionPurchaseParams calldata _protectionPurchaseParams
+  ) external view virtual returns (uint256 _premiumAmount, bool _isMinPremium);
 }

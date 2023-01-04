@@ -294,7 +294,8 @@ const testReferenceLendingPools: Function = (
             lendingPoolAddress: LENDING_POOL_3,
             nftLpTokenId: 714, // see: https://lark.market/tokenDetail?tokenId=714
             protectionAmount: parseUSDC("100"),
-            protectionDurationInSeconds: getDaysInSeconds(30)
+            protectionDurationInSeconds: getDaysInSeconds(30),
+            maxPremiumAmount: parseUSDC("1")
           };
         });
 

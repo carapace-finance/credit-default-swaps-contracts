@@ -126,18 +126,21 @@ contract Pool is IPool, SToken, ReentrancyGuard {
 
   /// @inheritdoc IPool
   function buyProtection(
-    ProtectionPurchaseParams calldata _protectionPurchaseParams
+    ProtectionPurchaseParams calldata _protectionPurchaseParams,
+    uint256 _maxPremiumAmount
   ) external override whenNotPaused nonReentrant {
     _verifyAndCreateProtection(
       block.timestamp,
       _protectionPurchaseParams,
+      _maxPremiumAmount,
       false
     );
   }
 
   /// @inheritdoc IPool
   function extendProtection(
-    ProtectionPurchaseParams calldata _protectionPurchaseParams
+    ProtectionPurchaseParams calldata _protectionPurchaseParams,
+    uint256 _maxPremiumAmount
   ) external override whenNotPaused nonReentrant {
     /// Verify that user can extend protection
     PoolHelper.verifyBuyerCanExtendProtection(
@@ -150,6 +153,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     _verifyAndCreateProtection(
       block.timestamp,
       _protectionPurchaseParams,
+      _maxPremiumAmount,
       true
     );
   }
@@ -658,11 +662,32 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       protectionBuyerAccounts[_buyer].lendingPoolToPremium[_lendingPoolAddress];
   }
 
+  /// @inheritdoc IPool
+  function calculateProtectionPremium(
+    ProtectionPurchaseParams calldata _protectionPurchaseParams
+  )
+    external
+    view
+    override
+    returns (uint256 _premiumAmount, bool _isMinPremium)
+  {
+    uint256 _leverageRatio = calculateLeverageRatio();
+
+    (, _premiumAmount, _isMinPremium) = PoolHelper.calculateProtectionPremium(
+      premiumCalculator,
+      poolInfo,
+      _protectionPurchaseParams,
+      totalSTokenUnderlying,
+      _leverageRatio
+    );
+  }
+
   /*** internal functions */
 
   function _verifyAndCreateProtection(
     uint256 _protectionStartTimestamp,
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
+    uint256 _maxPremiumAmount,
     bool _isExtension
   ) internal {
     /// Verify that user can buy protection
@@ -701,6 +726,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
         poolInfo,
         lendingPoolDetail,
         _protectionPurchaseParams,
+        _maxPremiumAmount,
         totalSTokenUnderlying,
         _leverageRatio
       );
