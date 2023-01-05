@@ -16,6 +16,8 @@ import { network } from "hardhat";
 import { BigNumber } from "@ethersproject/bignumber";
 
 const LENDING_POOL_3 = "0x89d7c618a4eef3065da8ad684859a547548e6169";
+const BUYER1 = "0x12c2cfda0a51fe2a68e443868bcbf3d6f6e2dda2";
+const BUYER2 = "0x10a590f528eff3d5de18c90da6e03a4acdde3a7d";
 
 const testReferenceLendingPools: Function = (
   deployer: Signer,
@@ -284,8 +286,6 @@ const testReferenceLendingPools: Function = (
 
       describe("canBuyProtection", async () => {
         let _purchaseParams: ProtectionPurchaseParamsStruct;
-        const BUYER1 = "0x12c2cfda0a51fe2a68e443868bcbf3d6f6e2dda2";
-        const BUYER2 = "0x10a590f528eff3d5de18c90da6e03a4acdde3a7d";
         let _buyerHasActiveProtection: boolean;
 
         before("set up", async () => {
@@ -421,6 +421,19 @@ const testReferenceLendingPools: Function = (
               590
             )
           ).to.eq(0);
+        });
+
+        it("...should return 0 when the buyer owns the NFT for different pool", async () => {
+          // see: https://lark.market/tokenDetail?tokenId=142
+          // Buyer owns this token, but pool for this token is 0x57686612c601cb5213b01aa8e80afeb24bbd01df
+
+          expect(
+            await referenceLendingPoolsInstance.calculateRemainingPrincipal(
+              LENDING_POOL_3,
+              BUYER2,
+              142
+            )
+          ).to.be.eq(0);
         });
       });
 

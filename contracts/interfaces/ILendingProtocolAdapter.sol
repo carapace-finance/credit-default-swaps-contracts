@@ -25,16 +25,6 @@ abstract contract ILendingProtocolAdapter {
     returns (bool);
 
   /**
-   * @notice Determines whether protection amount is less than or equal to the amount lent to the underlying lending pool by the specified buyer.
-   * @param _buyer the address of the buyer
-   * @param _purchaseParams the protection purchase params
-   */
-  function isProtectionAmountValid(
-    address _buyer,
-    ProtectionPurchaseParams memory _purchaseParams
-  ) external view virtual returns (bool);
-
-  /**
    * @notice Returns the term end timestamp of the lending pool
    * @param _lendingPoolAddress Address of the underlying lending pool
    * @return termEndTimestamp Timestamp of the term end
@@ -58,15 +48,16 @@ abstract contract ILendingProtocolAdapter {
 
   /**
    * @notice Returns the principal amount that is remaining in the specified lending pool for the specified lender for the specified token id.
+   * @param _lendingPoolAddress the address of the underlying lending pool
    * @param _lender address of the lender
    * @param _nftLpTokenId the id of NFT token representing the lending position of the specified lender
-   * @return the remaining principal amount
+   * @return the remaining principal amount in underlying
    */
-  function calculateRemainingPrincipal(address _lender, uint256 _nftLpTokenId)
-    public
-    view
-    virtual
-    returns (uint256);
+  function calculateRemainingPrincipal(
+    address _lendingPoolAddress,
+    address _lender,
+    uint256 _nftLpTokenId
+  ) public view virtual returns (uint256);
 
   /**
    * @notice Returns the latest payment timestamp of the specified lending pool

@@ -132,11 +132,11 @@ abstract contract IReferenceLendingPools {
   /**
    * @notice Returns the principal amount that is remaining in the specified lending pool
    * for the specified lender for the specified token id.
-   * If lender does not own the specified token id, then it returns 0.
+   * If lender does not have matching lending position, then it returns 0.
    * @param _lendingPool address of the lending pool
    * @param _lender address of the lender
    * @param _nftLpTokenId the id of NFT token representing the lending position of the specified lender
-   * @return the remaining principal amount
+   * @return the remaining principal amount in underlying
    */
   function calculateRemainingPrincipal(
     address _lendingPool,

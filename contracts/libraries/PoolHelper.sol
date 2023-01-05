@@ -68,18 +68,20 @@ library PoolHelper {
   }
 
   /**
-   * @notice Calculates & tracks the premium amount for the protection purchase.
+   * @notice Calculates the protection premium amount and related vars.
+   * @return _premiumAmountIn18Decimals The premium amount scaled to 18 decimals.
+   * @return _premiumAmount The premium amount in underlying token decimals.
+   * @return _isMinPremium True if the premium amount is equal to the minimum premium amount, false otherwise.
    */
-  function calculateAndTrackPremium(
+  function calculateProtectionPremium(
     IPremiumCalculator premiumCalculator,
-    mapping(address => ProtectionBuyerAccount) storage protectionBuyerAccounts,
     PoolInfo storage poolInfo,
-    LendingPoolDetail storage lendingPoolDetail,
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
     uint256 totalSTokenUnderlying,
     uint256 _leverageRatio
   )
-    external
+    public
+    view
     returns (
       uint256 _premiumAmountIn18Decimals,
       uint256 _premiumAmount,
@@ -110,6 +112,48 @@ library PoolHelper {
       _premiumAmountIn18Decimals,
       poolInfo.underlyingToken.decimals()
     );
+  }
+
+  /**
+   * @notice Calculates & tracks the premium amount for the protection purchase.
+   */
+  function calculateAndTrackPremium(
+    IPremiumCalculator premiumCalculator,
+    mapping(address => ProtectionBuyerAccount) storage protectionBuyerAccounts,
+    PoolInfo storage poolInfo,
+    LendingPoolDetail storage lendingPoolDetail,
+    ProtectionPurchaseParams calldata _protectionPurchaseParams,
+    uint256 _maxPremiumAmount,
+    uint256 totalSTokenUnderlying,
+    uint256 _leverageRatio
+  )
+    external
+    returns (
+      uint256 _premiumAmountIn18Decimals,
+      uint256 _premiumAmount,
+      bool _isMinPremium
+    )
+  {
+    /// Calculate the protection premium
+    (
+      _premiumAmountIn18Decimals,
+      _premiumAmount,
+      _isMinPremium
+    ) = calculateProtectionPremium(
+      premiumCalculator,
+      poolInfo,
+      _protectionPurchaseParams,
+      totalSTokenUnderlying,
+      _leverageRatio
+    );
+
+    // If calculated premium amount is higher than the max premium amount, revert.
+    if (_premiumAmount > _maxPremiumAmount) {
+      revert IPool.PremiumExceedsMaxPremiumAmount(
+        _premiumAmount,
+        _maxPremiumAmount
+      );
+    }
 
     /// Track the premium amount
     protectionBuyerAccounts[msg.sender].lendingPoolToPremium[
