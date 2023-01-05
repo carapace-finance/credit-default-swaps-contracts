@@ -56,24 +56,33 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
   }
 
   /// @inheritdoc ILendingProtocolAdapter
-  function isLendingPoolDefaulted(address _lendingPoolAddress)
-    external
-    view
-    override
-    returns (bool)
-  {
-    /// When “potential default” loan has write down, then lending pool is considered to be in “default” state
-    return _getSeniorPool().writedowns(_lendingPoolAddress) > 0;
-  }
-
-  /// @inheritdoc ILendingProtocolAdapter
   function isLendingPoolLate(address _lendingPoolAddress)
     external
     view
     override
     returns (bool)
   {
-    return _getCreditLine(_lendingPoolAddress).isLate();
+    return _isLendingPoolLate(_lendingPoolAddress);
+  }
+
+  /// @inheritdoc ILendingProtocolAdapter
+  function isLendingPoolLateWithinGracePeriod(
+    address _lendingPoolAddress,
+    uint256 _gracePeriodInDays
+  ) external view override returns (bool) {
+    uint256 _lastPaymentTimestamp = _getLatestPaymentTimestamp(
+      _lendingPoolAddress
+    );
+
+    /// Lending pool is considered late but within grace period if:
+    /// 1. Lending pool is late and
+    /// 2. Current time is less than the last payment time plus the payment period plus the grace period
+    return
+      _isLendingPoolLate(_lendingPoolAddress) &&
+      block.timestamp <=
+      (_lastPaymentTimestamp +
+        ((_getCreditLine(_lendingPoolAddress).paymentPeriodInDays() +
+          _gracePeriodInDays) * Constants.SECONDS_IN_DAY_UINT));
   }
 
   /// @inheritdoc ILendingProtocolAdapter
@@ -166,13 +175,23 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
   }
 
   /// @inheritdoc ILendingProtocolAdapter
+  function getPaymentPeriodInDays(address _lendingPool)
+    public
+    view
+    override
+    returns (uint256)
+  {
+    return _getCreditLine(_lendingPool).paymentPeriodInDays();
+  }
+
+  /// @inheritdoc ILendingProtocolAdapter
   function getLatestPaymentTimestamp(address _lendingPool)
     public
     view
     override
     returns (uint256)
   {
-    return _getCreditLine(_lendingPool).lastFullPaymentTime();
+    return _getLatestPaymentTimestamp(_lendingPool);
   }
 
   /** internal functions */
@@ -240,5 +259,21 @@ contract GoldfinchV2Adapter is ILendingProtocolAdapter {
     returns (ICreditLine)
   {
     return ITranchedPool(_lendingPoolAddress).creditLine();
+  }
+
+  function _getLatestPaymentTimestamp(address _lendingPool)
+    internal
+    view
+    returns (uint256)
+  {
+    return _getCreditLine(_lendingPool).lastFullPaymentTime();
+  }
+
+  function _isLendingPoolLate(address _lendingPoolAddress)
+    internal
+    view
+    returns (bool)
+  {
+    return _getCreditLine(_lendingPoolAddress).isLate();
   }
 }

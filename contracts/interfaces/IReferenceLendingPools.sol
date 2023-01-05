@@ -4,12 +4,18 @@ pragma solidity ^0.8.13;
 
 /// @notice Enum to represent the status of the lending pool
 enum LendingPoolStatus {
-  /// @notice This means the lending pool is not added to the basket
+  /// @notice This means the lending pool is not added to the basket and the protection can NOT be purchased
   NotSupported,
+  /// @notice This means the lending pool is added to the basket and the protection can be purchased
   Active,
-  Expired,
+  /// @notice This means the lending pool is late for payment but within the grace period and the protection can NOT be purchased
+  LateWithinGracePeriod,
+  /// @notice This means the lending pool is late for payment and beyond the grace period and the protection can NOT be purchased
   Late,
-  Defaulted
+  /// @notice This means the lending pool is defaulted and the protection can NOT be purchased
+  Defaulted,
+  /// @notice This means the lending pool is either fully repaid or full term has been completed and the protection can NOT be purchased
+  Expired
 }
 
 enum LendingProtocol {
@@ -84,17 +90,6 @@ abstract contract IReferenceLendingPools {
   function getLendingPools() public view virtual returns (address[] memory);
 
   /**
-   * @notice Provides the status of the specified lending pool.
-   * @param _lendingPoolAddress address of the lending pool
-   * @return the status of the lending pool
-   */
-  function getLendingPoolStatus(address _lendingPoolAddress)
-    public
-    view
-    virtual
-    returns (LendingPoolStatus);
-
-  /**
    * @notice Determines whether a buyer can buy the protection for the specified lending pool or not.
    * 1. A buyer can buy protection only within certain time an underlying lending pool added
    * to the basket of the Carapace eligible loans.
@@ -153,6 +148,15 @@ abstract contract IReferenceLendingPools {
    * @notice Returns the latest payment timestamp of the specified lending pool
    */
   function getLatestPaymentTimestamp(address _lendingPool)
+    public
+    view
+    virtual
+    returns (uint256);
+
+  /**
+   * @notice Returns the payment period of the specified lending pool in days
+   */
+  function getPaymentPeriodInDays(address _lendingPool)
     public
     view
     virtual

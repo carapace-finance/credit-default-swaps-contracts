@@ -668,6 +668,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     /// Verify that user can buy protection
     PoolHelper.verifyProtection(
       poolCycleManager,
+      defaultStateManager,
+      address(this),
       poolInfo,
       _protectionStartTimestamp,
       _protectionPurchaseParams,

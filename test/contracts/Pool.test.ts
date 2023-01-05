@@ -15,7 +15,8 @@ import {
   getDaysInSeconds,
   getLatestBlockTimestamp,
   getUnixTimestampAheadByDays,
-  moveForwardTimeByDays
+  moveForwardTimeByDays,
+  setNextBlockTimestamp
 } from "../utils/time";
 import {
   parseUSDC,
@@ -25,7 +26,6 @@ import {
   transferAndApproveUsdc
 } from "../utils/usdc";
 import { ITranchedPool } from "../../typechain-types/contracts/external/goldfinch/ITranchedPool";
-import { ICreditLine } from "../../typechain-types/contracts/external/goldfinch/ICreditLine";
 import { payToLendingPool, payToLendingPoolAddress } from "../utils/goldfinch";
 import { DefaultStateManager } from "../../typechain-types/contracts/core/DefaultStateManager";
 import { poolInstance } from "../../utils/deploy";
@@ -57,7 +57,7 @@ const testPool: Function = (
     let USDC: Contract;
     let poolInfo: PoolInfoStructOutput;
     let before1stDepositSnapshotId: string;
-    let beforePoolCycleTestSnapshotId: string;
+    let snapshotId2: string;
     let _protectionBuyer1: Signer;
     let _protectionBuyer2: Signer;
     let _protectionBuyer3: Signer;
@@ -1255,11 +1255,6 @@ const testPool: Function = (
               before1stDepositSnapshotId
             ])
           ).to.eq(true);
-
-          beforePoolCycleTestSnapshotId = await network.provider.send(
-            "evm_snapshot",
-            []
-          );
         });
 
         it("...pool cycle should be in open state", async () => {
@@ -1465,22 +1460,6 @@ const testPool: Function = (
         });
       });
 
-      describe("buyProtection failures with time restrictions", async () => {
-        it("...fails when lending pool is late for payment", async () => {
-          // day 42: time has moved forward by more than 30 days, so lending pool is late for payment
-          await expect(
-            pool.connect(_protectionBuyer1).buyProtection({
-              lendingPoolAddress: _lendingPool2,
-              nftLpTokenId: 590,
-              protectionAmount: parseUSDC("101"),
-              protectionDurationInSeconds: getDaysInSeconds(20)
-            })
-          ).to.be.revertedWith(
-            `LendingPoolHasLatePayment("0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf")`
-          );
-        });
-      });
-
       describe("claimUnlockedCapital", async () => {
         let lendingPool2: ITranchedPool;
         let _expectedLockedCapital: BigNumber;
@@ -1517,6 +1496,8 @@ const testPool: Function = (
         }
 
         before(async () => {
+          snapshotId2 = await network.provider.send("evm_snapshot", []);
+
           lendingPool2 = (await ethers.getContractAt(
             "ITranchedPool",
             _lendingPool2
@@ -1538,6 +1519,20 @@ const testPool: Function = (
           await expect(defaultStateManager.assessStates())
             .to.emit(defaultStateManager, "PoolStatesAssessed")
             .to.emit(defaultStateManager, "LendingPoolLocked");
+        });
+
+        it("...buyProtection fails when lending pool is late for payment", async () => {
+          // day 42: time has moved forward by more than 30 days, so lending pool is late for payment
+          await expect(
+            pool.connect(_protectionBuyer1).buyProtection({
+              lendingPoolAddress: _lendingPool2,
+              nftLpTokenId: 590,
+              protectionAmount: parseUSDC("101"),
+              protectionDurationInSeconds: getDaysInSeconds(20)
+            })
+          ).to.be.revertedWith(
+            `LendingPoolHasLatePayment("0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf")`
+          );
         });
 
         it("...should have locked capital for lending pool 2 after missing a payment", async () => {
@@ -1562,17 +1557,49 @@ const testPool: Function = (
           );
         });
 
-        it("...should NOT have locked capital for lending pool 1", async () => {
+        it("...should NOT have locked capital for lending pool 1 before unlocking lending pool 2", async () => {
           // verify that lending pool 1's capital is NOT locked
           const _lockedCapitalLP1 = await getLatestLockedCapital(_lendingPool1);
           expect(_lockedCapitalLP1).to.be.undefined;
         });
 
-        it("...should have unlocked capital after payment for lending pool 2", async () => {
-          await payToLendingPool(lendingPool2, "1000000", USDC);
-          await expect(defaultStateManager.assessStates())
-            .to.emit(defaultStateManager, "PoolStatesAssessed")
-            .to.emit(defaultStateManager, "LendingPoolUnlocked");
+        it("...should have unlocked capital after 2 consecutive payments for lending pool 2", async () => {
+          // Make 2 consecutive payments to 2nd lending pool
+          for (let i = 0; i < 2; i++) {
+            await moveForwardTimeByDays(30);
+            await payToLendingPool(lendingPool2, "300000", USDC);
+
+            // keep paying lending pool 1
+            await payToLendingPoolAddress(_lendingPool1, "300000", USDC);
+
+            if (i === 0) {
+              await defaultStateManager.assessStateBatch([
+                poolInstance.address
+              ]);
+
+              // verify that lending pool 2 is still in late state
+              expect(
+                await defaultStateManager.getLendingPoolStatus(
+                  poolInstance.address,
+                  _lendingPool2
+                )
+              ).to.be.eq(3); // Late
+            } else {
+              // after second payment, 2nd lending pool should move from Late to Active state
+              await expect(
+                defaultStateManager.assessStateBatch([poolInstance.address])
+              )
+                .to.emit(defaultStateManager, "PoolStatesAssessed")
+                .to.emit(defaultStateManager, "LendingPoolUnlocked");
+
+              expect(
+                await defaultStateManager.getLendingPoolStatus(
+                  poolInstance.address,
+                  _lendingPool2
+                )
+              ).to.be.eq(1);
+            }
+          }
 
           // verify that lending pool capital is unlocked
           const _unlockedCapital = await getLatestLockedCapital(_lendingPool2);
@@ -1580,6 +1607,12 @@ const testPool: Function = (
 
           // verify that unlocked capital is same as previously locked capital
           expect(_unlockedCapital.amount).to.be.eq(_expectedLockedCapital);
+        });
+
+        it("...should NOT have locked capital for lending pool 1 after unlocking lending pool 2", async () => {
+          // verify that lending pool 1's capital is NOT locked
+          const _lockedCapitalLP1 = await getLatestLockedCapital(_lendingPool1);
+          expect(_lockedCapitalLP1).to.be.undefined;
         });
 
         it("...deployer should  NOT be able to claim", async () => {
@@ -1610,6 +1643,10 @@ const testPool: Function = (
           expect(await claimAndVerifyUnlockedCapital(account4, true)).to.be.gt(
             0
           );
+          console.log(
+            "totalSTokenUnderlying: ",
+            await pool.totalSTokenUnderlying()
+          );
         });
 
         it("...account 4 should  NOT be able to claim again", async () => {
@@ -1617,12 +1654,29 @@ const testPool: Function = (
             0
           );
         });
-      });
 
-      describe("buyProtection after lock/unlock", async () => {
         it("...has correct total underlying amount", async () => {
           // 5 deposits = 20K + 40K + 40K + 100 + 100 - 50K of locked capital
           expect(await pool.totalSTokenUnderlying()).to.eq(parseUSDC("50200"));
+        });
+      });
+
+      describe("buyProtection after lock/unlock", async () => {
+        before(async () => {
+          // revert to snapshot
+          expect(
+            await network.provider.send("evm_revert", [snapshotId2])
+          ).to.be.eq(true);
+
+          snapshotId2 = await network.provider.send("evm_snapshot", []);
+
+          await payToLendingPoolAddress(_lendingPool1, "1000000", USDC);
+          await payToLendingPoolAddress(_lendingPool2, "1000000", USDC);
+        });
+
+        it("...has correct total underlying amount", async () => {
+          // 5 deposits = 20K + 40K + 40K + 100 + 100
+          expect(await pool.totalSTokenUnderlying()).to.eq(parseUSDC("100200"));
         });
 
         it("...accrue premium and expire protections", async () => {
@@ -1680,7 +1734,7 @@ const testPool: Function = (
           await pool.connect(_protectionBuyer4).extendProtection({
             lendingPoolAddress: _lendingPool1,
             nftLpTokenId: 645,
-            protectionAmount: parseUSDC("10000"),
+            protectionAmount: parseUSDC("20000"),
             protectionDurationInSeconds: getDaysInSeconds(13)
           });
 
@@ -1800,7 +1854,7 @@ const testPool: Function = (
         });
       });
 
-      describe("buyProtection after purchase limit", async () => {
+      describe("buyProtection after protection purchase limit", async () => {
         it("...should fail because of protection purchase limit for new buyer", async () => {
           // make lending pool payment current, so buyProtection should NOT fail for late payment,
           // but it should fail for NEW buyer because of protection purchase limit: past 60 days
@@ -1838,7 +1892,7 @@ const testPool: Function = (
             pool.connect(_protectionBuyer4).buyProtection({
               lendingPoolAddress: _lendingPool1,
               nftLpTokenId: 645,
-              protectionAmount: parseUSDC("10000"),
+              protectionAmount: parseUSDC("60000"),
               protectionDurationInSeconds: getDaysInSeconds(11)
             })
           ).to.be.revertedWith("PoolLeverageRatioTooLow");
@@ -1848,7 +1902,7 @@ const testPool: Function = (
           const _totalSTokenUnderlyingBefore =
             await pool.totalSTokenUnderlying();
 
-          const _depositAmount = parseUSDC("50000");
+          const _depositAmount = parseUSDC("10000");
           await transferAndApproveUsdcToPool(deployer, _depositAmount);
           await pool.connect(deployer).deposit(_depositAmount, deployerAddress);
 
@@ -1859,16 +1913,90 @@ const testPool: Function = (
           ).to.be.eq(_depositAmount);
         });
       });
+
+      describe("buyProtection after after adding new lending pool", async () => {
+        const _lendingPool3 = "0x89d7c618a4eef3065da8ad684859a547548e6169";
+        const _protectionBuyerAddress =
+          "0x3371E5ff5aE3f1979074bE4c5828E71dF51d299c";
+        let _protectionBuyer: Signer;
+
+        before(async () => {
+          _protectionBuyer = await ethers.getImpersonatedSigner(
+            _protectionBuyerAddress
+          );
+
+          // Ensure lending pool is current on payment
+          await payToLendingPoolAddress(_lendingPool3, "3000000", USDC);
+          await referenceLendingPools
+            .connect(deployer)
+            .addReferenceLendingPool(_lendingPool3, 0, 30);
+
+          expect(
+            (await referenceLendingPools.getLendingPools()).length
+          ).to.be.eq(3);
+
+          await defaultStateManager.assessStates();
+        });
+
+        it("...buyProtection in new pool should succeed", async () => {
+          expect(
+            (await pool.getActiveProtections(_protectionBuyerAddress)).length
+          ).to.be.eq(0);
+
+          await deployer.sendTransaction({
+            to: _protectionBuyerAddress,
+            value: ethers.utils.parseEther("10")
+          });
+
+          await transferAndApproveUsdcToPool(
+            _protectionBuyer,
+            parseUSDC("1000")
+          );
+          await pool.connect(_protectionBuyer).buyProtection({
+            lendingPoolAddress: _lendingPool3,
+            nftLpTokenId: 717,
+            protectionAmount: parseUSDC("30000"),
+            protectionDurationInSeconds: getDaysInSeconds(30)
+          });
+
+          expect(
+            (await pool.getActiveProtections(_protectionBuyerAddress)).length
+          ).to.be.eq(1);
+        });
+
+        it("...buyProtection in new pool should fail when pool is in LateWithinGracePeriod state", async () => {
+          // Ensure lending pool is late on payment
+          const lastPaymentTimestamp =
+            await referenceLendingPools.getLatestPaymentTimestamp(
+              _lendingPool3
+            );
+
+          await setNextBlockTimestamp(
+            lastPaymentTimestamp.add(getDaysInSeconds(30).add(60 * 60)) // late by 1 hour
+          );
+
+          await defaultStateManager.assessStates();
+          await expect(
+            pool.connect(_protectionBuyer).buyProtection({
+              lendingPoolAddress: _lendingPool3,
+              nftLpTokenId: 717,
+              protectionAmount: parseUSDC("30000"),
+              protectionDurationInSeconds: getDaysInSeconds(30)
+            })
+          ).to.be.revertedWith("LendingPoolHasLatePayment");
+        });
+      });
     });
 
     after(async () => {
       // Revert the EVM state before pool cycle tests in "before 1st pool cycle is locked"
       // to revert the time forwarded in the tests
-      expect(
-        await network.provider.send("evm_revert", [
-          beforePoolCycleTestSnapshotId
-        ])
-      ).to.be.eq(true);
+
+      expect(await network.provider.send("evm_revert", [snapshotId2])).to.be.eq(
+        true
+      );
+
+      await pool.accruePremiumAndExpireProtections([]);
     });
   });
 };

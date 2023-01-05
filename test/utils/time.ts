@@ -52,11 +52,20 @@ const getLatestBlockTimestamp: Function = async (): Promise<number> => {
   return (await ethers.provider.getBlock("latest")).timestamp;
 };
 
+// set next block timestamp
+const setNextBlockTimestamp: Function = async (timestamp: BigNumber) => {
+  await network.provider.send("evm_setNextBlockTimestamp", [
+    timestamp.toNumber()
+  ]);
+  await network.provider.send("evm_mine", []);
+};
+
 export {
   getUnixTimestampOfSomeMonthAhead,
   getUnixTimestampAheadByDays,
   moveForwardTime,
   getDaysInSeconds,
   getLatestBlockTimestamp,
-  moveForwardTimeByDays
+  moveForwardTimeByDays,
+  setNextBlockTimestamp
 };

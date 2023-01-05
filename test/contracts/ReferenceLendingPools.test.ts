@@ -8,10 +8,12 @@ import { ReferenceLendingPoolsFactory } from "../../typechain-types/contracts/co
 import {
   getDaysInSeconds,
   getLatestBlockTimestamp,
-  moveForwardTime
+  moveForwardTime,
+  setNextBlockTimestamp
 } from "../utils/time";
 import { parseUSDC } from "../utils/usdc";
 import { network } from "hardhat";
+import { BigNumber } from "@ethersproject/bignumber";
 
 const LENDING_POOL_3 = "0x89d7c618a4eef3065da8ad684859a547548e6169";
 
@@ -29,6 +31,20 @@ const testReferenceLendingPools: Function = (
     let _expectedLendingPools: string[];
     let _snapshotId: string;
 
+    async function revertToSnapshot(_snapshotId: string) {
+      expect(await network.provider.send("evm_revert", [_snapshotId])).to.eq(
+        true
+      );
+    }
+
+    const getLendingPoolStatus = async (
+      lendingPool: string
+    ): Promise<number> => {
+      const [lendingPools, statuses] =
+        await referenceLendingPoolsInstance.assessState();
+      return statuses[lendingPools.indexOf(lendingPool)];
+    };
+
     before(async () => {
       _deployerAddress = await deployer.getAddress();
       _implementationDeployerAddress =
@@ -38,9 +54,7 @@ const testReferenceLendingPools: Function = (
 
     after(async () => {
       // Some specs move time forward, revert the state to the snapshot
-      expect(await network.provider.send("evm_revert", [_snapshotId])).to.eq(
-        true
-      );
+      await revertToSnapshot(_snapshotId);
     });
 
     describe("Implementation", async () => {
@@ -268,24 +282,6 @@ const testReferenceLendingPools: Function = (
         });
       });
 
-      describe("getLendingPoolStatus", async () => {
-        it("...should return correct status for non-existing pool", async () => {
-          expect(
-            await referenceLendingPoolsInstance.getLendingPoolStatus(
-              ZERO_ADDRESS
-            )
-          ).to.be.eq(0); // NotSupported
-        });
-
-        it("...should return correct status for active pool", async () => {
-          expect(
-            await referenceLendingPoolsInstance.getLendingPoolStatus(
-              LENDING_POOL_3
-            )
-          ).to.be.eq(1); // Active
-        });
-      });
-
       describe("canBuyProtection", async () => {
         let _purchaseParams: ProtectionPurchaseParamsStruct;
         const BUYER1 = "0x12c2cfda0a51fe2a68e443868bcbf3d6f6e2dda2";
@@ -425,6 +421,72 @@ const testReferenceLendingPools: Function = (
               590
             )
           ).to.eq(0);
+        });
+      });
+
+      // This test spec should be last as it sets exact block timestamp and then moves time forward
+      describe("getLendingPoolStatus", async () => {
+        const _lendingPool = "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf";
+
+        it("...should return no status for non-existing pool", async () => {
+          expect(await getLendingPoolStatus(ZERO_ADDRESS)).to.be.eq(undefined);
+        });
+
+        it("...should return no status for not supported pool", async () => {
+          expect(await getLendingPoolStatus(LENDING_POOL_3)).to.be.eq(
+            undefined
+          );
+        });
+
+        it("...should return correct status for active pool", async () => {
+          expect(await getLendingPoolStatus(_lendingPool)).to.be.eq(1); // Active
+        });
+
+        it("...should return active when payment is not late", async () => {
+          // Move time forward by 30 days from last payment timestamp
+          const lastPaymentTimestamp =
+            await referenceLendingPoolsInstance.getLatestPaymentTimestamp(
+              _lendingPool
+            );
+          await setNextBlockTimestamp(
+            lastPaymentTimestamp.add(getDaysInSeconds(30))
+          );
+
+          // This means, payment is still not late and should return false
+          expect(await getLendingPoolStatus(_lendingPool)).to.eq(1); // Active
+        });
+
+        it("...should return LateWithinGracePeriod when payment is late but within grace period", async () => {
+          // Move time forward by 1 second
+          await moveForwardTime(BigNumber.from(1));
+
+          // Lending pool is late but within grace period, so should return LateWithinGracePeriod status
+          expect(await getLendingPoolStatus(_lendingPool)).to.eq(2); // LateWithinGracePeriod
+        });
+
+        it("...should return false when payment is late and after grace period", async () => {
+          // Move time forward by one more day
+          await moveForwardTime(getDaysInSeconds(1));
+
+          // Lending pool is late and after grace period, so should return Late status
+          // Total time elapsed since last payment = 30 days + 1 day + 1 second
+          expect(await getLendingPoolStatus(_lendingPool)).to.eq(3); // Late
+        });
+      });
+
+      describe("getPaymentPeriodInDays", () => {
+        it("...should return the correct payment period", async () => {
+          expect(
+            await referenceLendingPoolsInstance.getPaymentPeriodInDays(
+              "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf"
+            )
+          ).to.eq(BigNumber.from(30));
+
+          expect(
+            await referenceLendingPoolsInstance.getPaymentPeriodInDays(
+              "0xb26b42dd5771689d0a7faeea32825ff9710b9c11"
+            )
+          ).to.eq(BigNumber.from(30));
         });
       });
     });

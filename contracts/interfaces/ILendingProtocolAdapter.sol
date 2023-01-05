@@ -5,16 +5,6 @@ import {IReferenceLendingPools, ProtectionPurchaseParams} from "./IReferenceLend
 
 abstract contract ILendingProtocolAdapter {
   /**
-   * @notice Determines whether the specified lending pool is defaulted or not.
-   * @param _lendingPoolAddress the address of the lending pool
-   */
-  function isLendingPoolDefaulted(address _lendingPoolAddress)
-    external
-    view
-    virtual
-    returns (bool);
-
-  /**
    * @notice Determines whether the specified lending pool's term has ended or balance has been repaid.
    * @param _lendingPoolAddress the address of the lending pool
    */
@@ -82,6 +72,25 @@ abstract contract ILendingProtocolAdapter {
    * @notice Returns the latest payment timestamp of the specified lending pool
    */
   function getLatestPaymentTimestamp(address _lendingPool)
+    public
+    view
+    virtual
+    returns (uint256);
+
+  /**
+   * @notice Determines whether the specified lending pool is late for payment but within the specified grace period.
+   * @param _lendingPoolAddress the address of the lending pool
+   * @param _gracePeriodInDays the grace period in days using unscaled value, i.e. 1 day = 1
+   */
+  function isLendingPoolLateWithinGracePeriod(
+    address _lendingPoolAddress,
+    uint256 _gracePeriodInDays
+  ) external view virtual returns (bool);
+
+  /**
+   * @notice Returns the payment period of the specified lending pool in days
+   */
+  function getPaymentPeriodInDays(address _lendingPool)
     public
     view
     virtual
