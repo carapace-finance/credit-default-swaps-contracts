@@ -67,9 +67,9 @@ abstract contract IDefaultStateManager {
 
   /**
    * @notice register a protection pool. Only pool factory can call this function.
-   * @param _protectionPool the protection pool to register
+   * @param _protectionPool an address of the protection pool to register
    */
-  function registerPool(IPool _protectionPool) external virtual;
+  function registerPool(address _protectionPool) external virtual;
 
   /**
    * @notice assess states of all registered pools and initiate state changes & related actions as needed.

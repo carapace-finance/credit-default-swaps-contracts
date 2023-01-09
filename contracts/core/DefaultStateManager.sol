@@ -47,27 +47,28 @@ contract DefaultStateManager is IDefaultStateManager {
   }
 
   /// @inheritdoc IDefaultStateManager
-  function registerPool(IPool _protectionPool)
+  function registerPool(address _protectionPoolAddress)
     external
     override
     onlyPoolFactory
   {
-    address poolAddress = address(_protectionPool);
     uint256 newIndex = poolStates.length;
 
     /// Check whether the pool is already registered or not
-    PoolState storage poolState = poolStates[poolStateIndex[poolAddress]];
+    PoolState storage poolState = poolStates[
+      poolStateIndex[_protectionPoolAddress]
+    ];
     if (poolState.updatedTimestamp > 0) {
-      revert PoolAlreadyRegistered(poolAddress);
+      revert PoolAlreadyRegistered(_protectionPoolAddress);
     }
 
     poolStates.push();
-    poolStates[newIndex].protectionPool = _protectionPool;
-    poolStateIndex[poolAddress] = newIndex;
+    poolStates[newIndex].protectionPool = IPool(_protectionPoolAddress);
+    poolStateIndex[_protectionPoolAddress] = newIndex;
 
     _assessState(poolStates[newIndex]);
 
-    emit PoolRegistered(poolAddress);
+    emit PoolRegistered(_protectionPoolAddress);
   }
 
   /// @inheritdoc IDefaultStateManager
