@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import {EnumerableSetUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {IERC20MetadataUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
+import {SafeERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+
 import {SToken} from "./SToken.sol";
 import {IPremiumCalculator} from "../../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools, LendingPoolStatus, ProtectionPurchaseParams} from "../../interfaces/IReferenceLendingPools.sol";
 import {IPoolCycleManager, CycleState} from "../../interfaces/IPoolCycleManager.sol";
-import {IPool, EnumerableSet, PoolParams, PoolCycleParams, PoolInfo, ProtectionInfo, LendingPoolDetail, WithdrawalCycleDetail, ProtectionBuyerAccount, PoolPhase} from "../../interfaces/IPool.sol";
+import {IPool, PoolParams, PoolCycleParams, PoolInfo, ProtectionInfo, LendingPoolDetail, WithdrawalCycleDetail, ProtectionBuyerAccount, PoolPhase} from "../../interfaces/IPool.sol";
 import {IDefaultStateManager} from "../../interfaces/IDefaultStateManager.sol";
 
 import "../../libraries/AccruedPremiumCalculator.sol";
@@ -21,21 +26,34 @@ import "hardhat/console.sol";
  * @notice Each pool is a market where protection sellers
  *         and buyers can swap credit default risks of designated underlying loans.
  */
-contract Pool is IPool, SToken, ReentrancyGuard {
+contract Pool is
+  Initializable,
+  OwnableUpgradeable,
+  ReentrancyGuardUpgradeable,
+  UUPSUpgradeable,
+  IPool,
+  SToken
+{
   /*** libraries ***/
   /// @notice OpenZeppelin library for managing counters
-  using SafeERC20 for IERC20Metadata;
-  using EnumerableSet for EnumerableSet.UintSet;
+  using SafeERC20Upgradeable for IERC20MetadataUpgradeable;
+  using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
 
-  /*** state variables ***/
+  //////////////////////////////////////////////////////
+  ///             STORAGE - START                   ///
+  /////////////////////////////////////////////////////
+  /**
+   * @dev DO NOT CHANGE THE ORDER OF THESE VARIABLES ONCE DEPLOYED
+   */
+
   /// @notice Reference to the PremiumPricing contract
-  IPremiumCalculator private immutable premiumCalculator;
+  IPremiumCalculator private premiumCalculator;
 
   /// @notice Reference to the PoolCycleManager contract
-  IPoolCycleManager private immutable poolCycleManager;
+  IPoolCycleManager private poolCycleManager;
 
   /// @notice Reference to default state manager contract
-  IDefaultStateManager private immutable defaultStateManager;
+  IDefaultStateManager private defaultStateManager;
 
   /// @notice information about this pool
   PoolInfo private poolInfo;
@@ -66,6 +84,17 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /// @notice The mapping to track all protection buyer accounts by address
   mapping(address => ProtectionBuyerAccount) private protectionBuyerAccounts;
 
+  /**
+   * @dev This empty reserved space is put in place to allow future versions to add new
+   * variables without shifting down storage in the inheritance chain.
+   * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
+   */
+  uint256[50] private __gap;
+
+  //////////////////////////////////////////////////////
+  ///             STORAGE - END                     ///
+  /////////////////////////////////////////////////////
+
   /*** modifiers ***/
 
   /// @notice Checks whether pool cycle is in open state. If not, reverts.
@@ -89,7 +118,14 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     _;
   }
 
-  /*** constructor ***/
+  /// @custom:oz-upgrades-unsafe-allow constructor
+  constructor() {
+    /// Disable the initialization of this implementation contract as
+    /// it is intended to be used through proxy.
+    _disableInitializers();
+  }
+
+  /*** initializer ***/
   /**
    * @param _poolInfo The information about this pool.
    * @param _premiumCalculator an address of a premium calculator contract
@@ -98,14 +134,20 @@ contract Pool is IPool, SToken, ReentrancyGuard {
    * @param _name a name of the sToken
    * @param _symbol a symbol of the sToken
    */
-  constructor(
-    PoolInfo memory _poolInfo,
+  function initialize(
+    PoolInfo calldata _poolInfo,
     IPremiumCalculator _premiumCalculator,
     IPoolCycleManager _poolCycleManager,
     IDefaultStateManager _defaultStateManager,
-    string memory _name,
-    string memory _symbol
-  ) SToken(_name, _symbol) {
+    string calldata _name,
+    string calldata _symbol
+  ) public initializer {
+    /// initialize parent contracts in same order as they are inherited to mimic the behavior of a constructor
+    __Ownable_init();
+    __ReentrancyGuard_init();
+    __UUPSUpgradeable_init();
+    __sToken_init(_name, _symbol);
+
     poolInfo = _poolInfo;
     premiumCalculator = _premiumCalculator;
     poolCycleManager = _poolCycleManager;
@@ -395,8 +437,9 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _lendingPoolAddress
     ];
 
-    EnumerableSet.UintSet storage activeProtectionIndexes = lendingPoolDetail
-      .activeProtectionIndexes;
+    EnumerableSetUpgradeable.UintSet
+      storage activeProtectionIndexes = lendingPoolDetail
+        .activeProtectionIndexes;
     uint256 _length = activeProtectionIndexes.length();
     for (uint256 i; i < _length; ) {
       uint256 _protectionIndex = activeProtectionIndexes.at(i);
@@ -635,7 +678,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     view
     returns (ProtectionInfo[] memory _protectionInfos)
   {
-    EnumerableSet.UintSet
+    EnumerableSetUpgradeable.UintSet
       storage activeProtectionIndexes = protectionBuyerAccounts[_buyer]
         .activeProtectionIndexes;
     uint256 _length = activeProtectionIndexes.length();
@@ -708,6 +751,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   }
 
   /*** internal functions */
+  /// @inheritdoc UUPSUpgradeable
+  function _authorizeUpgrade(address) internal override onlyOwner {}
 
   function _verifyAndCreateProtection(
     uint256 _protectionStartTimestamp,

@@ -12,6 +12,7 @@ import "hardhat-abi-exporter";
 import "hardhat-contract-sizer";
 import "hardhat-gas-reporter";
 import "hardhat-storage-layout";
+import "@openzeppelin/hardhat-upgrades";
 
 const {
   ALCHEMY_API_KEY,

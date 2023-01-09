@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./AccruedPremiumCalculator.sol";
-import "./Constants.sol";
+import {EnumerableSetUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
 
 import {ProtectionPurchaseParams, LendingPoolStatus, IReferenceLendingPools} from "../interfaces/IReferenceLendingPools.sol";
-import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {PoolInfo, ProtectionInfo, ProtectionBuyerAccount, IPool, LendingPoolDetail, PoolPhase} from "../interfaces/IPool.sol";
 import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
 import {IDefaultStateManager} from "../interfaces/IDefaultStateManager.sol";
 import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
+
+import "./AccruedPremiumCalculator.sol";
+import "./Constants.sol";
 
 import "hardhat/console.sol";
 
@@ -17,7 +18,7 @@ import "hardhat/console.sol";
  * @notice Helper library for Pool contract, mainly for size reduction.
  */
 library PoolHelper {
-  using EnumerableSet for EnumerableSet.UintSet;
+  using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
 
   /**
    * @notice Verifies that the status of the lending pool is ACTIVE and protection can be bought,

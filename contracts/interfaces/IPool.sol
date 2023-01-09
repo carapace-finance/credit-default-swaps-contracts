@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {IERC20MetadataUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
+import {EnumerableSetUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
+
 import {IReferenceLendingPools, ProtectionPurchaseParams} from "./IReferenceLendingPools.sol";
-import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 enum PoolPhase {
   OpenToSellers,
@@ -47,7 +48,7 @@ struct PoolParams {
 struct PoolInfo {
   uint256 poolId;
   PoolParams params;
-  IERC20Metadata underlyingToken;
+  IERC20MetadataUpgradeable underlyingToken;
   IReferenceLendingPools referenceLendingPools;
   /// @notice A enum indicating current phase of the pool.
   PoolPhase currentPhase;
@@ -78,7 +79,7 @@ struct LendingPoolDetail {
   /// @notice Track the total amount of premium for each lending pool
   uint256 totalPremium;
   /// @notice Set to track all protections bought for specific lending pool, which are active/not expired
-  EnumerableSet.UintSet activeProtectionIndexes;
+  EnumerableSetUpgradeable.UintSet activeProtectionIndexes;
   /// @notice Track the total amount of protection bought for each lending pool
   uint256 totalProtection;
 }
@@ -97,14 +98,14 @@ struct ProtectionBuyerAccount {
   /// @dev a lending pool address to the premium amount paid
   mapping(address => uint256) lendingPoolToPremium;
   /// @notice Set to track all protections bought by a buyer, which are active/not-expired.
-  EnumerableSet.UintSet activeProtectionIndexes;
+  EnumerableSetUpgradeable.UintSet activeProtectionIndexes;
   /// @notice Mapping to track last expired protection index of given lending pool by nft token id.
   /// @dev a lending pool address to NFT id to the last expired protection index
   mapping(address => mapping(uint256 => uint256)) expiredProtectionIndexByLendingPool;
 }
 
 abstract contract IPool {
-  using EnumerableSet for EnumerableSet.UintSet;
+  using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
 
   /*** errors ***/
   error LendingPoolNotSupported(address lendingPoolAddress);
@@ -142,7 +143,7 @@ abstract contract IPool {
   event PoolInitialized(
     string name,
     string symbol,
-    IERC20Metadata underlyingToken,
+    IERC20MetadataUpgradeable underlyingToken,
     IReferenceLendingPools referenceLendingPools
   );
 
