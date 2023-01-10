@@ -5,6 +5,9 @@ import {IERC20MetadataUpgradeable} from "@openzeppelin/contracts-upgradeable/tok
 import {EnumerableSetUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
 
 import {IReferenceLendingPools, ProtectionPurchaseParams} from "./IReferenceLendingPools.sol";
+import {IPremiumCalculator} from "./IPremiumCalculator.sol";
+import {IPoolCycleManager} from "./IPoolCycleManager.sol";
+import {IDefaultStateManager} from "./IDefaultStateManager.sol";
 
 enum PoolPhase {
   OpenToSellers,
@@ -189,6 +192,15 @@ abstract contract IPool {
 
   /// @notice Emitted when a pool phase is updated.
   event PoolPhaseUpdated(uint256 poolId, PoolPhase newState);
+
+  function initialize(
+    PoolInfo calldata _poolInfo,
+    IPremiumCalculator _premiumCalculator,
+    IPoolCycleManager _poolCycleManager,
+    IDefaultStateManager _defaultStateManager,
+    string calldata _name,
+    string calldata _symbol
+  ) public virtual;
 
   /**
    * @notice A buyer can buy protection for a position in lending pool when lending pool is supported & active (not defaulted or expired).

@@ -141,7 +141,7 @@ contract Pool is
     IDefaultStateManager _defaultStateManager,
     string calldata _name,
     string calldata _symbol
-  ) public initializer {
+  ) public override initializer {
     /// initialize parent contracts in same order as they are inherited to mimic the behavior of a constructor
     __Ownable_init();
     __ReentrancyGuard_init();

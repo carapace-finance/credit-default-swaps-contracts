@@ -2,41 +2,57 @@
 pragma solidity ^0.8.13;
 
 import {IERC20MetadataUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
-import {ERC1967Proxy} from "../external/openzeppelin/ERC1967/ERC1967Proxy.sol";
 import {AddressUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {CountersUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/CountersUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Counters} from "@openzeppelin/contracts/utils/Counters.sol";
-
+import {ERC1967Proxy} from "../external/openzeppelin/ERC1967/ERC1967Proxy.sol";
 import {IPool, PoolParams, PoolInfo, PoolPhase} from "../interfaces/IPool.sol";
 import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools} from "../interfaces/IReferenceLendingPools.sol";
 import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
 import {IDefaultStateManager} from "../interfaces/IDefaultStateManager.sol";
-import {Pool} from "./pool/Pool.sol";
 
 /**
  * @notice PoolFactory creates a new pool and keeps track of them.
  * @author Carapace Finance
  */
-contract PoolFactory is Ownable {
+contract PoolFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   /*** libraries ***/
   /// @notice OpenZeppelin library for managing counters.
-  using Counters for Counters.Counter;
+  using CountersUpgradeable for CountersUpgradeable.Counter;
 
-  /*** state variables ***/
+  /////////////////////////////////////////////////////
+  ///             STORAGE - START                   ///
+  /////////////////////////////////////////////////////
+  /**
+   * @dev DO NOT CHANGE THE ORDER OF THESE VARIABLES ONCE DEPLOYED
+   */
 
   /// @notice pool id counter
-  Counters.Counter private poolIdCounter;
+  CountersUpgradeable.Counter private poolIdCounter;
 
   /// @notice a pool id for each pool address
   mapping(uint256 => address) private poolIdToPoolAddress;
 
   /// @notice reference to the pool cycle manager
-  IPoolCycleManager private immutable poolCycleManager;
+  IPoolCycleManager private poolCycleManager;
 
   /// @notice reference to the default state manager
-  IDefaultStateManager private immutable defaultStateManager;
+  IDefaultStateManager private defaultStateManager;
+
+  /**
+   * @dev This empty reserved space is put in place to allow future versions to add new
+   * variables without shifting down storage in the inheritance chain.
+   * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
+   */
+  uint256[50] private __gap;
+
+  //////////////////////////////////////////////////////
+  ///             STORAGE - END                     ///
+  /////////////////////////////////////////////////////
 
   /*** events ***/
 
@@ -51,11 +67,22 @@ contract PoolFactory is Ownable {
     IPremiumCalculator premiumCalculator
   );
 
-  /*** constructor ***/
-  constructor(
+  /// @custom:oz-upgrades-unsafe-allow constructor
+  constructor() {
+    /// Disable the initialization of this implementation contract as
+    /// it is intended to be used through proxy.
+    _disableInitializers();
+  }
+
+  /*** initializer ***/
+  function initialize(
     IPoolCycleManager _poolCycleManager,
     IDefaultStateManager _defaultStateManager
-  ) {
+  ) public initializer {
+    /// initialize parent contracts in same order as they are inherited to mimic the behavior of a constructor
+    __Ownable_init();
+    __UUPSUpgradeable_init();
+
     poolCycleManager = _poolCycleManager;
     defaultStateManager = _defaultStateManager;
 
@@ -102,7 +129,7 @@ contract PoolFactory is Ownable {
     ERC1967Proxy _poolProxy = new ERC1967Proxy(
       _poolImpl,
       abi.encodeWithSelector(
-        Pool(address(0)).initialize.selector,
+        IPool(address(0)).initialize.selector,
         _name,
         _symbol
       )
@@ -141,7 +168,7 @@ contract PoolFactory is Ownable {
     AddressUpgradeable.functionCall(
       _poolProxyAddress,
       abi.encodeWithSelector(
-        Ownable(address(0)).transferOwnership.selector,
+        OwnableUpgradeable(address(0)).transferOwnership.selector,
         owner()
       ),
       "Failed to transferOwnership from Pool's owner to PoolFactory"
@@ -158,4 +185,8 @@ contract PoolFactory is Ownable {
   function getPoolAddress(uint256 _poolId) external view returns (address) {
     return poolIdToPoolAddress[_poolId];
   }
+
+  /*** internal functions */
+  /// @inheritdoc UUPSUpgradeable
+  function _authorizeUpgrade(address) internal override onlyOwner {}
 }
