@@ -3,10 +3,8 @@ pragma solidity ^0.8.13;
 
 import {IERC20MetadataUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 import {AddressUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
+import {OwnableUpgradeable, UUPSUpgradeableBase} from "./UUPSUpgradeableBase.sol";
 import {ERC1967Proxy} from "../external/openzeppelin/ERC1967/ERC1967Proxy.sol";
 import {IPool, PoolParams, PoolInfo, PoolPhase} from "../interfaces/IPool.sol";
 import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
@@ -15,10 +13,13 @@ import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
 import {IDefaultStateManager} from "../interfaces/IDefaultStateManager.sol";
 
 /**
- * @notice PoolFactory creates a new pool and keeps track of them.
+ * @title PoolFactory
  * @author Carapace Finance
+ * @notice PoolFactory creates a new pool and keeps track of them.
+ * @notice This contract is used to create new upgradable pools using ERC1967 proxy.
+ * This contract is also upgradeable using the UUPS pattern.
  */
-contract PoolFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+contract PoolFactory is UUPSUpgradeableBase {
   /////////////////////////////////////////////////////
   ///             STORAGE - START                   ///
   /////////////////////////////////////////////////////
@@ -58,24 +59,22 @@ contract PoolFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     IPremiumCalculator premiumCalculator
   );
 
-  /// @custom:oz-upgrades-unsafe-allow constructor
-  constructor() {
-    /// Disable the initialization of this implementation contract as
-    /// it is intended to be used through proxy.
-    _disableInitializers();
-  }
-
   /*** initializer ***/
+
   function initialize(
     IPoolCycleManager _poolCycleManager,
     IDefaultStateManager _defaultStateManager
   ) public initializer {
-    /// initialize parent contracts in same order as they are inherited to mimic the behavior of a constructor
-    __Ownable_init();
-    __UUPSUpgradeable_init();
+    __UUPSUpgradeableBase_init();
 
     poolCycleManager = _poolCycleManager;
     defaultStateManager = _defaultStateManager;
+
+    /// Sets pool factory address into the PoolCycleManager
+    /// This is required to enable the pool cycle manager to register a new pool when it is created
+    /// "setPoolFactory" could only be called by the owner of the pool cycle manager,
+    /// so owner of pool factory and the pool cycle manager need to be the same
+    poolCycleManager.setPoolFactory(address(this));
   }
 
   /*** state-changing functions ***/
@@ -168,8 +167,4 @@ contract PoolFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   function getPools() external view returns (address[] memory) {
     return pools;
   }
-
-  /*** internal functions */
-  /// @inheritdoc UUPSUpgradeable
-  function _authorizeUpgrade(address) internal override onlyOwner {}
 }

@@ -16,6 +16,8 @@ abstract contract SToken is PausableUpgradeable, ERC20SnapshotUpgradeable {
   event Minted(address indexed owner, uint256 amount);
 
   /** Initializer */
+
+  // solhint-disable-next-line func-name-mixedcase
   function __sToken_init(string calldata _name, string calldata _symbol)
     internal
     onlyInitializing

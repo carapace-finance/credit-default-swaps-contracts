@@ -2,13 +2,11 @@
 pragma solidity ^0.8.13;
 
 import {EnumerableSetUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
-import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {IERC20MetadataUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 import {SafeERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
-import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
+import {UUPSUpgradeableBase} from "../UUPSUpgradeableBase.sol";
 import {SToken} from "./SToken.sol";
 import {IPremiumCalculator} from "../../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools, LendingPoolStatus, ProtectionPurchaseParams} from "../../interfaces/IReferenceLendingPools.sol";
@@ -23,24 +21,24 @@ import "../../libraries/PoolHelper.sol";
 import "hardhat/console.sol";
 
 /**
+ * @title Pool
+ * @author Carapace Finance
  * @notice Each pool is a market where protection sellers
- *         and buyers can swap credit default risks of designated underlying loans.
+ * and buyers can swap credit default risks of designated/referenced underlying loans.
+ * This contract is upgradeable using the UUPS pattern.
  */
 contract Pool is
-  Initializable,
-  OwnableUpgradeable,
+  UUPSUpgradeableBase,
   ReentrancyGuardUpgradeable,
-  UUPSUpgradeable,
   IPool,
   SToken
 {
   /*** libraries ***/
-  /// @notice OpenZeppelin library for managing counters
   using SafeERC20Upgradeable for IERC20MetadataUpgradeable;
   using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
 
   //////////////////////////////////////////////////////
-  ///             STORAGE - START                   ///
+  ///             STORAGE- START                   ///
   /////////////////////////////////////////////////////
   /**
    * @dev DO NOT CHANGE THE ORDER OF THESE VARIABLES ONCE DEPLOYED
@@ -117,13 +115,6 @@ contract Pool is
     _;
   }
 
-  /// @custom:oz-upgrades-unsafe-allow constructor
-  constructor() {
-    /// Disable the initialization of this implementation contract as
-    /// it is intended to be used through proxy.
-    _disableInitializers();
-  }
-
   /*** initializer ***/
   /**
    * @param _poolInfo The information about this pool.
@@ -142,9 +133,8 @@ contract Pool is
     string calldata _symbol
   ) public override initializer {
     /// initialize parent contracts in same order as they are inherited to mimic the behavior of a constructor
-    __Ownable_init();
+    __UUPSUpgradeableBase_init();
     __ReentrancyGuard_init();
-    __UUPSUpgradeable_init();
     __sToken_init(_name, _symbol);
 
     poolInfo = _poolInfo;
@@ -750,8 +740,6 @@ contract Pool is
   }
 
   /*** internal functions */
-  /// @inheritdoc UUPSUpgradeable
-  function _authorizeUpgrade(address) internal override onlyOwner {}
 
   function _verifyAndCreateProtection(
     uint256 _protectionStartTimestamp,

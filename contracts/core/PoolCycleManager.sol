@@ -1,27 +1,38 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {UUPSUpgradeableBase} from "./UUPSUpgradeableBase.sol";
 import {IPoolCycleManager, PoolCycle, CycleState} from "../interfaces/IPoolCycleManager.sol";
 
 /**
  * @title PoolCycleManager
  * @author Carapace Finance
  * @notice Contract to manage the current cycle of various pools.
+ * This contract is upgradeable using the UUPS pattern.
  */
-contract PoolCycleManager is IPoolCycleManager {
-  /*** state variables ***/
-  address public immutable poolFactoryAddress;
+contract PoolCycleManager is UUPSUpgradeableBase, IPoolCycleManager {
+  /////////////////////////////////////////////////////
+  ///             STORAGE - START                   ///
+  /////////////////////////////////////////////////////
+  /**
+   * @dev DO NOT CHANGE THE ORDER OF THESE VARIABLES ONCE DEPLOYED
+   */
+
+  /// @notice address of the pool factory which is the only one allowed to register pools.
+  address private poolFactoryAddress;
 
   /// @notice tracks the current cycle of all pools in the system by its address.
   mapping(address => PoolCycle) public poolCycles;
-
-  /*** constructor ***/
   /**
-   * @dev Pool factory contract must create this contract in order to register new pools.
+   * @dev This empty reserved space is put in place to allow future versions to add new
+   * variables without shifting down storage in the inheritance chain.
+   * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
    */
-  constructor() {
-    poolFactoryAddress = msg.sender;
-  }
+  uint256[50] private __gap;
+
+  //////////////////////////////////////////////////////
+  ///             STORAGE - END                     ///
+  /////////////////////////////////////////////////////
 
   /*** modifiers ***/
   modifier onlyPoolFactory() {
@@ -31,7 +42,28 @@ contract PoolCycleManager is IPoolCycleManager {
     _;
   }
 
+  /*** initializer ***/
+
+  /**
+   * @notice Initializes the contract.
+   */
+  function initialize() public initializer {
+    __UUPSUpgradeableBase_init();
+  }
+
   /*** state-changing functions ***/
+
+  /**
+   * @notice Sets the pool factory address. Only callable by the owner.
+   * @param _poolFactoryAddress address of the pool factory which is the only contract allowed to register pools.
+   */
+  function setPoolFactory(address _poolFactoryAddress)
+    external
+    override
+    onlyOwner
+  {
+    poolFactoryAddress = _poolFactoryAddress;
+  }
 
   /// @inheritdoc IPoolCycleManager
   function registerPool(

@@ -41,6 +41,12 @@ abstract contract IPoolCycleManager {
   error InvalidCycleDuration(uint256 cycleDuration);
 
   /**
+   * @notice Sets the pool factory address. Only callable by the owner.
+   * @param _poolFactoryAddress address of the pool factory which is the only contract allowed to register pools.
+   */
+  function setPoolFactory(address _poolFactoryAddress) external virtual;
+
+  /**
    * @notice Registers the given pool and starts a new cycle for it in `Open` state.
    * @param _poolAddress The address of the pool.
    * @param _openCycleDuration Time duration for which cycle is OPEN, meaning deposit & withdraw is allowed.
