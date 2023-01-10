@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {ERC20Snapshot} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Snapshot.sol";
+import {ERC20SnapshotUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20SnapshotUpgradeable.sol";
 
+import {UUPSUpgradeableBase} from "./UUPSUpgradeableBase.sol";
 import {IReferenceLendingPools, LendingPoolStatus} from "../interfaces/IReferenceLendingPools.sol";
 import {ILendingProtocolAdapter} from "../interfaces/ILendingProtocolAdapter.sol";
 import {IPool} from "../interfaces/IPool.sol";
@@ -11,10 +12,21 @@ import "../libraries/Constants.sol";
 
 import "hardhat/console.sol";
 
-contract DefaultStateManager is IDefaultStateManager {
-  /*** state variables ***/
+/**
+ * @title DefaultStateManager
+ * @author Carapace Finance
+ * @notice Contract to assess and manage the state transitions of of all pools.
+ * This contract is upgradeable using the UUPS pattern.
+ */
+contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
+  /////////////////////////////////////////////////////
+  ///             STORAGE - START                   ///
+  /////////////////////////////////////////////////////
+  /**
+   * @dev DO NOT CHANGE THE ORDER OF THESE VARIABLES ONCE DEPLOYED
+   */
 
-  address private immutable poolFactoryAddress;
+  address private poolFactoryAddress;
 
   /// @notice stores the current state of all pools in the system.
   /// @dev Array is used for enumerating all pools during state assessment.
@@ -23,19 +35,16 @@ contract DefaultStateManager is IDefaultStateManager {
   /// @notice tracks an index of PoolState for each pool in poolStates array.
   mapping(address => uint256) private poolStateIndex;
 
-  /*** constructor ***/
-
   /**
-   * @dev Pool factory contract must create this contract in order to register new pools.
+   * @dev This empty reserved space is put in place to allow future versions to add new
+   * variables without shifting down storage in the inheritance chain.
+   * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
    */
-  constructor() {
-    poolFactoryAddress = msg.sender;
+  uint256[50] private __gap;
 
-    /// create a dummy pool state to reserve index 0.
-    /// this is to ensure that poolStateIndex[pool] is always greater than 0,
-    /// which is used to check if a pool is registered or not.
-    poolStates.push();
-  }
+  //////////////////////////////////////////////////////
+  ///             STORAGE - END                     ///
+  /////////////////////////////////////////////////////
 
   /*** modifiers ***/
 
@@ -44,6 +53,31 @@ contract DefaultStateManager is IDefaultStateManager {
       revert NotPoolFactory(msg.sender);
     }
     _;
+  }
+
+  /*** initializer ***/
+
+  /**
+   * @notice Initializes the contract.
+   */
+  function initialize() public initializer {
+    __UUPSUpgradeableBase_init();
+
+    /// create a dummy pool state to reserve index 0.
+    /// this is to ensure that poolStateIndex[pool] is always greater than 0,
+    /// which is used to check if a pool is registered or not.
+    poolStates.push();
+  }
+
+  /*** state-changing functions ***/
+
+  /// @inheritdoc IDefaultStateManager
+  function setPoolFactory(address _poolFactoryAddress)
+    external
+    override
+    onlyOwner
+  {
+    poolFactoryAddress = _poolFactoryAddress;
   }
 
   /// @inheritdoc IDefaultStateManager
@@ -389,7 +423,7 @@ contract DefaultStateManager is IDefaultStateManager {
       );
 
       if (!lockedCapital.locked && _snapshotId > _lastClaimedSnapshotId) {
-        ERC20Snapshot _poolToken = ERC20Snapshot(
+        ERC20SnapshotUpgradeable _poolToken = ERC20SnapshotUpgradeable(
           address(poolState.protectionPool)
         );
 

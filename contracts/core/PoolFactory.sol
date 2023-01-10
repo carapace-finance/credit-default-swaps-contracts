@@ -70,11 +70,12 @@ contract PoolFactory is UUPSUpgradeableBase {
     poolCycleManager = _poolCycleManager;
     defaultStateManager = _defaultStateManager;
 
-    /// Sets pool factory address into the PoolCycleManager
-    /// This is required to enable the pool cycle manager to register a new pool when it is created
-    /// "setPoolFactory" could only be called by the owner of the pool cycle manager,
-    /// so owner of pool factory and the pool cycle manager need to be the same
+    /// Sets pool factory address into the PoolCycleManager & DefaultStateManager
+    /// This is required to enable the PoolCycleManager & DefaultStateManager to register a new pool when it is created
+    /// "setPoolFactory" could only be called by the owner of the PoolCycleManager/DefaultStateManager,
+    /// so the owner of PoolFactory, PoolCycleManager & DefaultStateManager must be the same
     poolCycleManager.setPoolFactory(address(this));
+    defaultStateManager.setPoolFactory(address(this));
   }
 
   /*** state-changing functions ***/

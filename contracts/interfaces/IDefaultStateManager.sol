@@ -66,6 +66,12 @@ abstract contract IDefaultStateManager {
   error PoolAlreadyRegistered(address pool);
 
   /**
+   * @notice Sets the pool factory address. Only callable by the owner.
+   * @param _poolFactoryAddress address of the pool factory which is the only contract allowed to register pools.
+   */
+  function setPoolFactory(address _poolFactoryAddress) external virtual;
+
+  /**
    * @notice register a protection pool. Only pool factory can call this function.
    * @param _protectionPool an address of the protection pool to register
    */

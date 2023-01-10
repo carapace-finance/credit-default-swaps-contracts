@@ -23,6 +23,7 @@ contract PoolCycleManager is UUPSUpgradeableBase, IPoolCycleManager {
 
   /// @notice tracks the current cycle of all pools in the system by its address.
   mapping(address => PoolCycle) public poolCycles;
+
   /**
    * @dev This empty reserved space is put in place to allow future versions to add new
    * variables without shifting down storage in the inheritance chain.
@@ -53,10 +54,7 @@ contract PoolCycleManager is UUPSUpgradeableBase, IPoolCycleManager {
 
   /*** state-changing functions ***/
 
-  /**
-   * @notice Sets the pool factory address. Only callable by the owner.
-   * @param _poolFactoryAddress address of the pool factory which is the only contract allowed to register pools.
-   */
+  /// @inheritdoc IPoolCycleManager
   function setPoolFactory(address _poolFactoryAddress)
     external
     override
