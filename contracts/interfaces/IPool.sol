@@ -49,7 +49,7 @@ struct PoolParams {
 
 /// @notice Contains pool information
 struct PoolInfo {
-  uint256 poolId;
+  address poolAddress;
   PoolParams params;
   IERC20MetadataUpgradeable underlyingToken;
   IReferenceLendingPools referenceLendingPools;
@@ -118,13 +118,10 @@ abstract contract IPool {
   error ProtectionPurchaseNotAllowed(ProtectionPurchaseParams params);
   error ProtectionDurationTooShort(uint256 protectionDurationInSeconds);
   error ProtectionDurationTooLong(uint256 protectionDurationInSeconds);
-  error PoolIsNotOpen(uint256 poolId);
-  error PoolLeverageRatioTooHigh(uint256 poolId, uint256 leverageRatio);
-  error PoolLeverageRatioTooLow(uint256 poolId, uint256 leverageRatio);
-  error PoolHasNoMinCapitalRequired(
-    uint256 poolId,
-    uint256 totalSTokenUnderlying
-  );
+  error PoolIsNotOpen();
+  error PoolLeverageRatioTooHigh(uint256 leverageRatio);
+  error PoolLeverageRatioTooLow(uint256 leverageRatio);
+  error PoolHasNoMinCapitalRequired(uint256 totalSTokenUnderlying);
   error NoWithdrawalRequested(address msgSender, uint256 poolCycleIndex);
   error WithdrawalHigherThanRequested(
     address msgSender,
@@ -132,8 +129,8 @@ abstract contract IPool {
   );
   error InsufficientSTokenBalance(address msgSender, uint256 sTokenBalance);
   error OnlyDefaultStateManager(address msgSender);
-  error PoolInOpenToSellersPhase(uint256 poolId);
-  error PoolInOpenToBuyersPhase(uint256 poolId);
+  error PoolInOpenToSellersPhase();
+  error PoolInOpenToBuyersPhase();
   error NoExpiredProtectionToExtend();
   error CanNotExtendProtectionAfterGracePeriod();
   error PremiumExceedsMaxPremiumAmount(
@@ -191,7 +188,7 @@ abstract contract IPool {
   );
 
   /// @notice Emitted when a pool phase is updated.
-  event PoolPhaseUpdated(uint256 poolId, PoolPhase newState);
+  event PoolPhaseUpdated(PoolPhase newPhase);
 
   function initialize(
     PoolInfo calldata _poolInfo,

@@ -100,13 +100,12 @@ contract Pool is
   /// @notice Checks whether pool cycle is in open state. If not, reverts.
   modifier whenPoolIsOpen() {
     /// Update the pool cycle state
-    uint256 poolId = poolInfo.poolId;
     CycleState cycleState = poolCycleManager.calculateAndSetPoolCycleState(
-      poolId
+      address(this)
     );
 
     if (cycleState != CycleState.Open) {
-      revert PoolIsNotOpen(poolId);
+      revert PoolIsNotOpen();
     }
     _;
   }
@@ -209,7 +208,7 @@ contract Pool is
   {
     /// Verify that the pool is not in OpenToBuyers phase
     if (poolInfo.currentPhase == PoolPhase.OpenToBuyers) {
-      revert PoolInOpenToBuyersPhase(poolInfo.poolId);
+      revert PoolInOpenToBuyersPhase();
     }
 
     uint256 _sTokenShares = convertToSToken(_underlyingAmount);
@@ -227,7 +226,7 @@ contract Pool is
       uint256 _leverageRatio = calculateLeverageRatio();
 
       if (_leverageRatio > poolInfo.params.leverageRatioCeiling) {
-        revert PoolLeverageRatioTooHigh(poolInfo.poolId, _leverageRatio);
+        revert PoolLeverageRatioTooHigh(_leverageRatio);
       }
     }
 
@@ -246,7 +245,7 @@ contract Pool is
     }
 
     uint256 _currentCycleIndex = poolCycleManager.getCurrentCycleIndex(
-      poolInfo.poolId
+      address(this)
     );
 
     /// Actual withdrawal is allowed in open period of cycle after next cycle
@@ -283,7 +282,7 @@ contract Pool is
   {
     /// Step 1: Retrieve withdrawal details for current pool cycle index
     uint256 _currentCycleIndex = poolCycleManager.getCurrentCycleIndex(
-      poolInfo.poolId
+      address(this)
     );
     WithdrawalCycleDetail storage withdrawalCycle = withdrawalCycleDetails[
       _currentCycleIndex
@@ -528,13 +527,13 @@ contract Pool is
     /// when the pool is in OpenToSellers phase, it can be moved to OpenToBuyers phase
     if (_currentPhase == PoolPhase.OpenToSellers && _hasMinRequiredCapital()) {
       poolInfo.currentPhase = _newPhase = PoolPhase.OpenToBuyers;
-      emit PoolPhaseUpdated(poolInfo.poolId, _newPhase);
+      emit PoolPhaseUpdated(_newPhase);
     } else if (_currentPhase == PoolPhase.OpenToBuyers) {
       /// when the pool is in OpenToBuyers phase, it can be moved to Open phase
       /// if the leverage ratio is below the ceiling
       if (calculateLeverageRatio() <= poolInfo.params.leverageRatioCeiling) {
         poolInfo.currentPhase = _newPhase = PoolPhase.Open;
-        emit PoolPhaseUpdated(poolInfo.poolId, _newPhase);
+        emit PoolPhaseUpdated(_newPhase);
       }
     }
 
@@ -746,7 +745,7 @@ contract Pool is
     returns (uint256 _maxAllowedProtectionDurationInSeconds)
   {
     _maxAllowedProtectionDurationInSeconds =
-      poolCycleManager.getNextCycleEndTimestamp(poolInfo.poolId) -
+      poolCycleManager.getNextCycleEndTimestamp(address(this)) -
       block.timestamp;
   }
 
@@ -776,7 +775,7 @@ contract Pool is
     totalProtection += _protectionPurchaseParams.protectionAmount;
     uint256 _leverageRatio = calculateLeverageRatio();
     if (_leverageRatio < poolInfo.params.leverageRatioFloor) {
-      revert PoolLeverageRatioTooLow(poolInfo.poolId, _leverageRatio);
+      revert PoolLeverageRatioTooLow(_leverageRatio);
     }
 
     LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[

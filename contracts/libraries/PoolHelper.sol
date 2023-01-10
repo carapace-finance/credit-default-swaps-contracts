@@ -35,14 +35,14 @@ library PoolHelper {
   ) external {
     /// Verify that the pool is not in OpenToSellers phase
     if (poolInfo.currentPhase == PoolPhase.OpenToSellers) {
-      revert IPool.PoolInOpenToSellersPhase(poolInfo.poolId);
+      revert IPool.PoolInOpenToSellersPhase();
     }
 
     /// a buyer needs to buy protection longer than min protection duration specified in the pool params
     /// or to extend protection longer than a day
     _verifyProtectionDuration(
       poolCycleManager,
-      poolInfo.poolId,
+      poolInfo.poolAddress,
       _protectionStartTimestamp,
       _protectionPurchaseParams.protectionDurationInSeconds,
       _isExtension
@@ -389,7 +389,7 @@ library PoolHelper {
    */
   function _verifyProtectionDuration(
     IPoolCycleManager poolCycleManager,
-    uint256 _poolId,
+    address _poolAddress,
     uint256 _protectionStartTimestamp,
     uint256 _protectionDurationInSeconds,
     uint256 _minProtectionDurationInSeconds
@@ -402,9 +402,9 @@ library PoolHelper {
     }
 
     /// protection expiry can not be be after the next cycle end
-    poolCycleManager.calculateAndSetPoolCycleState(_poolId);
+    poolCycleManager.calculateAndSetPoolCycleState(_poolAddress);
     uint256 _nextCycleEndTimestamp = poolCycleManager.getNextCycleEndTimestamp(
-      _poolId
+      _poolAddress
     );
 
     if (_protectionExpirationTimestamp > _nextCycleEndTimestamp) {

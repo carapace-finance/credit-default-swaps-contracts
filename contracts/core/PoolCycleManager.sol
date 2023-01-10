@@ -12,8 +12,8 @@ contract PoolCycleManager is IPoolCycleManager {
   /*** state variables ***/
   address public immutable poolFactoryAddress;
 
-  /// @notice tracks the current cycle of all pools in the system.
-  mapping(uint256 => PoolCycle) public poolCycles;
+  /// @notice tracks the current cycle of all pools in the system by its address.
+  mapping(address => PoolCycle) public poolCycles;
 
   /*** constructor ***/
   /**
@@ -35,14 +35,14 @@ contract PoolCycleManager is IPoolCycleManager {
 
   /// @inheritdoc IPoolCycleManager
   function registerPool(
-    uint256 _poolId,
+    address _poolAddress,
     uint256 _openCycleDuration,
     uint256 _cycleDuration
   ) external override onlyPoolFactory {
-    PoolCycle storage poolCycle = poolCycles[_poolId];
+    PoolCycle storage poolCycle = poolCycles[_poolAddress];
 
     if (poolCycle.currentCycleStartTime > 0) {
-      revert PoolAlreadyRegistered(_poolId);
+      revert PoolAlreadyRegistered(_poolAddress);
     }
 
     if (_openCycleDuration > _cycleDuration) {
@@ -51,16 +51,16 @@ contract PoolCycleManager is IPoolCycleManager {
 
     poolCycle.openCycleDuration = _openCycleDuration;
     poolCycle.cycleDuration = _cycleDuration;
-    _startNewCycle(_poolId, poolCycle, 0);
+    _startNewCycle(_poolAddress, poolCycle, 0);
   }
 
   /// @inheritdoc IPoolCycleManager
-  function calculateAndSetPoolCycleState(uint256 _poolId)
+  function calculateAndSetPoolCycleState(address _poolAddress)
     external
     override
     returns (CycleState)
   {
-    PoolCycle storage poolCycle = poolCycles[_poolId];
+    PoolCycle storage poolCycle = poolCycles[_poolAddress];
 
     /// Gas optimization:
     /// Store the current cycle state in memory instead of reading it from the storage each time.
@@ -87,7 +87,11 @@ contract PoolCycleManager is IPoolCycleManager {
         poolCycle.cycleDuration
       ) {
         /// move current cycle to a new cycle
-        _startNewCycle(_poolId, poolCycle, poolCycle.currentCycleIndex + 1);
+        _startNewCycle(
+          _poolAddress,
+          poolCycle,
+          poolCycle.currentCycleIndex + 1
+        );
       }
     }
 
@@ -97,42 +101,42 @@ contract PoolCycleManager is IPoolCycleManager {
   /*** view functions ***/
 
   /// @inheritdoc IPoolCycleManager
-  function getCurrentCycleState(uint256 _poolId)
+  function getCurrentCycleState(address _poolAddress)
     external
     view
     override
     returns (CycleState)
   {
-    return poolCycles[_poolId].currentCycleState;
+    return poolCycles[_poolAddress].currentCycleState;
   }
 
   /// @inheritdoc IPoolCycleManager
-  function getCurrentCycleIndex(uint256 _poolId)
+  function getCurrentCycleIndex(address _poolAddress)
     external
     view
     override
     returns (uint256)
   {
-    return poolCycles[_poolId].currentCycleIndex;
+    return poolCycles[_poolAddress].currentCycleIndex;
   }
 
   /// @inheritdoc IPoolCycleManager
-  function getCurrentPoolCycle(uint256 _poolId)
+  function getCurrentPoolCycle(address _poolAddress)
     external
     view
     override
     returns (PoolCycle memory)
   {
-    return poolCycles[_poolId];
+    return poolCycles[_poolAddress];
   }
 
-  function getNextCycleEndTimestamp(uint256 _poolId)
+  function getNextCycleEndTimestamp(address _poolAddress)
     external
     view
     override
     returns (uint256 _nextCycleEndTimestamp)
   {
-    PoolCycle storage poolCycle = poolCycles[_poolId];
+    PoolCycle storage poolCycle = poolCycles[_poolAddress];
     _nextCycleEndTimestamp =
       poolCycle.currentCycleStartTime +
       (2 * poolCycle.cycleDuration);
@@ -142,7 +146,7 @@ contract PoolCycleManager is IPoolCycleManager {
 
   /// @dev Starts a new pool cycle using specified cycle index
   function _startNewCycle(
-    uint256 _poolId,
+    address _poolAddress,
     PoolCycle storage _poolCycle,
     uint256 _cycleIndex
   ) internal {
@@ -151,7 +155,7 @@ contract PoolCycleManager is IPoolCycleManager {
     _poolCycle.currentCycleState = CycleState.Open;
 
     emit PoolCycleCreated(
-      _poolId,
+      _poolAddress,
       _cycleIndex,
       block.timestamp,
       _poolCycle.openCycleDuration,

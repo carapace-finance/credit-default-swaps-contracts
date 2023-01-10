@@ -4,7 +4,6 @@ pragma solidity ^0.8.13;
 import {IERC20MetadataUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 import {AddressUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {CountersUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/CountersUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
@@ -20,10 +19,6 @@ import {IDefaultStateManager} from "../interfaces/IDefaultStateManager.sol";
  * @author Carapace Finance
  */
 contract PoolFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
-  /*** libraries ***/
-  /// @notice OpenZeppelin library for managing counters.
-  using CountersUpgradeable for CountersUpgradeable.Counter;
-
   /////////////////////////////////////////////////////
   ///             STORAGE - START                   ///
   /////////////////////////////////////////////////////
@@ -31,17 +26,14 @@ contract PoolFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
    * @dev DO NOT CHANGE THE ORDER OF THESE VARIABLES ONCE DEPLOYED
    */
 
-  /// @notice pool id counter
-  CountersUpgradeable.Counter private poolIdCounter;
-
-  /// @notice a pool id for each pool address
-  mapping(uint256 => address) private poolIdToPoolAddress;
-
   /// @notice reference to the pool cycle manager
   IPoolCycleManager private poolCycleManager;
 
   /// @notice reference to the default state manager
   IDefaultStateManager private defaultStateManager;
+
+  /// @notice list of all pools created by this factory
+  address[] private pools;
 
   /**
    * @dev This empty reserved space is put in place to allow future versions to add new
@@ -58,7 +50,6 @@ contract PoolFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /// @notice Emitted when a new pool is created.
   event PoolCreated(
-    uint256 poolId,
     address poolAddress,
     uint256 floor,
     uint256 ceiling,
@@ -85,9 +76,6 @@ contract PoolFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     poolCycleManager = _poolCycleManager;
     defaultStateManager = _defaultStateManager;
-
-    /// poolIdCounter starts in 1 for consistency
-    poolIdCounter.increment();
   }
 
   /*** state-changing functions ***/
@@ -109,7 +97,6 @@ contract PoolFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     string calldata _name,
     string calldata _symbol
   ) external onlyOwner returns (address) {
-    uint256 _poolId = poolIdCounter.current();
     // Pool pool = new Pool{salt: _salt}(
     //   PoolInfo({
     //     poolId: _poolId,
@@ -136,12 +123,9 @@ contract PoolFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     );
     address _poolProxyAddress = address(_poolProxy);
 
-    poolIdToPoolAddress[_poolId] = _poolProxyAddress;
-    poolIdCounter.increment();
-
     /// register newly created pool to the pool cycle manager
     poolCycleManager.registerPool(
-      _poolId,
+      _poolProxyAddress,
       _poolParameters.poolCycleParams.openCycleDuration,
       _poolParameters.poolCycleParams.cycleDuration
     );
@@ -150,7 +134,6 @@ contract PoolFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     defaultStateManager.registerPool(_poolProxyAddress);
 
     emit PoolCreated(
-      _poolId,
       _poolProxyAddress,
       _poolParameters.leverageRatioFloor,
       _poolParameters.leverageRatioCeiling,
@@ -180,10 +163,10 @@ contract PoolFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   /*** view functions ***/
 
   /**
-   * @notice Returns the pool address for a given pool id.
+   * @notice Returns all pools created by this factory.
    */
-  function getPoolAddress(uint256 _poolId) external view returns (address) {
-    return poolIdToPoolAddress[_poolId];
+  function getPools() external view returns (address[] memory) {
+    return pools;
   }
 
   /*** internal functions */
