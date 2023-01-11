@@ -5,7 +5,7 @@ import {UUPSUpgradeableBase} from "../UUPSUpgradeableBase.sol";
 
 import {IReferenceLendingPools, LendingPoolStatus, LendingProtocol, ProtectionPurchaseParams, ReferenceLendingPoolInfo} from "../../interfaces/IReferenceLendingPools.sol";
 import {ILendingProtocolAdapter} from "../../interfaces/ILendingProtocolAdapter.sol";
-import {GoldfinchV2Adapter} from "../../adapters/GoldfinchV2Adapter.sol";
+import {GoldfinchAdapter} from "../../adapters/GoldfinchAdapter.sol";
 import "../../libraries/Constants.sol";
 
 /**
@@ -28,7 +28,7 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
   address[] private lendingPools;
 
   /// @notice the mapping of the lending pool protocol to the lending protocol adapter
-  /// i.e GoldfinchV2 => GoldfinchV2Adapter
+  /// i.e Goldfinch => GoldfinchAdapter
   mapping(LendingProtocol => ILendingProtocolAdapter)
     public lendingProtocolAdapters;
 
@@ -314,8 +314,8 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
     internal
     returns (ILendingProtocolAdapter)
   {
-    if (protocol == LendingProtocol.GoldfinchV2) {
-      return new GoldfinchV2Adapter();
+    if (protocol == LendingProtocol.Goldfinch) {
+      return new GoldfinchAdapter();
     } else {
       revert LendingProtocolNotSupported(protocol);
     }

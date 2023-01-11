@@ -19,7 +19,7 @@ import "../libraries/Constants.sol";
  * @notice Adapter for Goldfinch V2 lending protocol
  * @author Carapace Finance
  */
-contract GoldfinchV2Adapter is ILendingProtocolAdapter {
+contract GoldfinchAdapter is ILendingProtocolAdapter {
   using PRBMathUD60x18 for uint256;
 
   /// Copied from Goldfinch's TranchingLogic.sol:

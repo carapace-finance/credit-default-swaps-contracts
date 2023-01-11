@@ -19,7 +19,7 @@ enum LendingPoolStatus {
 }
 
 enum LendingProtocol {
-  GoldfinchV2
+  Goldfinch
 }
 
 /// @notice This struct represents the information of the reference lending pool for which buyers can purchase the protection
