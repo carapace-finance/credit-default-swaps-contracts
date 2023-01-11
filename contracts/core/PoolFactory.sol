@@ -17,7 +17,7 @@ import {IDefaultStateManager} from "../interfaces/IDefaultStateManager.sol";
  * @author Carapace Finance
  * @notice PoolFactory creates a new pool and keeps track of them.
  * @notice This contract is used to create new upgradable pools using ERC1967 proxy.
- * This contract is also upgradeable using the UUPS pattern.
+ * This factory contract is also upgradeable using the UUPS pattern.
  */
 contract PoolFactory is UUPSUpgradeableBase {
   /////////////////////////////////////////////////////

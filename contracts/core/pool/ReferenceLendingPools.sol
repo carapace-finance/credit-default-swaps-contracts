@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {UUPSUpgradeableBase} from "../UUPSUpgradeableBase.sol";
 
 import {IReferenceLendingPools, LendingPoolStatus, LendingProtocol, ProtectionPurchaseParams, ReferenceLendingPoolInfo} from "../../interfaces/IReferenceLendingPools.sol";
 import {ILendingProtocolAdapter} from "../../interfaces/ILendingProtocolAdapter.sol";
@@ -14,12 +13,13 @@ import "../../libraries/Constants.sol";
  * against which the carapace protocol can provide the protection.
  * @author Carapace Finance
  */
-contract ReferenceLendingPools is
-  Ownable,
-  Initializable,
-  IReferenceLendingPools
-{
-  /** state variables */
+contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
+  /////////////////////////////////////////////////////
+  ///             STORAGE - START                   ///
+  /////////////////////////////////////////////////////
+  /**
+   * @dev DO NOT CHANGE THE ORDER OF THESE VARIABLES ONCE DEPLOYED
+   */
 
   /// @notice the mapping of the lending pool address to the lending pool info
   mapping(address => ReferenceLendingPoolInfo) public referenceLendingPools;
@@ -32,19 +32,23 @@ contract ReferenceLendingPools is
   mapping(LendingProtocol => ILendingProtocolAdapter)
     public lendingProtocolAdapters;
 
+  /**
+   * @dev This empty reserved space is put in place to allow future versions to add new
+   * variables without shifting down storage in the inheritance chain.
+   * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
+   */
+  uint256[50] private __gap;
+
+  //////////////////////////////////////////////////////
+  ///             STORAGE - END                     ///
+  /////////////////////////////////////////////////////
+
   /** modifiers */
   modifier whenLendingPoolSupported(address _lendingPoolAddress) {
     if (!_isReferenceLendingPoolAdded(_lendingPoolAddress)) {
       revert ReferenceLendingPoolNotSupported(_lendingPoolAddress);
     }
     _;
-  }
-
-  /** constructor */
-  constructor() {
-    /// disable the initialization of this implementation contract as
-    /// it is intended to be called through minimal proxies.
-    _disableInitializers();
   }
 
   /// @inheritdoc IReferenceLendingPools
@@ -54,6 +58,8 @@ contract ReferenceLendingPools is
     LendingProtocol[] calldata _lendingPoolProtocols,
     uint256[] calldata _protectionPurchaseLimitsInDays
   ) external override initializer {
+    __UUPSUpgradeableBase_init();
+
     if (
       _lendingPools.length != _lendingPoolProtocols.length ||
       _lendingPools.length != _protectionPurchaseLimitsInDays.length
