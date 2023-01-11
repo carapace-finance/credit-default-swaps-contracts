@@ -13,6 +13,7 @@ import {IReferenceLendingPools, LendingProtocol} from "../interfaces/IReferenceL
  */
 contract ReferenceLendingPoolsFactory is Ownable {
   address public immutable referenceLendingPoolsImplementation;
+  address[] public referenceLendingPoolsList;
 
   event ReferenceLendingPoolsCreated(address indexed referenceLendingPools);
 
@@ -50,6 +51,20 @@ contract ReferenceLendingPoolsFactory is Ownable {
       _protectionPurchaseLimitsInDays
     );
 
+    /// add the newly created reference lending pools to the list of reference lending pools
+    referenceLendingPoolsList.push(referenceLendingPools);
+
     emit ReferenceLendingPoolsCreated(address(_referenceLendingPools));
+  }
+
+  /**
+   * @notice Returns the list of reference lending pools created by the factory.
+   */
+  function getReferenceLendingPoolsList()
+    external
+    view
+    returns (address[] memory)
+  {
+    return referenceLendingPoolsList;
   }
 }

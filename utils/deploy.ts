@@ -1,4 +1,3 @@
-import { BigNumber } from "@ethersproject/bignumber";
 import { ContractFactory, Signer } from "ethers";
 import { parseEther } from "ethers/lib/utils";
 import { ethers } from "hardhat";
@@ -137,8 +136,17 @@ const deployContracts: Function = async () => {
         _lendingProtocols,
         _purchaseLimitsInDays
       );
-    referenceLendingPoolsInstance =
-      await getReferenceLendingPoolsInstanceFromTx(tx1);
+    const referenceLendingPoolsList =
+      await referenceLendingPoolsFactoryInstance.getReferenceLendingPoolsList();
+    referenceLendingPoolsInstance = (await ethers.getContractAt(
+      "ReferenceLendingPools",
+      referenceLendingPoolsList[referenceLendingPoolsList.length - 1]
+    )) as ReferenceLendingPools;
+
+    console.log(
+      "ReferenceLendingPools instance created at: ",
+      referenceLendingPoolsInstance.address
+    );
 
     // Deploy PoolCycleManager
     const poolCycleManagerFactory = await contractFactory("PoolCycleManager");
@@ -219,7 +227,14 @@ const deployContracts: Function = async () => {
       "sToken11",
       "sT11"
     );
-    poolInstance = await getPoolInstanceFromTx(tx);
+
+    const pools = await poolFactoryInstance.getPools();
+    poolInstance = (await ethers.getContractAt(
+      "Pool",
+      pools[pools.length - 1]
+    )) as Pool;
+
+    console.log("Pool instance created at: ", poolInstance.address);
   } catch (e) {
     console.log(e);
   }
