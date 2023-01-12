@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import {IERC20MetadataUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 import {AddressUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
 
-import {OwnableUpgradeable, UUPSUpgradeableBase} from "./UUPSUpgradeableBase.sol";
+import {OwnableUpgradeable, UUPSUpgradeableBase} from "../UUPSUpgradeableBase.sol";
 import {ERC1967Proxy} from "../external/openzeppelin/ERC1967/ERC1967Proxy.sol";
 import {IPool, PoolParams, PoolInfo, PoolPhase} from "../interfaces/IPool.sol";
 import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";

@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import {ERC20SnapshotUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20SnapshotUpgradeable.sol";
 
-import {UUPSUpgradeableBase} from "./UUPSUpgradeableBase.sol";
+import {UUPSUpgradeableBase} from "../UUPSUpgradeableBase.sol";
 import {IReferenceLendingPools, LendingPoolStatus} from "../interfaces/IReferenceLendingPools.sol";
 import {ILendingProtocolAdapter} from "../interfaces/ILendingProtocolAdapter.sol";
 import {IPool} from "../interfaces/IPool.sol";

@@ -62,7 +62,6 @@ abstract contract IReferenceLendingPools {
 
   /** errors */
   error ReferenceLendingPoolsConstructionError(string error);
-  error LendingProtocolNotSupported(LendingProtocol protocol);
   error ReferenceLendingPoolNotSupported(address lendingPoolAddress);
   error ReferenceLendingPoolAlreadyAdded(address lendingPoolAddress);
   error ReferenceLendingPoolIsNotActive(address lendingPoolAddress);
@@ -76,12 +75,14 @@ abstract contract IReferenceLendingPools {
    * @param _lendingPoolProtocols the corresponding protocols of the lending pools which will be added to the basket
    * @param _protectionPurchaseLimitsInDays the corresponding protection purchase limits(in days) of the lending pools,
    * which will be added to the basket
+   * @param _lendingProtocolAdapterFactory the address of the {LendingProtocolAdapterFactory} contract
    */
   function initialize(
     address _owner,
     address[] calldata _lendingPools,
     LendingProtocol[] calldata _lendingPoolProtocols,
-    uint256[] calldata _protectionPurchaseLimitsInDays
+    uint256[] calldata _protectionPurchaseLimitsInDays,
+    address _lendingProtocolAdapterFactory
   ) external virtual;
 
   /**

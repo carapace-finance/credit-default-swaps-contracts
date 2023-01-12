@@ -1,17 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {UUPSUpgradeableBase} from "../UUPSUpgradeableBase.sol";
+import {UUPSUpgradeableBase} from "../../UUPSUpgradeableBase.sol";
 
 import {IReferenceLendingPools, LendingPoolStatus, LendingProtocol, ProtectionPurchaseParams, ReferenceLendingPoolInfo} from "../../interfaces/IReferenceLendingPools.sol";
 import {ILendingProtocolAdapter} from "../../interfaces/ILendingProtocolAdapter.sol";
-import {GoldfinchAdapter} from "../../adapters/GoldfinchAdapter.sol";
+import {ILendingProtocolAdapterFactory} from "../../interfaces/ILendingProtocolAdapterFactory.sol";
+
 import "../../libraries/Constants.sol";
 
 /**
+ * @title ReferenceLendingPools
+ * @author Carapace Finance
  * @notice ReferenceLendingPools manages the basket of reference lending pools,
  * against which the carapace protocol can provide the protection.
- * @author Carapace Finance
+ * This contract is upgradeable using the UUPS pattern.
  */
 contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
   /////////////////////////////////////////////////////
@@ -20,17 +23,13 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
   /**
    * @dev DO NOT CHANGE THE ORDER OF THESE VARIABLES ONCE DEPLOYED
    */
+  ILendingProtocolAdapterFactory private lendingProtocolAdapterFactory;
 
   /// @notice the mapping of the lending pool address to the lending pool info
   mapping(address => ReferenceLendingPoolInfo) public referenceLendingPools;
 
   /// @notice an array of all the added/supported lending pools in this basket
   address[] private lendingPools;
-
-  /// @notice the mapping of the lending pool protocol to the lending protocol adapter
-  /// i.e Goldfinch => GoldfinchAdapter
-  mapping(LendingProtocol => ILendingProtocolAdapter)
-    public lendingProtocolAdapters;
 
   /**
    * @dev This empty reserved space is put in place to allow future versions to add new
@@ -56,10 +55,9 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
     address _owner,
     address[] calldata _lendingPools,
     LendingProtocol[] calldata _lendingPoolProtocols,
-    uint256[] calldata _protectionPurchaseLimitsInDays
+    uint256[] calldata _protectionPurchaseLimitsInDays,
+    address _lendingProtocolAdapterFactory
   ) external override initializer {
-    __UUPSUpgradeableBase_init();
-
     if (
       _lendingPools.length != _lendingPoolProtocols.length ||
       _lendingPools.length != _protectionPurchaseLimitsInDays.length
@@ -75,6 +73,11 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
       );
     }
 
+    __UUPSUpgradeableBase_init();
+
+    lendingProtocolAdapterFactory = ILendingProtocolAdapterFactory(
+      _lendingProtocolAdapterFactory
+    );
     _transferOwnership(_owner);
 
     uint256 length = _lendingPools.length;
@@ -268,16 +271,6 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
     });
     lendingPools.push(_lendingPoolAddress);
 
-    /// Create underlying protocol adapter if it doesn't exist
-    if (
-      address(lendingProtocolAdapters[_lendingPoolProtocol]) ==
-      Constants.ZERO_ADDRESS
-    ) {
-      lendingProtocolAdapters[_lendingPoolProtocol] = _createAdapter(
-        _lendingPoolProtocol
-      );
-    }
-
     LendingPoolStatus _poolStatus = _getLendingPoolStatus(_lendingPoolAddress);
     if (_poolStatus != LendingPoolStatus.Active) {
       revert ReferenceLendingPoolIsNotActive(_lendingPoolAddress);
@@ -297,9 +290,9 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
     returns (ILendingProtocolAdapter)
   {
     return
-      lendingProtocolAdapters[
+      lendingProtocolAdapterFactory.getLendingProtocolAdapter(
         referenceLendingPools[_lendingPoolAddress].protocol
-      ];
+      );
   }
 
   function _isReferenceLendingPoolAdded(address _lendingPoolAddress)
@@ -308,17 +301,6 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
     returns (bool)
   {
     return referenceLendingPools[_lendingPoolAddress].addedTimestamp != 0;
-  }
-
-  function _createAdapter(LendingProtocol protocol)
-    internal
-    returns (ILendingProtocolAdapter)
-  {
-    if (protocol == LendingProtocol.Goldfinch) {
-      return new GoldfinchAdapter();
-    } else {
-      revert LendingProtocolNotSupported(protocol);
-    }
   }
 
   function _getLendingPoolStatus(address _lendingPoolAddress)

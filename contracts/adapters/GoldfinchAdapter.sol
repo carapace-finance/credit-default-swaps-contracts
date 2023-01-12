@@ -3,6 +3,8 @@ pragma solidity ^0.8.13;
 
 import "@prb/math/contracts/PRBMathUD60x18.sol";
 
+import {UUPSUpgradeableBase} from "../UUPSUpgradeableBase.sol";
+
 import {IPoolTokens} from "../external/goldfinch/IPoolTokens.sol";
 import {ITranchedPool} from "../external/goldfinch/ITranchedPool.sol";
 import {ICreditLine} from "../external/goldfinch/ICreditLine.sol";
@@ -16,10 +18,12 @@ import {IReferenceLendingPools, ProtectionPurchaseParams} from "../interfaces/IR
 import "../libraries/Constants.sol";
 
 /**
- * @notice Adapter for Goldfinch V2 lending protocol
+ * @title GoldfinchAdapter
  * @author Carapace Finance
+ * @notice Adapter for Goldfinch lending protocol
+ * This contract is upgradeable using the UUPS pattern.
  */
-contract GoldfinchAdapter is ILendingProtocolAdapter {
+contract GoldfinchAdapter is UUPSUpgradeableBase, ILendingProtocolAdapter {
   using PRBMathUD60x18 for uint256;
 
   /// Copied from Goldfinch's TranchingLogic.sol:
@@ -29,11 +33,23 @@ contract GoldfinchAdapter is ILendingProtocolAdapter {
   address public constant GOLDFINCH_CONFIG_ADDRESS =
     0xaA425F8BfE82CD18f634e2Fe91E5DdEeFD98fDA1;
 
+  /////////////////////////////////////////////////////
+  ///             STORAGE - START                   ///
+  /////////////////////////////////////////////////////
+  /**
+   * @dev DO NOT CHANGE THE ORDER OF THESE VARIABLES ONCE DEPLOYED
+   */
+
   /// This contract stores mappings of useful goldfinch's "protocol config state".
   /// These config vars are enumerated in the `ConfigOptions` library.
-  IGoldfinchConfig public immutable goldfinchConfig;
+  IGoldfinchConfig public goldfinchConfig;
 
-  constructor() {
+  //////////////////////////////////////////////////////
+  ///             STORAGE - END                     ///
+  /////////////////////////////////////////////////////
+
+  /*** initializer ***/
+  function initialize() public initializer {
     goldfinchConfig = IGoldfinchConfig(GOLDFINCH_CONFIG_ADDRESS);
   }
 

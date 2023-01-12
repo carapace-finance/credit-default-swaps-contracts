@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import "@prb/math/contracts/PRBMathSD59x18.sol";
 
+import {UUPSUpgradeableBase} from "../UUPSUpgradeableBase.sol";
 import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
 import {IPool, PoolParams} from "../interfaces/IPool.sol";
 
@@ -11,7 +12,7 @@ import "../libraries/RiskFactorCalculator.sol";
 
 import "hardhat/console.sol";
 
-contract PremiumCalculator is IPremiumCalculator {
+contract PremiumCalculator is UUPSUpgradeableBase, IPremiumCalculator {
   using PRBMathSD59x18 for int256;
 
   /// @inheritdoc IPremiumCalculator

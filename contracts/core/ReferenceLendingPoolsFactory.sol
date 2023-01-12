@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {UUPSUpgradeableBase} from "./UUPSUpgradeableBase.sol";
+import {UUPSUpgradeableBase} from "../UUPSUpgradeableBase.sol";
 
 import {ERC1967Proxy} from "../external/openzeppelin/ERC1967/ERC1967Proxy.sol";
 import {IReferenceLendingPools, LendingProtocol} from "../interfaces/IReferenceLendingPools.sol";
@@ -51,13 +51,15 @@ contract ReferenceLendingPoolsFactory is UUPSUpgradeableBase {
    * @param _lendingPoolProtocols the corresponding protocols of the lending pools which will be added to the basket
    * @param _protectionPurchaseLimitsInDays the corresponding protection purchase limits(in days) of the lending pools,
    * which will be added to the basket
+   * @param _lendingProtocolAdapterFactory the address of the {LendingProtocolAdapterFactory} contract
    * @return _referenceLendingPoolsAddress the address of the newly created {IReferenceLendingPools} instance
    */
   function createReferenceLendingPools(
     address _referenceLendingPoolsImplementation,
     address[] calldata _lendingPools,
     LendingProtocol[] calldata _lendingPoolProtocols,
-    uint256[] calldata _protectionPurchaseLimitsInDays
+    uint256[] calldata _protectionPurchaseLimitsInDays,
+    address _lendingProtocolAdapterFactory
   ) external onlyOwner returns (address _referenceLendingPoolsAddress) {
     /// Create a ERC1967 proxy contract for the reference lending pools using specified implementation address
     /// This instance of reference lending pools is upgradable using UUPS pattern
@@ -68,7 +70,8 @@ contract ReferenceLendingPoolsFactory is UUPSUpgradeableBase {
         _msgSender(),
         _lendingPools,
         _lendingPoolProtocols,
-        _protectionPurchaseLimitsInDays
+        _protectionPurchaseLimitsInDays,
+        _lendingProtocolAdapterFactory
       )
     );
 
