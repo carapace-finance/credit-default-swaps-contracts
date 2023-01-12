@@ -2,6 +2,8 @@
 
 pragma solidity ^0.8.13;
 
+import {LendingProtocol} from "./ILendingProtocolAdapter.sol";
+
 /// @notice Enum to represent the status of the lending pool
 enum LendingPoolStatus {
   /// @notice This means the lending pool is not added to the basket and the protection can NOT be purchased
@@ -16,10 +18,6 @@ enum LendingPoolStatus {
   Defaulted,
   /// @notice This means the lending pool is either fully repaid or full term has been completed and the protection can NOT be purchased
   Expired
-}
-
-enum LendingProtocol {
-  Goldfinch
 }
 
 /// @notice This struct represents the information of the reference lending pool for which buyers can purchase the protection
