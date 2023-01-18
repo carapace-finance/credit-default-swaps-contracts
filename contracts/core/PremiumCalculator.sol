@@ -15,6 +15,15 @@ import "hardhat/console.sol";
 contract PremiumCalculator is UUPSUpgradeableBase, IPremiumCalculator {
   using PRBMathSD59x18 for int256;
 
+  /*** initializer ***/
+
+  /**
+   * @notice Initializes the contract.
+   */
+  function initialize() public initializer {
+    __UUPSUpgradeableBase_init();
+  }
+
   /// @inheritdoc IPremiumCalculator
   function calculatePremium(
     uint256 _protectionDurationInSeconds,
@@ -23,7 +32,13 @@ contract PremiumCalculator is UUPSUpgradeableBase, IPremiumCalculator {
     uint256 _leverageRatio,
     uint256 _totalCapital,
     PoolParams calldata _poolParameters
-  ) external view override returns (uint256 premiumAmount, bool isMinPremium) {
+  )
+    external
+    view
+    virtual
+    override
+    returns (uint256 premiumAmount, bool isMinPremium)
+  {
     console.log(
       "Calculating premium... protection duration in seconds: %s, protection amount: %s, leverage ratio: %s",
       _protectionDurationInSeconds,
@@ -32,7 +47,7 @@ contract PremiumCalculator is UUPSUpgradeableBase, IPremiumCalculator {
     );
 
     int256 carapacePremiumRate;
-    uint256 durationInYears = calculateDurationInYears(
+    uint256 durationInYears = _calculateDurationInYears(
       _protectionDurationInSeconds
     );
 
@@ -134,7 +149,7 @@ contract PremiumCalculator is UUPSUpgradeableBase, IPremiumCalculator {
    * Formula used: (_protectionDurationInSeconds / SECONDS_IN_DAY) / 365.24
    * @param _protectionDurationInSeconds protection duration in seconds.
    */
-  function calculateDurationInYears(uint256 _protectionDurationInSeconds)
+  function _calculateDurationInYears(uint256 _protectionDurationInSeconds)
     internal
     pure
     returns (uint256)

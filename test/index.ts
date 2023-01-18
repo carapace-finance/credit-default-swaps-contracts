@@ -52,7 +52,12 @@ describe("start testing", () => {
     });
 
     it("run the PremiumCalculator test", async () => {
-      testPremiumCalculator(premiumCalculatorInstance);
+      testPremiumCalculator(
+        deployer,
+        account1,
+        premiumCalculatorInstance,
+        riskFactorCalculatorInstance
+      );
     });
 
     it("run the GoldfinchV2Adapter test", async () => {

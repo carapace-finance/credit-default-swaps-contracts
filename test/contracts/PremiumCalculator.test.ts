@@ -1,6 +1,7 @@
 import { BigNumber } from "@ethersproject/bignumber";
 import { expect } from "chai";
 import { parseEther } from "ethers/lib/utils";
+import { Signer } from "ethers/lib/ethers";
 import {
   PoolParamsStruct,
   PoolCycleParamsStruct
@@ -9,9 +10,15 @@ import { parseUSDC } from "../utils/usdc";
 
 import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";
 import { getDaysInSeconds } from "../utils/time";
+import { ethers, upgrades } from "hardhat";
+import { RiskFactorCalculator } from "../../typechain-types/contracts/libraries/RiskFactorCalculator";
+import { PremiumCalculatorV2 } from "../../typechain-types/contracts/test/PremiumCalculatorV2";
 
 const testPremiumCalculator: Function = (
-  premiumCalculator: PremiumCalculator
+  deployer: Signer,
+  account1: Signer,
+  premiumCalculator: PremiumCalculator,
+  riskFactorCalculator: RiskFactorCalculator
 ) => {
   describe("PremiumCalculator", () => {
     const _curvature: BigNumber = parseEther("0.05");
@@ -174,6 +181,67 @@ const testPremiumCalculator: Function = (
         expect(premiumAndMinPremiumFlag[0])
           .to.be.gt(parseEther("2837.8052"))
           .and.lt(parseEther("2837.8053"));
+      });
+    });
+
+    describe("upgrade", () => {
+      let upgradedPremiumCalculator: PremiumCalculatorV2;
+
+      it("... should revert when upgradeTo is called by non-owner", async () => {
+        await expect(
+          premiumCalculator
+            .connect(account1)
+            .upgradeTo("0xA18173d6cf19e4Cc5a7F63780Fe4738b12E8b781")
+        ).to.be.revertedWith("Ownable: caller is not the owner");
+      });
+
+      it("... should upgrade successfully", async () => {
+        const premiumCalculatorV2Factory = await ethers.getContractFactory(
+          "PremiumCalculatorV2",
+          {
+            signer: deployer,
+            libraries: {
+              RiskFactorCalculator: riskFactorCalculator.address
+            }
+          }
+        );
+
+        // upgrade to v2
+        upgradedPremiumCalculator = (await upgrades.upgradeProxy(
+          premiumCalculator.address,
+          premiumCalculatorV2Factory,
+          {
+            unsafeAllowLinkedLibraries: true
+          }
+        )) as PremiumCalculatorV2;
+      });
+
+      it("... should have same address after upgrade", async () => {
+        expect(upgradedPremiumCalculator.address).to.be.equal(
+          premiumCalculator.address
+        );
+      });
+
+      it("... should be able to call new function in v2", async () => {
+        const value = await upgradedPremiumCalculator.calculatePremiumV2(2);
+        expect(value).to.equal(BigNumber.from(4));
+      });
+
+      it("... should be able to call existing function in v1", async () => {
+        const _protectionDurationInSeconds = getDaysInSeconds(180);
+        const premiumAndMinPremiumFlag =
+          await premiumCalculator.calculatePremium(
+            _protectionDurationInSeconds,
+            _protectionAmt,
+            _protectionBuyerApy,
+            _currentLeverageRatio,
+            parseUSDC("15000"),
+            _poolParams
+          );
+
+        expect(premiumAndMinPremiumFlag[0])
+          .to.be.gt(parseEther("3271.8265"))
+          .and.lt(parseEther("3271.8266"));
       });
     });
   });

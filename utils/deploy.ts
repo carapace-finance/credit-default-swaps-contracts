@@ -20,6 +20,7 @@ import { LendingProtocolAdapterFactory } from "../typechain-types/contracts/core
 
 import { parseUSDC } from "../test/utils/usdc";
 import { getDaysInSeconds } from "../test/utils/time";
+import { OutgoingMessage } from "http";
 
 let deployer: Signer;
 let account1: Signer;
@@ -100,7 +101,16 @@ const deployContracts: Function = async () => {
       "PremiumCalculator",
       riskFactorLibRef
     );
-    premiumCalculatorInstance = await premiumCalculatorFactory.deploy();
+
+    // unsafeAllowLinkedLibraries needs to be set to true for the contract to be deployed
+    // More details: https://docs.openzeppelin.com/upgrades-plugins/1.x/faq#why-cant-i-use-external-libraries
+    // https://forum.openzeppelin.com/t/upgrade-safe-libraries/13832/2
+    premiumCalculatorInstance = (await upgrades.deployProxy(
+      premiumCalculatorFactory,
+      {
+        unsafeAllowLinkedLibraries: true
+      }
+    )) as PremiumCalculator;
     await premiumCalculatorInstance.deployed();
     console.log(
       "PremiumCalculator deployed to:",

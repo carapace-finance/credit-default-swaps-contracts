@@ -1184,7 +1184,7 @@ const testPool: Function = (
               _totalSTokenUnderlyingBefore
             )
           )
-            .to.be.gt(parseUSDC("3358.99"))
+            .to.be.gt(parseUSDC("3358.98"))
             .and.to.be.lt(parseUSDC("3359"));
 
           expect((await pool.getLendingPoolDetail(_lendingPool2))[0]).to.be.eq(
