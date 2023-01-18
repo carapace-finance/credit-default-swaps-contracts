@@ -1,6 +1,6 @@
 import { ContractFactory, Signer } from "ethers";
 import { parseEther } from "ethers/lib/utils";
-import { ethers } from "hardhat";
+import { ethers, upgrades } from "hardhat";
 import { USDC_ADDRESS } from "../test/utils/constants";
 import { Pool } from "../typechain-types/contracts/core/pool/Pool";
 import {
@@ -13,9 +13,10 @@ import { ReferenceLendingPools } from "../typechain-types/contracts/core/pool/Re
 import { PoolCycleManager } from "../typechain-types/contracts/core/PoolCycleManager";
 import { AccruedPremiumCalculator } from "../typechain-types/contracts/libraries/AccruedPremiumCalculator";
 import { RiskFactorCalculator } from "../typechain-types/contracts/libraries/RiskFactorCalculator";
-import { GoldfinchV2Adapter } from "../typechain-types/contracts/adapters/GoldfinchV2Adapter";
+import { GoldfinchAdapter } from "../typechain-types/contracts/adapters/GoldfinchAdapter";
 import { ReferenceLendingPoolsFactory } from "../typechain-types/contracts/core/ReferenceLendingPoolsFactory";
 import { DefaultStateManager } from "../typechain-types/contracts/core/DefaultStateManager";
+import { LendingProtocolAdapterFactory } from "../typechain-types/contracts/core/LendingProtocolAdapterFactory";
 
 import { parseUSDC } from "../test/utils/usdc";
 import { getDaysInSeconds } from "../test/utils/time";
@@ -26,6 +27,7 @@ let account2: Signer;
 let account3: Signer;
 let account4: Signer;
 
+let poolImplementation: Pool;
 let poolInstance: Pool;
 let poolFactoryInstance: PoolFactory;
 let premiumCalculatorInstance: PremiumCalculator;
@@ -33,10 +35,11 @@ let referenceLendingPoolsInstance: ReferenceLendingPools;
 let poolCycleManagerInstance: PoolCycleManager;
 let accruedPremiumCalculatorInstance: AccruedPremiumCalculator;
 let riskFactorCalculatorInstance: RiskFactorCalculator;
-let goldfinchV2AdapterInstance: GoldfinchV2Adapter;
+let goldfinchAdapterInstance: GoldfinchAdapter;
 let referenceLendingPoolsFactoryInstance: ReferenceLendingPoolsFactory;
 let referenceLendingPoolsImplementation: ReferenceLendingPools;
 let defaultStateManagerInstance: DefaultStateManager;
+let lendingProtocolAdapterFactoryInstance: LendingProtocolAdapterFactory;
 
 const GOLDFINCH_LENDING_POOLS = [
   "0xb26b42dd5771689d0a7faeea32825ff9710b9c11",
@@ -46,6 +49,7 @@ const GOLDFINCH_LENDING_POOLS = [
 (async () => {
   [deployer, account1, account2, account3, account4] =
     await ethers.getSigners();
+  console.log("Deployer address: ", await deployer.getAddress());
 })().catch((err) => {
   console.error(err);
 });
@@ -65,6 +69,7 @@ const contractFactory: Function = async (
 
 const deployContracts: Function = async () => {
   try {
+    // Deploy RiskFactorCalculator library
     const riskFactorCalculatorFactory = await contractFactory(
       "RiskFactorCalculator"
     );
@@ -75,6 +80,7 @@ const deployContracts: Function = async () => {
       riskFactorCalculatorInstance.address
     );
 
+    // Deploy AccruedPremiumCalculator library
     const riskFactorLibRef = {
       RiskFactorCalculator: riskFactorCalculatorInstance.address
     };
@@ -89,6 +95,7 @@ const deployContracts: Function = async () => {
       accruedPremiumCalculatorInstance.address
     );
 
+    // Deploy PremiumCalculator contract
     const premiumCalculatorFactory = await contractFactory(
       "PremiumCalculator",
       riskFactorLibRef
@@ -102,70 +109,90 @@ const deployContracts: Function = async () => {
 
     // Deploy ReferenceLendingPools Implementation contract
     const referenceLendingPoolsFactory = await contractFactory(
-      "ReferenceLendingPools",
-      {},
-      account1
+      "ReferenceLendingPools"
     );
     referenceLendingPoolsImplementation =
       await referenceLendingPoolsFactory.deploy();
     await referenceLendingPoolsImplementation.deployed();
     console.log(
-      "ReferenceLendingPools Implementation" + " deployed to:",
+      "ReferenceLendingPools Implementation deployed to:",
       referenceLendingPoolsImplementation.address
     );
 
+    // Deploy a proxy to LendingProtocolAdapterFactory contract
+    const lendingProtocolAdapterFactory = await contractFactory(
+      "LendingProtocolAdapterFactory"
+    );
+    lendingProtocolAdapterFactoryInstance = (await upgrades.deployProxy(
+      lendingProtocolAdapterFactory
+    )) as LendingProtocolAdapterFactory;
+    await lendingProtocolAdapterFactoryInstance.deployed();
+    console.log(
+      "LendingProtocolAdapterFactory deployed to: ",
+      lendingProtocolAdapterFactoryInstance.address
+    );
+
+    // Deploy a proxy to ReferenceLendingPoolsFactory contract to make it upgradeable
     const referenceLendingPoolsFactoryFactory = await contractFactory(
       "ReferenceLendingPoolsFactory"
     );
-    referenceLendingPoolsFactoryInstance =
-      await referenceLendingPoolsFactoryFactory.deploy(
-        referenceLendingPoolsImplementation.address
-      );
+    referenceLendingPoolsFactoryInstance = (await upgrades.deployProxy(
+      referenceLendingPoolsFactoryFactory
+    )) as ReferenceLendingPoolsFactory;
     await referenceLendingPoolsFactoryInstance.deployed();
     console.log(
-      "ReferenceLendingPoolsFactory" + " deployed to:",
+      "ReferenceLendingPoolsFactory deployed to:",
       referenceLendingPoolsFactoryInstance.address
     );
 
     // Create an instance of the ReferenceLendingPools
     const _lendingProtocols = [0, 0]; // 0 = Goldfinch
     const _purchaseLimitsInDays = [90, 60];
-    const tx1 =
-      await referenceLendingPoolsFactoryInstance.createReferenceLendingPools(
-        GOLDFINCH_LENDING_POOLS,
-        _lendingProtocols,
-        _purchaseLimitsInDays
+    await referenceLendingPoolsFactoryInstance.createReferenceLendingPools(
+      referenceLendingPoolsImplementation.address,
+      GOLDFINCH_LENDING_POOLS,
+      _lendingProtocols,
+      _purchaseLimitsInDays,
+      lendingProtocolAdapterFactoryInstance.address
+    );
+    referenceLendingPoolsInstance =
+      await getLatestReferenceLendingPoolsInstance(
+        referenceLendingPoolsFactoryInstance
       );
-    const referenceLendingPoolsList =
-      await referenceLendingPoolsFactoryInstance.getReferenceLendingPoolsList();
-    referenceLendingPoolsInstance = (await ethers.getContractAt(
-      "ReferenceLendingPools",
-      referenceLendingPoolsList[referenceLendingPoolsList.length - 1]
-    )) as ReferenceLendingPools;
+
+    // Retrieve an instance of GoldfinchAdapter from the LendingProtocolAdapterFactory
+    goldfinchAdapterInstance = (await ethers.getContractAt(
+      "GoldfinchAdapter",
+      await lendingProtocolAdapterFactoryInstance.getLendingProtocolAdapter(0)
+    )) as GoldfinchAdapter;
 
     console.log(
-      "ReferenceLendingPools instance created at: ",
-      referenceLendingPoolsInstance.address
+      "GoldfinchAdapter is deployed to: ",
+      goldfinchAdapterInstance.address
     );
 
-    // Deploy PoolCycleManager
+    // Deploy a proxy to PoolCycleManager contract
     const poolCycleManagerFactory = await contractFactory("PoolCycleManager");
-    poolCycleManagerInstance = await poolCycleManagerFactory.deploy();
+    poolCycleManagerInstance = (await upgrades.deployProxy(
+      poolCycleManagerFactory
+    )) as PoolCycleManager;
     await poolCycleManagerInstance.deployed();
     console.log(
-      "PoolCycleManager" + " deployed to:",
+      "PoolCycleManager is deployed to: ",
       poolCycleManagerInstance.address
     );
 
-    // Deploy GoldfinchV2Adapter
-    const goldfinchV2AdapterFactory = await contractFactory(
-      "GoldfinchV2Adapter"
+    // Deploy a proxy to DefaultStateManager contract
+    const defaultStateManagerFactory = await contractFactory(
+      "DefaultStateManager"
     );
-    goldfinchV2AdapterInstance = await goldfinchV2AdapterFactory.deploy();
-    await goldfinchV2AdapterInstance.deployed();
+    defaultStateManagerInstance = (await upgrades.deployProxy(
+      defaultStateManagerFactory
+    )) as DefaultStateManager;
+    await defaultStateManagerInstance.deployed();
     console.log(
-      "GoldfinchV2Adapter" + " deployed to:",
-      goldfinchV2AdapterInstance.address
+      "DefaultStateManager is deployed to: ",
+      defaultStateManagerInstance.address
     );
 
     // Deploy PoolHelper library contract
@@ -174,27 +201,41 @@ const deployContracts: Function = async () => {
     });
     const poolHelperInstance = await poolHelperFactory.deploy();
     await poolHelperInstance.deployed();
-    console.log("PoolHelper lib deployed to:", poolHelperInstance.address);
+    console.log("PoolHelper lib is deployed to:", poolHelperInstance.address);
 
-    // Deploy PoolFactory
-    const _poolFactoryFactory = await contractFactory("PoolFactory", {
+    // Deploy a proxy to PoolFactory contract
+    const _poolFactoryFactory = await contractFactory("PoolFactory");
+    poolFactoryInstance = (await upgrades.deployProxy(_poolFactoryFactory, [
+      poolCycleManagerInstance.address,
+      defaultStateManagerInstance.address
+    ])) as PoolFactory;
+    await poolFactoryInstance.deployed();
+    console.log("PoolFactory is deployed to: ", poolFactoryInstance.address);
+
+    /// Sets pool factory address into the PoolCycleManager & DefaultStateManager
+    /// This is required to enable the PoolCycleManager & DefaultStateManager to register a new pool when it is created
+    /// "setPoolFactory" must be called by the owner
+    await poolCycleManagerInstance
+      .connect(deployer)
+      .setPoolFactory(poolFactoryInstance.address);
+    await defaultStateManagerInstance
+      .connect(deployer)
+      .setPoolFactory(poolFactoryInstance.address);
+
+    // Deploy a Pool implementation contract
+    const poolFactory = await contractFactory("Pool", {
       AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address,
       PoolHelper: poolHelperInstance.address
     });
-    poolFactoryInstance = await _poolFactoryFactory.deploy();
-    await poolFactoryInstance.deployed();
-    console.log("PoolFactory" + " deployed to:", poolFactoryInstance.address);
-
-    // Get DefaultStateManager instance from pool factory
-    defaultStateManagerInstance = (await ethers.getContractAt(
-      "DefaultStateManager",
-      await poolFactoryInstance.getDefaultStateManager()
-    )) as DefaultStateManager;
+    poolImplementation = await poolFactory.deploy();
+    await poolImplementation.deployed();
     console.log(
-      "DefaultStateManager" + " is deployed at:",
-      defaultStateManagerInstance.address
+      "Pool implementation is deployed to: ",
+      poolImplementation.address
     );
 
+    /// Create an instance of the Pool, which should be upgradable
+    // Create a pool using PoolFactory instead of deploying new pool directly to mimic the prod behavior
     const _poolCycleParams: PoolCycleParamsStruct = {
       openCycleDuration: getDaysInSeconds(10),
       cycleDuration: getDaysInSeconds(30)
@@ -213,13 +254,8 @@ const deployContracts: Function = async () => {
       protectionExtensionGracePeriodInSeconds: getDaysInSeconds(14) // 2 weeks
     };
 
-    // Create a pool using PoolFactory instead of deploying new pool directly to mimic the prod behavior
-    const _firstPoolFirstTrancheSalt: string = "0x".concat(
-      process.env.FIRST_POOL_SALT
-    );
-
-    const tx = await poolFactoryInstance.createPool(
-      _firstPoolFirstTrancheSalt,
+    await poolFactoryInstance.createPool(
+      poolImplementation.address,
       _poolParams,
       USDC_ADDRESS,
       referenceLendingPoolsInstance.address,
@@ -228,30 +264,20 @@ const deployContracts: Function = async () => {
       "sT11"
     );
 
-    const pools = await poolFactoryInstance.getPools();
-    poolInstance = (await ethers.getContractAt(
-      "Pool",
-      pools[pools.length - 1]
-    )) as Pool;
-
-    console.log("Pool instance created at: ", poolInstance.address);
+    poolInstance = await getLatestPoolInstance(poolFactoryInstance);
   } catch (e) {
     console.log(e);
   }
 };
 
-async function getReferenceLendingPoolsInstanceFromTx(
-  tx: any
+async function getLatestReferenceLendingPoolsInstance(
+  referenceLendingPoolsFactoryInstance: ReferenceLendingPoolsFactory
 ): Promise<ReferenceLendingPools> {
-  const receipt: any = await tx.wait();
-
-  const referenceLendingPoolsCreatedEvent = receipt.events.find(
-    (eventInfo: any) => eventInfo.event === "ReferenceLendingPoolsCreated"
-  );
-
+  const referenceLendingPoolsList =
+    await referenceLendingPoolsFactoryInstance.getReferenceLendingPoolsList();
   const newReferenceLendingPoolsInstance = (await ethers.getContractAt(
     "ReferenceLendingPools",
-    referenceLendingPoolsCreatedEvent.args.referenceLendingPools
+    referenceLendingPoolsList[referenceLendingPoolsList.length - 1]
   )) as ReferenceLendingPools;
 
   console.log(
@@ -262,20 +288,16 @@ async function getReferenceLendingPoolsInstanceFromTx(
   return newReferenceLendingPoolsInstance;
 }
 
-async function getPoolInstanceFromTx(tx: any): Promise<Pool> {
-  const receipt: any = await tx.wait();
-
-  const poolCreatedEvent = receipt.events.find(
-    (eventInfo: any) => eventInfo.event === "PoolCreated"
-  );
-
+async function getLatestPoolInstance(
+  poolFactoryInstance: PoolFactory
+): Promise<Pool> {
+  const pools = await poolFactoryInstance.getPools();
   const newPoolInstance = (await ethers.getContractAt(
     "Pool",
-    poolCreatedEvent.args.poolAddress
+    pools[pools.length - 1]
   )) as Pool;
 
-  console.log("Pool instance created at: ", newPoolInstance.address);
-
+  console.log("Latest pool instance is deployed at: ", newPoolInstance.address);
   return newPoolInstance;
 }
 
@@ -286,6 +308,7 @@ export {
   account3,
   account4,
   deployContracts,
+  poolImplementation,
   poolInstance,
   poolFactoryInstance,
   premiumCalculatorInstance,
@@ -293,11 +316,12 @@ export {
   poolCycleManagerInstance,
   accruedPremiumCalculatorInstance,
   riskFactorCalculatorInstance,
-  goldfinchV2AdapterInstance,
+  goldfinchAdapterInstance,
+  lendingProtocolAdapterFactoryInstance,
   referenceLendingPoolsImplementation, // implementation contract which is used to create proxy contract
   referenceLendingPoolsFactoryInstance,
   defaultStateManagerInstance,
   GOLDFINCH_LENDING_POOLS,
-  getReferenceLendingPoolsInstanceFromTx,
-  getPoolInstanceFromTx
+  getLatestReferenceLendingPoolsInstance,
+  getLatestPoolInstance
 };

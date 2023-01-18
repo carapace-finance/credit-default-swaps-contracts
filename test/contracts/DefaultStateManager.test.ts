@@ -78,7 +78,7 @@ const testDefaultStateManager: Function = (
 
       usdcContract = getUsdcContract(deployer);
       pool1 = poolInstance.address;
-      pool2 = await poolFactory.getPoolAddress(2);
+      pool2 = (await poolFactory.getPools())[1];
       sellerAddress = await seller.getAddress();
 
       referenceLendingPoolsInstance = (await ethers.getContractAt(

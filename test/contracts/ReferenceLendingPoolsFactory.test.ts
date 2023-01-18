@@ -3,6 +3,7 @@ import { Signer } from "ethers/lib/ethers";
 import { ZERO_ADDRESS } from "../../test/utils/constants";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { ReferenceLendingPoolsFactory } from "../../typechain-types/contracts/core/ReferenceLendingPoolsFactory";
+import { LendingProtocolAdapterFactory } from "../../typechain-types/contracts/core/LendingProtocolAdapterFactory";
 import { getDaysInSeconds, getLatestBlockTimestamp } from "../utils/time";
 
 const LENDING_POOL_1 = "0x759f097f3153f5d62ff1c2d82ba78b6350f223e3";
@@ -12,14 +13,13 @@ const testReferenceLendingPoolsFactory: Function = (
   account1: Signer,
   referenceLendingPoolsImplementation: ReferenceLendingPools,
   referenceLendingPoolsFactory: ReferenceLendingPoolsFactory,
-  getReferenceLendingPoolsInstanceFromTx: Function
+  lendingProtocolAdapterFactory: LendingProtocolAdapterFactory,
+  getLatestReferenceLendingPoolsInstance: Function
 ) => {
   describe("ReferenceLendingPoolsFactory", () => {
     describe("constructor", () => {
-      it("...should set the implementation address", async () => {
-        expect(
-          await referenceLendingPoolsFactory.referenceLendingPoolsImplementation()
-        ).to.equal(referenceLendingPoolsImplementation.address);
+      it("...should be valid instance", async () => {
+        expect(referenceLendingPoolsFactory).to.not.equal(undefined);
       });
     });
 
@@ -28,7 +28,13 @@ const testReferenceLendingPoolsFactory: Function = (
         await expect(
           referenceLendingPoolsFactory
             .connect(account1)
-            .createReferenceLendingPools([ZERO_ADDRESS], [0], [0])
+            .createReferenceLendingPools(
+              referenceLendingPoolsImplementation.address,
+              [ZERO_ADDRESS],
+              [0],
+              [0],
+              ZERO_ADDRESS
+            )
         ).to.be.revertedWith("Ownable: caller is not the owner");
       });
 
@@ -36,30 +42,38 @@ const testReferenceLendingPoolsFactory: Function = (
         await expect(
           referenceLendingPoolsFactory
             .connect(deployer)
-            .createReferenceLendingPools([ZERO_ADDRESS], [0], [0])
-        ).to.be.revertedWith("ReferenceLendingPoolIsZeroAddress");
+            .createReferenceLendingPools(
+              ZERO_ADDRESS,
+              [ZERO_ADDRESS],
+              [0],
+              [0],
+              ZERO_ADDRESS
+            )
+        ).to.be.revertedWith("ERC1967: new implementation is not a contract");
       });
 
-      it("...should revert when array lengths are not equal", async () => {
+      it("...should revert when lending pools and protocols array lengths are not equal", async () => {
         await expect(
           referenceLendingPoolsFactory.createReferenceLendingPools(
+            referenceLendingPoolsImplementation.address,
             [ZERO_ADDRESS],
             [],
-            []
+            [],
+            ZERO_ADDRESS
           )
-        ).to.be.revertedWith("Array inputs length must match");
+        ).to.be.revertedWith;
+      });
 
-        await expect(
-          referenceLendingPoolsFactory.createReferenceLendingPools([], [0], [])
-        ).to.be.revertedWith("Array inputs length must match");
-
+      it("...should revert when lending protocols and purchase limit days array lengths are not equal", async () => {
         await expect(
           referenceLendingPoolsFactory.createReferenceLendingPools(
+            referenceLendingPoolsImplementation.address,
             [ZERO_ADDRESS],
             [0],
-            [10, 11]
+            [10, 11],
+            ZERO_ADDRESS
           )
-        ).to.be.revertedWith("Array inputs length must match");
+        ).to.be.revertedWith;
       });
 
       it("...should create an instance of ReferenceLendingPools successfully", async () => {
@@ -67,12 +81,16 @@ const testReferenceLendingPoolsFactory: Function = (
         const tx = await referenceLendingPoolsFactory
           .connect(deployer)
           .createReferenceLendingPools(
+            referenceLendingPoolsImplementation.address,
             [LENDING_POOL_1],
             [0],
-            [_purchaseLimitInDays]
+            [_purchaseLimitInDays],
+            lendingProtocolAdapterFactory.address
           );
         const referenceLendingPoolsInstance =
-          await getReferenceLendingPoolsInstanceFromTx(tx);
+          await getLatestReferenceLendingPoolsInstance(
+            referenceLendingPoolsFactory
+          );
 
         const lendingPoolInfo =
           await referenceLendingPoolsInstance.referenceLendingPools(

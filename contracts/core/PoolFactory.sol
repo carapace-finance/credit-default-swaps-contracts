@@ -69,13 +69,6 @@ contract PoolFactory is UUPSUpgradeableBase {
 
     poolCycleManager = _poolCycleManager;
     defaultStateManager = _defaultStateManager;
-
-    /// Sets pool factory address into the PoolCycleManager & DefaultStateManager
-    /// This is required to enable the PoolCycleManager & DefaultStateManager to register a new pool when it is created
-    /// "setPoolFactory" could only be called by the owner of the PoolCycleManager/DefaultStateManager,
-    /// so the owner of PoolFactory, PoolCycleManager & DefaultStateManager must be the same
-    poolCycleManager.setPoolFactory(address(this));
-    defaultStateManager.setPoolFactory(address(this));
   }
 
   /*** state-changing functions ***/
@@ -97,31 +90,27 @@ contract PoolFactory is UUPSUpgradeableBase {
     string calldata _name,
     string calldata _symbol
   ) external onlyOwner returns (address) {
-    // Pool pool = new Pool{salt: _salt}(
-    //   PoolInfo({
-    //     poolId: _poolId,
-    //     params: _poolParameters,
-    //     underlyingToken: _underlyingToken,
-    //     referenceLendingPools: _referenceLendingPools,
-    //     currentPhase: PoolPhase.OpenToSellers
-    //   }),
-    //   _premiumCalculator,
-    //   poolCycleManager,
-    //   defaultStateManager,
-    //   _name,
-    //   _symbol
-    // );
-
     /// Create a proxy contract for the pool, which is upgradable using UUPS pattern
     ERC1967Proxy _poolProxy = new ERC1967Proxy(
       _poolImpl,
       abi.encodeWithSelector(
         IPool(address(0)).initialize.selector,
+        PoolInfo({
+          poolAddress: address(0),
+          params: _poolParameters,
+          underlyingToken: _underlyingToken,
+          referenceLendingPools: _referenceLendingPools,
+          currentPhase: PoolPhase.OpenToSellers
+        }),
+        _premiumCalculator,
+        poolCycleManager,
+        defaultStateManager,
         _name,
         _symbol
       )
     );
     address _poolProxyAddress = address(_poolProxy);
+    pools.push(_poolProxyAddress);
 
     /// register newly created pool to the pool cycle manager
     poolCycleManager.registerPool(

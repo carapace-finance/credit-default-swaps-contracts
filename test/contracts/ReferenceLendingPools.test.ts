@@ -61,10 +61,10 @@ const testReferenceLendingPools: Function = (
 
     describe("Implementation", async () => {
       describe("constructor", async () => {
-        it("...should set the correct owner on construction", async () => {
-          const owner: string =
-            await referenceLendingPoolsImplementation.owner();
-          expect(owner).to.equal(_implementationDeployerAddress);
+        it("...should NOT have an owner on construction", async () => {
+          expect(await referenceLendingPoolsImplementation.owner()).to.equal(
+            ZERO_ADDRESS
+          );
         });
 
         it("...should disable initialize after construction", async () => {
@@ -73,7 +73,8 @@ const testReferenceLendingPools: Function = (
               _deployerAddress,
               [],
               [],
-              []
+              [],
+              ZERO_ADDRESS
             )
           ).to.be.revertedWith(
             "Initializable: contract is already initialized"
@@ -86,10 +87,6 @@ const testReferenceLendingPools: Function = (
               "0xb26b42dd5771689d0a7faeea32825ff9710b9c11"
             );
           expect(referenceLendingPoolInfo.addedTimestamp).to.equal(0);
-
-          expect(
-            await referenceLendingPoolsImplementation.lendingProtocolAdapters(0)
-          ).to.equal(ZERO_ADDRESS);
         });
       });
     });
@@ -128,7 +125,8 @@ const testReferenceLendingPools: Function = (
               _deployerAddress,
               [],
               [],
-              []
+              [],
+              ZERO_ADDRESS
             )
           ).to.be.revertedWith(
             "Initializable: contract is already initialized"
@@ -152,23 +150,14 @@ const testReferenceLendingPools: Function = (
           });
         });
 
-        it("...should have Goldfinch adapter created", async () => {
-          expect(
-            await referenceLendingPoolsInstance.lendingProtocolAdapters(0)
-          ).to.not.equal(ZERO_ADDRESS);
-        });
-
-        it("...should not have any other adapter created", async () => {
-          await expect(referenceLendingPoolsInstance.lendingProtocolAdapters(1))
-            .to.be.reverted;
-        });
-
         it("...should transfer ownership during initialization", async () => {
           expect(
             await referenceLendingPoolsFactoryInstance.createReferenceLendingPools(
+              referenceLendingPoolsImplementation.address,
               [],
               [],
-              []
+              [],
+              ZERO_ADDRESS
             )
           )
             .emit(referenceLendingPoolsInstance, "OwnershipTransferred")

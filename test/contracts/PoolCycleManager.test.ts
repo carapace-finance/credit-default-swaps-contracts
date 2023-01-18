@@ -10,21 +10,29 @@ import { moveForwardTime } from "../utils/time";
 const testPoolCycleManager: Function = (
   deployer: Signer,
   account1: Signer,
-  poolCycleManager: PoolCycleManager
+  poolCycleManager: PoolCycleManager,
+  poolFactoryAddress: string
 ) => {
   describe("PoolCycleManager", () => {
-    // poolId 1 is already being used by the main pool instance
-    const _poolId: BigNumber = BigNumber.from(11);
-    const _secondPoolId: BigNumber = BigNumber.from(2);
+    const _poolAddress: string = "0x395326f1418F65F581693de55719c824ad48A367";
+    const _secondPoolAddress: string =
+      "0x7dA5E231478d5F5ACB45DBC122DE7846b676F715";
     const _openCycleDuration: BigNumber = BigNumber.from(7 * 24 * 60 * 60); // 7 days
     const _cycleDuration: BigNumber = BigNumber.from(30 * 24 * 60 * 60); // 30 days
+
+    before(async () => {
+      // Use deployer as pool factory for tests
+      poolCycleManager
+        .connect(deployer)
+        .setPoolFactory(await deployer.getAddress());
+    });
 
     describe("registerPool", async () => {
       it("...should NOT be callable by non-pool-factory address", async () => {
         await expect(
           poolCycleManager
             .connect(account1)
-            .registerPool(_poolId, _openCycleDuration, _cycleDuration)
+            .registerPool(_poolAddress, _openCycleDuration, _cycleDuration)
         ).to.be.revertedWith(
           `NotPoolFactory("${await account1.getAddress()}")`
         );
@@ -32,49 +40,53 @@ const testPoolCycleManager: Function = (
 
       it("...should be able callable by only pool factory contract", async () => {
         await expect(
-          poolCycleManager.registerPool(
-            _poolId,
-            _openCycleDuration,
-            _cycleDuration
-          )
+          poolCycleManager
+            .connect(deployer)
+            .registerPool(_poolAddress, _openCycleDuration, _cycleDuration)
         )
           .to.emit(poolCycleManager, "PoolCycleCreated")
-          .withArgs(_poolId, 0, anyValue, _openCycleDuration, _cycleDuration);
+          .withArgs(
+            _poolAddress,
+            0,
+            anyValue,
+            _openCycleDuration,
+            _cycleDuration
+          );
       });
 
       it("...should NOT be able to register pool twice", async () => {
         await expect(
-          poolCycleManager.registerPool(
-            _poolId,
-            _openCycleDuration,
-            _cycleDuration
-          )
-        ).to.be.revertedWith(`PoolAlreadyRegistered(${_poolId})`);
+          poolCycleManager
+            .connect(deployer)
+            .registerPool(_poolAddress, _openCycleDuration, _cycleDuration)
+        ).to.be.revertedWith(`PoolAlreadyRegistered("${_poolAddress}")`);
       });
 
       it("...should NOT be able to register pool with openCycleDuration > cycleDuration", async () => {
         await expect(
-          poolCycleManager.registerPool(
-            _secondPoolId,
-            _openCycleDuration.add(_cycleDuration),
-            _cycleDuration
-          )
+          poolCycleManager
+            .connect(deployer)
+            .registerPool(
+              _secondPoolAddress,
+              _openCycleDuration.add(_cycleDuration),
+              _cycleDuration
+            )
         ).to.be.revertedWith(`InvalidCycleDuration(${_cycleDuration})`);
       });
 
       it("...should create new cycle for the pool with correct params", async () => {
         await poolCycleManager
           .connect(deployer)
-          .registerPool(_secondPoolId, _openCycleDuration, _cycleDuration);
+          .registerPool(_secondPoolAddress, _openCycleDuration, _cycleDuration);
 
         expect(
-          await poolCycleManager.getCurrentCycleIndex(_secondPoolId)
+          await poolCycleManager.getCurrentCycleIndex(_secondPoolAddress)
         ).to.equal(0);
         expect(
-          await poolCycleManager.getCurrentCycleState(_secondPoolId)
+          await poolCycleManager.getCurrentCycleState(_secondPoolAddress)
         ).to.equal(1); // 1 = Open
 
-        const poolCycle = await poolCycleManager.poolCycles(_secondPoolId);
+        const poolCycle = await poolCycleManager.poolCycles(_secondPoolAddress);
         expect(poolCycle.openCycleDuration).to.equal(_openCycleDuration);
         expect(poolCycle.cycleDuration).to.equal(_cycleDuration);
         expect(poolCycle.currentCycleStartTime).to.equal(
@@ -84,23 +96,30 @@ const testPoolCycleManager: Function = (
 
       it("...should be able to register multiple pools", async () => {
         // register 3rd pool
-        const thirdPoolId: BigNumber = BigNumber.from(3);
+        const thirdPoolAddress: string =
+          "0xa13c4F4bAea32D953813147FdBB3799CDaB5F641";
         const thirdOpenCycleDuration: BigNumber = BigNumber.from(
           2 * 24 * 60 * 60
         );
         const thirdCycleDuration: BigNumber = BigNumber.from(12 * 24 * 60 * 60);
         await poolCycleManager
           .connect(deployer)
-          .registerPool(3, thirdOpenCycleDuration, thirdCycleDuration);
+          .registerPool(
+            thirdPoolAddress,
+            thirdOpenCycleDuration,
+            thirdCycleDuration
+          );
 
         expect(
-          await poolCycleManager.getCurrentCycleIndex(thirdPoolId)
+          await poolCycleManager.getCurrentCycleIndex(thirdPoolAddress)
         ).to.equal(0);
         expect(
-          await poolCycleManager.getCurrentCycleState(thirdPoolId)
+          await poolCycleManager.getCurrentCycleState(thirdPoolAddress)
         ).to.equal(1); // 1 = Open
 
-        const thirdPoolCycle = await poolCycleManager.poolCycles(thirdPoolId);
+        const thirdPoolCycle = await poolCycleManager.poolCycles(
+          thirdPoolAddress
+        );
         expect(thirdPoolCycle.openCycleDuration).to.equal(
           thirdOpenCycleDuration
         );
@@ -110,7 +129,8 @@ const testPoolCycleManager: Function = (
         );
 
         // register 4th pool
-        const fourthPoolId: BigNumber = BigNumber.from(4);
+        const fourthPoolAddress: string =
+          "0x3d7b7F12eDB3A0A2b9e9efc3EfD25c7455677746";
         const fourthOpenCycleDuration: BigNumber = BigNumber.from(
           5 * 24 * 60 * 60
         );
@@ -120,19 +140,21 @@ const testPoolCycleManager: Function = (
         await poolCycleManager
           .connect(deployer)
           .registerPool(
-            fourthPoolId,
+            fourthPoolAddress,
             fourthOpenCycleDuration,
             fourthCycleDuration
           );
 
         expect(
-          await poolCycleManager.getCurrentCycleIndex(fourthPoolId)
+          await poolCycleManager.getCurrentCycleIndex(fourthPoolAddress)
         ).to.equal(0);
         expect(
-          await poolCycleManager.getCurrentCycleState(fourthPoolId)
+          await poolCycleManager.getCurrentCycleState(fourthPoolAddress)
         ).to.equal(1); // 1 = Open
 
-        const fourthPoolCycle = await poolCycleManager.poolCycles(fourthPoolId);
+        const fourthPoolCycle = await poolCycleManager.poolCycles(
+          fourthPoolAddress
+        );
         expect(fourthPoolCycle.openCycleDuration).to.equal(
           fourthOpenCycleDuration
         );
@@ -146,18 +168,21 @@ const testPoolCycleManager: Function = (
     describe("calculateAndSetPoolCycleState", async () => {
       let cycleStartTime: BigNumber;
       before(async () => {
-        cycleStartTime = (await poolCycleManager.poolCycles(_secondPoolId))
+        cycleStartTime = (await poolCycleManager.poolCycles(_secondPoolAddress))
           .currentCycleStartTime;
       });
 
-      it("...should have 'Created' state for non-registered pool", async () => {
-        await poolCycleManager.calculateAndSetPoolCycleState(101);
-        expect(await poolCycleManager.getCurrentCycleState(101)).to.equal(0); // 0 = None
+      it("...should have 'None' state for non-registered pool", async () => {
+        expect(
+          await poolCycleManager.getCurrentCycleState(
+            "0x9E775D89857E9ff1e76923fB45e296d3bf43b31f"
+          )
+        ).to.equal(0); // 0 = None
       });
 
       it("...should stay in 'Open' state when less time than openCycleDuration has passed", async () => {
         expect(
-          await poolCycleManager.getCurrentCycleState(_secondPoolId)
+          await poolCycleManager.getCurrentCycleState(_secondPoolAddress)
         ).to.equal(1); // 1 = Open
 
         // Move time forward by openCycleDuration - 30 seconds
@@ -169,19 +194,21 @@ const testPoolCycleManager: Function = (
         );
         assert(currentTime < cycleStartTime.add(_openCycleDuration));
 
-        await poolCycleManager.calculateAndSetPoolCycleState(_secondPoolId);
+        await poolCycleManager.calculateAndSetPoolCycleState(
+          _secondPoolAddress
+        );
 
         expect(
-          await poolCycleManager.getCurrentCycleState(_secondPoolId)
+          await poolCycleManager.getCurrentCycleState(_secondPoolAddress)
         ).to.equal(1); // 1 = Open
         expect(
-          await poolCycleManager.getCurrentCycleIndex(_secondPoolId)
+          await poolCycleManager.getCurrentCycleIndex(_secondPoolAddress)
         ).to.equal(0);
       });
 
       it("...should move to 'Locked' state after openCycleDuration has passed", async () => {
         expect(
-          await poolCycleManager.getCurrentCycleState(_secondPoolId)
+          await poolCycleManager.getCurrentCycleState(_secondPoolAddress)
         ).to.equal(1); // 1 = Open
 
         // Move time forward by time left in openCycleDuration
@@ -193,19 +220,21 @@ const testPoolCycleManager: Function = (
         );
         assert(currentTime > cycleStartTime.add(_openCycleDuration));
 
-        await poolCycleManager.calculateAndSetPoolCycleState(_secondPoolId);
+        await poolCycleManager.calculateAndSetPoolCycleState(
+          _secondPoolAddress
+        );
 
         expect(
-          await poolCycleManager.getCurrentCycleState(_secondPoolId)
+          await poolCycleManager.getCurrentCycleState(_secondPoolAddress)
         ).to.equal(2); // 2 = Locked
         expect(
-          await poolCycleManager.getCurrentCycleIndex(_secondPoolId)
+          await poolCycleManager.getCurrentCycleIndex(_secondPoolAddress)
         ).to.equal(0);
       });
 
       it("...should stay in 'Locked' state when less time than cycleDuration has passed", async () => {
         expect(
-          await poolCycleManager.getCurrentCycleState(_secondPoolId)
+          await poolCycleManager.getCurrentCycleState(_secondPoolAddress)
         ).to.equal(2); // 2 = Locked
 
         // Move time forward by cycleDuration - 30 seconds
@@ -220,25 +249,29 @@ const testPoolCycleManager: Function = (
         );
         assert(currentTime < cycleStartTime.add(_cycleDuration));
 
-        await poolCycleManager.calculateAndSetPoolCycleState(_secondPoolId);
+        await poolCycleManager.calculateAndSetPoolCycleState(
+          _secondPoolAddress
+        );
 
         expect(
-          await poolCycleManager.getCurrentCycleState(_secondPoolId)
+          await poolCycleManager.getCurrentCycleState(_secondPoolAddress)
         ).to.equal(2); // 2 = Locked
         expect(
-          await poolCycleManager.getCurrentCycleIndex(_secondPoolId)
+          await poolCycleManager.getCurrentCycleIndex(_secondPoolAddress)
         ).to.equal(0);
       });
 
       it("...should create new cycle with 'Open' state after cycleDuration has passed", async () => {
         expect(
-          await poolCycleManager.getCurrentCycleState(_secondPoolId)
+          await poolCycleManager.getCurrentCycleState(_secondPoolAddress)
         ).to.equal(2); // 2 = Locked
 
         // Move time forward by time left in cycle
         await moveForwardTime(BigNumber.from(30));
 
-        await poolCycleManager.calculateAndSetPoolCycleState(_secondPoolId);
+        await poolCycleManager.calculateAndSetPoolCycleState(
+          _secondPoolAddress
+        );
 
         // Verify current time is greater than cycleStartTime + cycleDuration
         const currentTime = BigNumber.from(
@@ -247,12 +280,16 @@ const testPoolCycleManager: Function = (
         assert(currentTime > cycleStartTime.add(_cycleDuration));
 
         expect(
-          await poolCycleManager.getCurrentCycleState(_secondPoolId)
+          await poolCycleManager.getCurrentCycleState(_secondPoolAddress)
         ).to.equal(1); // 1 = Open
         expect(
-          await poolCycleManager.getCurrentCycleIndex(_secondPoolId)
+          await poolCycleManager.getCurrentCycleIndex(_secondPoolAddress)
         ).to.equal(1);
       });
+    });
+
+    after(async () => {
+      poolCycleManager.connect(deployer).setPoolFactory(poolFactoryAddress);
     });
   });
 };

@@ -138,6 +138,7 @@ contract Pool is
     __sToken_init(_name, _symbol);
 
     poolInfo = _poolInfo;
+    poolInfo.poolAddress = address(this);
     premiumCalculator = _premiumCalculator;
     poolCycleManager = _poolCycleManager;
     defaultStateManager = _defaultStateManager;

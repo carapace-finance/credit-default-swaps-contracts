@@ -1,5 +1,5 @@
 import { BigNumber } from "@ethersproject/bignumber";
-import { expect, should } from "chai";
+import { expect } from "chai";
 import { Contract, Signer } from "ethers";
 import { ethers, network } from "hardhat";
 import { parseEther } from "ethers/lib/utils";
@@ -139,9 +139,11 @@ const testPool: Function = (
       expectedCycleIndex: number,
       expectedState: number
     ) => {
-      await poolCycleManager.calculateAndSetPoolCycleState(poolInfo.poolId);
+      await poolCycleManager.calculateAndSetPoolCycleState(
+        poolInfo.poolAddress
+      );
       const currentPoolCycle = await poolCycleManager.getCurrentPoolCycle(
-        poolInfo.poolId
+        poolInfo.poolAddress
       );
       expect(currentPoolCycle.currentCycleIndex).to.equal(expectedCycleIndex);
       expect(currentPoolCycle.currentCycleState).to.eq(expectedState);
@@ -195,7 +197,7 @@ const testPool: Function = (
     const verifyMaxAllowedProtectionDuration = async () => {
       const currentTimestamp = await getLatestBlockTimestamp();
       const currentPoolCycle = await poolCycleManager.getCurrentPoolCycle(
-        poolInfo.poolId
+        poolInfo.poolAddress
       );
 
       // max duration = next cycle's end timestamp - currentTimestamp
@@ -256,7 +258,7 @@ const testPool: Function = (
       });
 
       it("...set the pool id", async () => {
-        expect(poolInfo.poolId.toString()).to.eq("1");
+        expect(poolInfo.poolAddress).to.eq(pool.address);
       });
 
       it("...set the leverage ratio floor", async () => {
@@ -408,7 +410,7 @@ const testPool: Function = (
             []
           );
           expect(
-            await poolCycleManager.getCurrentCycleState(poolInfo.poolId)
+            await poolCycleManager.getCurrentCycleState(poolInfo.poolAddress)
           ).to.equal(1); // 1 = Open
 
           // pause the pool
@@ -501,7 +503,7 @@ const testPool: Function = (
               },
               parseUSDC("10000")
             )
-          ).to.be.revertedWith(`PoolInOpenToSellersPhase(${poolInfo.poolId})`);
+          ).to.be.revertedWith(`PoolInOpenToSellersPhase()`);
         });
       });
 
@@ -515,7 +517,7 @@ const testPool: Function = (
         it("...should succeed if caller is owner and pool has min capital required", async () => {
           await expect(pool.connect(deployer).movePoolPhase())
             .to.emit(pool, "PoolPhaseUpdated")
-            .withArgs(poolInfo.poolId, 1); // 1 = BuyProtectionOnly
+            .withArgs(1); // 1 = BuyProtectionOnly
 
           expect((await pool.getPoolInfo()).currentPhase).to.eq(1);
         });
@@ -531,7 +533,7 @@ const testPool: Function = (
         it("...should fail", async () => {
           await expect(
             pool.deposit(parseUSDC("1001"), deployerAddress)
-          ).to.be.revertedWith(`PoolInOpenToBuyersPhase(${poolInfo.poolId})`);
+          ).to.be.revertedWith(`PoolInOpenToBuyersPhase()`);
         });
       });
 
@@ -907,7 +909,7 @@ const testPool: Function = (
           );
           await expect(pool.connect(deployer).movePoolPhase())
             .to.emit(pool, "PoolPhaseUpdated")
-            .withArgs(poolInfo.poolId, 2); // 2 = Open
+            .withArgs(2); // 2 = Open
 
           expect((await pool.getPoolInfo()).currentPhase).to.eq(2);
         });
@@ -920,9 +922,7 @@ const testPool: Function = (
           // LR = 170K / 150K = 1.13 > 1 (ceiling)
           await expect(
             pool.connect(deployer).deposit(_depositAmt, deployerAddress)
-          ).to.be.revertedWith(
-            `PoolLeverageRatioTooHigh(${poolInfo.poolId}, 1133333333333333333)`
-          );
+          ).to.be.revertedWith(`PoolLeverageRatioTooHigh(1133333333333333333)`);
         });
 
         it("...add 4th protection", async () => {
@@ -1113,7 +1113,7 @@ const testPool: Function = (
 
         it("...fails because there was no previous cycle", async () => {
           const currentPoolCycle = await poolCycleManager.getCurrentPoolCycle(
-            poolInfo.poolId
+            poolInfo.poolAddress
           );
           await expect(
             pool.withdraw(parseEther("1"), deployerAddress)
@@ -1174,9 +1174,9 @@ const testPool: Function = (
             .to.emit(pool, "PremiumAccrued")
             .to.emit(pool, "ProtectionExpired");
 
-          // 1599.28 + 707.59 + 410.24 + 641.89 = ~3359
+          // 1599.26 + 707.59 + 410.23 + 641.89 = ~3359
           expect(await pool.totalPremiumAccrued())
-            .to.be.gt(parseUSDC("3358.99"))
+            .to.be.gt(parseUSDC("3358.98"))
             .and.to.be.lt(parseUSDC("3359"));
 
           expect(
@@ -1568,7 +1568,7 @@ const testPool: Function = (
         it("...withdraw should fail", async () => {
           await expect(
             pool.withdraw(parseUSDC("1"), deployerAddress)
-          ).to.be.revertedWith(`PoolIsNotOpen(${poolInfo.poolId})`);
+          ).to.be.revertedWith(`PoolIsNotOpen()`);
         });
       });
     });
@@ -1635,7 +1635,7 @@ const testPool: Function = (
         it("...withdraw should fail", async () => {
           await expect(
             pool.withdraw(parseUSDC("1"), deployerAddress)
-          ).to.be.revertedWith(`PoolIsNotOpen(${poolInfo.poolId})`);
+          ).to.be.revertedWith(`PoolIsNotOpen()`);
         });
       });
 

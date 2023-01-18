@@ -21,7 +21,7 @@ const BUYER1 = "0x0196ad265c56f2b18b708c75ce9358a0b6df64cf";
 const BUYER2 = "0x1b027485ee2ba9b2e9b43689435188b1a1556a1c";
 const BUYER3 = "0x10a590f528eff3d5de18c90da6e03a4acdde3a7d";
 
-const testGoldfinchV2Adapter: Function = (
+const testGoldfinchAdapter: Function = (
   goldfinchV2Adapter: GoldfinchV2Adapter
 ) => {
   describe("GoldfinchV2Adapter", () => {
@@ -306,4 +306,4 @@ const testGoldfinchV2Adapter: Function = (
   });
 };
 
-export { testGoldfinchV2Adapter };
+export { testGoldfinchAdapter };
