@@ -33,6 +33,7 @@ let referenceLendingPoolsInstance: ReferenceLendingPools;
 let poolCycleManagerInstance: PoolCycleManager;
 let accruedPremiumCalculatorInstance: AccruedPremiumCalculator;
 let riskFactorCalculatorInstance: RiskFactorCalculator;
+let goldfinchAdapterImplementation: GoldfinchAdapter;
 let goldfinchAdapterInstance: GoldfinchAdapter;
 let referenceLendingPoolsImplementation: ReferenceLendingPools;
 let defaultStateManagerInstance: DefaultStateManager;
@@ -168,18 +169,21 @@ const deployContracts: Function = async () => {
 
     // Deploy GoldfinchAdapter implementation contract
     const goldfinchAdapterFactory = await contractFactory("GoldfinchAdapter");
-    const goldfinchAdapterImpl = await goldfinchAdapterFactory.deploy();
-    await goldfinchAdapterImpl.deployed();
+    goldfinchAdapterImplementation = await goldfinchAdapterFactory.deploy();
+    await goldfinchAdapterImplementation.deployed();
     console.log(
       "GoldfinchAdapter implementation is deployed to:",
-      goldfinchAdapterImpl.address
+      goldfinchAdapterImplementation.address
     );
 
     // Create an upgradable instance of GoldfinchAdapter
     await cpContractFactoryInstance.createLendingProtocolAdapter(
       0, // Goldfinch
-      goldfinchAdapterImpl.address,
-      goldfinchAdapterImpl.interface.encodeFunctionData("initialize", [])
+      goldfinchAdapterImplementation.address,
+      goldfinchAdapterImplementation.interface.encodeFunctionData(
+        "initialize",
+        [await deployer.getAddress()]
+      )
     );
 
     // Retrieve an instance of GoldfinchAdapter from the LendingProtocolAdapterFactory
@@ -312,6 +316,7 @@ export {
   poolCycleManagerInstance,
   accruedPremiumCalculatorInstance,
   riskFactorCalculatorInstance,
+  goldfinchAdapterImplementation,
   goldfinchAdapterInstance,
   referenceLendingPoolsImplementation, // implementation contract which is used to create proxy contract
   defaultStateManagerInstance,

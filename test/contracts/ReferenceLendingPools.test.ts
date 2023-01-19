@@ -4,7 +4,7 @@ import { parseEther } from "ethers/lib/utils";
 import { ZERO_ADDRESS } from "../../test/utils/constants";
 import { ProtectionPurchaseParamsStruct } from "../../typechain-types/contracts/interfaces/IReferenceLendingPools";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
-import { ReferenceLendingPoolsFactory } from "../../typechain-types/contracts/core/ReferenceLendingPoolsFactory";
+import { ContractFactory } from "../../typechain-types/contracts/core/ContractFactory";
 import {
   getDaysInSeconds,
   getLatestBlockTimestamp,
@@ -24,7 +24,7 @@ const testReferenceLendingPools: Function = (
   implementationDeployer: Signer,
   referenceLendingPoolsImplementation: ReferenceLendingPools,
   referenceLendingPoolsInstance: ReferenceLendingPools,
-  referenceLendingPoolsFactoryInstance: ReferenceLendingPoolsFactory,
+  contractFactory: ContractFactory,
   addedLendingPools: string[]
 ) => {
   describe("ReferenceLendingPools", async () => {
@@ -152,7 +152,7 @@ const testReferenceLendingPools: Function = (
 
         it("...should transfer ownership during initialization", async () => {
           expect(
-            await referenceLendingPoolsFactoryInstance.createReferenceLendingPools(
+            await contractFactory.createReferenceLendingPools(
               referenceLendingPoolsImplementation.address,
               [],
               [],

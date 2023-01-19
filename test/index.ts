@@ -24,6 +24,7 @@ import {
   poolCycleManagerInstance,
   accruedPremiumCalculatorInstance,
   riskFactorCalculatorInstance,
+  goldfinchAdapterImplementation,
   goldfinchAdapterInstance,
   referenceLendingPoolsImplementation,
   defaultStateManagerInstance,
@@ -56,8 +57,13 @@ describe("start testing", () => {
       );
     });
 
-    it("run the GoldfinchV2Adapter test", async () => {
-      testGoldfinchAdapter(goldfinchAdapterInstance);
+    it("run the GoldfinchAdapter test", async () => {
+      testGoldfinchAdapter(
+        deployer,
+        account1,
+        goldfinchAdapterImplementation,
+        goldfinchAdapterInstance
+      );
     });
 
     it("run the PoolFactory test", async () => {

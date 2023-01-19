@@ -3,7 +3,7 @@ import { expect } from "chai";
 import { Contract, Signer } from "ethers";
 import { ZERO_ADDRESS } from "../utils/constants";
 import { Pool } from "../../typechain-types/contracts/core/pool/Pool";
-import { PoolFactory } from "../../typechain-types/contracts/core/PoolFactory";
+import { ContractFactory } from "../../typechain-types/contracts/core/ContractFactory";
 import { ethers } from "hardhat";
 import {
   parseUSDC,
@@ -26,7 +26,7 @@ const testDefaultStateManager: Function = (
   account1: Signer,
   seller: Signer,
   defaultStateManager: DefaultStateManager,
-  poolFactory: PoolFactory,
+  contractFactory: ContractFactory,
   poolInstance: Pool,
   lendingPools: string[]
 ) => {
@@ -78,7 +78,7 @@ const testDefaultStateManager: Function = (
 
       usdcContract = getUsdcContract(deployer);
       pool1 = poolInstance.address;
-      pool2 = (await poolFactory.getPools())[1];
+      pool2 = (await contractFactory.getPools())[1];
       sellerAddress = await seller.getAddress();
 
       referenceLendingPoolsInstance = (await ethers.getContractAt(
@@ -109,7 +109,7 @@ const testDefaultStateManager: Function = (
       it("...should fail to register already registered pool", async () => {
         await expect(
           defaultStateManager
-            .connect(await ethers.getSigner(poolFactory.address))
+            .connect(await ethers.getSigner(contractFactory.address))
             .registerPool(poolInstance.address)
         ).to.be.revertedWith(
           `PoolAlreadyRegistered("${await poolInstance.address}")`
