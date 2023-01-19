@@ -12,29 +12,39 @@ import {
 } from "../../typechain-types/contracts/interfaces/IPool";
 import { Pool } from "../../typechain-types/contracts/core/Pool";
 import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";
-import { PoolFactory } from "../../typechain-types/contracts/core/PoolFactory";
+import { ContractFactory } from "../../typechain-types/contracts/core/ContractFactory";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { DefaultStateManager } from "../../typechain-types/contracts/core/DefaultStateManager";
 import { parseUSDC } from "../utils/usdc";
 import { getDaysInSeconds, getLatestBlockTimestamp } from "../utils/time";
 
-const testPoolFactory: Function = (
+const LENDING_POOL_1 = "0x759f097f3153f5d62ff1c2d82ba78b6350f223e3";
+
+const testContractFactory: Function = (
   deployer: Signer,
   account1: Signer,
-  poolFactory: PoolFactory,
+  cpContractFactory: ContractFactory,
   premiumCalculator: PremiumCalculator,
   referenceLendingPools: ReferenceLendingPools,
   poolCycleManager: PoolCycleManager,
   defaultStateManager: DefaultStateManager,
-  poolImplementation: Pool
+  poolImplementation: Pool,
+  referenceLendingPoolsImplementation: ReferenceLendingPools,
+  getLatestReferenceLendingPoolsInstance: Function
 ) => {
   describe("PoolFactory", () => {
     let _firstPoolAddress: string;
     let _secondPoolAddress: string;
 
     before(async () => {
-      _firstPoolAddress = (await poolFactory.getPools())[0];
+      _firstPoolAddress = (await cpContractFactory.getPools())[0];
       console.log("first pool address", _firstPoolAddress);
+    });
+
+    describe("constructor", () => {
+      it("...should be valid instance", async () => {
+        expect(cpContractFactory).to.not.equal(undefined);
+      });
     });
 
     describe("createPool", async () => {
@@ -59,7 +69,7 @@ const testPoolFactory: Function = (
 
       it("...only the owner should be able to call the createPool function", async () => {
         await expect(
-          poolFactory
+          cpContractFactory
             .connect(account1)
             .createPool(
               poolImplementation.address,
@@ -89,7 +99,7 @@ const testPoolFactory: Function = (
           (await getLatestBlockTimestamp()) + 1;
 
         await expect(
-          poolFactory.createPool(
+          cpContractFactory.createPool(
             poolImplementation.address,
             _poolParams,
             USDC_ADDRESS,
@@ -99,7 +109,7 @@ const testPoolFactory: Function = (
             "sT21"
           )
         )
-          .to.emit(poolFactory, "PoolCreated")
+          .to.emit(cpContractFactory, "PoolCreated")
           .withArgs(
             _secondPoolAddress,
             anyValue,
@@ -120,7 +130,7 @@ const testPoolFactory: Function = (
           )
           .emit(defaultStateManager, "PoolRegistered");
 
-        _secondPoolAddress = (await poolFactory.getPools())[1];
+        _secondPoolAddress = (await cpContractFactory.getPools())[1];
       });
 
       it("...should start new pool cycle for the second pool", async () => {
@@ -138,9 +148,9 @@ const testPoolFactory: Function = (
 
       it("...should transfer pool's ownership to poolFactory's owner", async () => {
         const deployerAddress: string = await deployer.getAddress();
-        expect(poolFactory)
-          .to.emit(poolFactory, "OwnershipTransferred")
-          .withArgs(poolFactory.address, deployerAddress);
+        expect(cpContractFactory)
+          .to.emit(cpContractFactory, "OwnershipTransferred")
+          .withArgs(cpContractFactory.address, deployerAddress);
 
         const secondPool: Pool = (await ethers.getContractAt(
           "Pool",
@@ -149,7 +159,98 @@ const testPoolFactory: Function = (
         expect(await secondPool.owner()).to.equal(deployerAddress);
       });
     });
+
+    describe("createReferenceLendingPools", () => {
+      it("...should revert when not called by owner", async () => {
+        await expect(
+          cpContractFactory
+            .connect(account1)
+            .createReferenceLendingPools(
+              referenceLendingPoolsImplementation.address,
+              [ZERO_ADDRESS],
+              [0],
+              [0],
+              ZERO_ADDRESS
+            )
+        ).to.be.revertedWith("Ownable: caller is not the owner");
+      });
+
+      it("...should revert when new pool is created with zero address by owner", async () => {
+        await expect(
+          cpContractFactory
+            .connect(deployer)
+            .createReferenceLendingPools(
+              ZERO_ADDRESS,
+              [ZERO_ADDRESS],
+              [0],
+              [0],
+              ZERO_ADDRESS
+            )
+        ).to.be.revertedWith("ERC1967: new implementation is not a contract");
+      });
+
+      it("...should revert when lending pools and protocols array lengths are not equal", async () => {
+        await expect(
+          cpContractFactory.createReferenceLendingPools(
+            referenceLendingPoolsImplementation.address,
+            [ZERO_ADDRESS],
+            [],
+            [],
+            ZERO_ADDRESS
+          )
+        ).to.be.revertedWith;
+      });
+
+      it("...should revert when lending protocols and purchase limit days array lengths are not equal", async () => {
+        await expect(
+          cpContractFactory.createReferenceLendingPools(
+            referenceLendingPoolsImplementation.address,
+            [ZERO_ADDRESS],
+            [0],
+            [10, 11],
+            ZERO_ADDRESS
+          )
+        ).to.be.revertedWith;
+      });
+
+      it("...should create an instance of ReferenceLendingPools successfully", async () => {
+        const _purchaseLimitInDays = 30;
+        const tx = await cpContractFactory
+          .connect(deployer)
+          .createReferenceLendingPools(
+            referenceLendingPoolsImplementation.address,
+            [LENDING_POOL_1],
+            [0],
+            [_purchaseLimitInDays],
+            cpContractFactory.address
+          );
+        const referenceLendingPoolsInstance =
+          await getLatestReferenceLendingPoolsInstance(cpContractFactory);
+
+        const lendingPoolInfo =
+          await referenceLendingPoolsInstance.referenceLendingPools(
+            LENDING_POOL_1
+          );
+
+        const _expectedLatestTimestamp = await getLatestBlockTimestamp();
+        const _expectedPurchaseLimitTimestamp =
+          _expectedLatestTimestamp +
+          getDaysInSeconds(_purchaseLimitInDays).toNumber();
+
+        expect(lendingPoolInfo.protocol).to.be.eq(0); // GoldfinchV2
+        expect(lendingPoolInfo.addedTimestamp).to.be.eq(
+          _expectedLatestTimestamp
+        );
+        expect(lendingPoolInfo.protectionPurchaseLimitTimestamp).to.be.eq(
+          _expectedPurchaseLimitTimestamp
+        );
+
+        expect(await referenceLendingPoolsInstance.owner()).to.be.eq(
+          await deployer.getAddress()
+        );
+      });
+    });
   });
 };
 
-export { testPoolFactory };
+export { testContractFactory };

@@ -7,20 +7,17 @@ import {
   PoolParamsStruct,
   PoolCycleParamsStruct
 } from "../typechain-types/contracts/interfaces/IPool";
-import { PoolFactory } from "../typechain-types/contracts/core/PoolFactory";
+import { ContractFactory as CPContractFactory } from "../typechain-types/contracts/core/ContractFactory";
 import { PremiumCalculator } from "../typechain-types/contracts/core/PremiumCalculator";
 import { ReferenceLendingPools } from "../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { PoolCycleManager } from "../typechain-types/contracts/core/PoolCycleManager";
 import { AccruedPremiumCalculator } from "../typechain-types/contracts/libraries/AccruedPremiumCalculator";
 import { RiskFactorCalculator } from "../typechain-types/contracts/libraries/RiskFactorCalculator";
 import { GoldfinchAdapter } from "../typechain-types/contracts/adapters/GoldfinchAdapter";
-import { ReferenceLendingPoolsFactory } from "../typechain-types/contracts/core/ReferenceLendingPoolsFactory";
 import { DefaultStateManager } from "../typechain-types/contracts/core/DefaultStateManager";
-import { LendingProtocolAdapterFactory } from "../typechain-types/contracts/core/LendingProtocolAdapterFactory";
 
 import { parseUSDC } from "../test/utils/usdc";
 import { getDaysInSeconds } from "../test/utils/time";
-import { OutgoingMessage } from "http";
 
 let deployer: Signer;
 let account1: Signer;
@@ -30,17 +27,15 @@ let account4: Signer;
 
 let poolImplementation: Pool;
 let poolInstance: Pool;
-let poolFactoryInstance: PoolFactory;
+let cpContractFactoryInstance: CPContractFactory;
 let premiumCalculatorInstance: PremiumCalculator;
 let referenceLendingPoolsInstance: ReferenceLendingPools;
 let poolCycleManagerInstance: PoolCycleManager;
 let accruedPremiumCalculatorInstance: AccruedPremiumCalculator;
 let riskFactorCalculatorInstance: RiskFactorCalculator;
 let goldfinchAdapterInstance: GoldfinchAdapter;
-let referenceLendingPoolsFactoryInstance: ReferenceLendingPoolsFactory;
 let referenceLendingPoolsImplementation: ReferenceLendingPools;
 let defaultStateManagerInstance: DefaultStateManager;
-let lendingProtocolAdapterFactoryInstance: LendingProtocolAdapterFactory;
 
 const GOLDFINCH_LENDING_POOLS = [
   "0xb26b42dd5771689d0a7faeea32825ff9710b9c11",
@@ -117,70 +112,6 @@ const deployContracts: Function = async () => {
       premiumCalculatorInstance.address
     );
 
-    // Deploy ReferenceLendingPools Implementation contract
-    const referenceLendingPoolsFactory = await contractFactory(
-      "ReferenceLendingPools"
-    );
-    referenceLendingPoolsImplementation =
-      await referenceLendingPoolsFactory.deploy();
-    await referenceLendingPoolsImplementation.deployed();
-    console.log(
-      "ReferenceLendingPools Implementation deployed to:",
-      referenceLendingPoolsImplementation.address
-    );
-
-    // Deploy a proxy to LendingProtocolAdapterFactory contract
-    const lendingProtocolAdapterFactory = await contractFactory(
-      "LendingProtocolAdapterFactory"
-    );
-    lendingProtocolAdapterFactoryInstance = (await upgrades.deployProxy(
-      lendingProtocolAdapterFactory
-    )) as LendingProtocolAdapterFactory;
-    await lendingProtocolAdapterFactoryInstance.deployed();
-    console.log(
-      "LendingProtocolAdapterFactory deployed to: ",
-      lendingProtocolAdapterFactoryInstance.address
-    );
-
-    // Deploy a proxy to ReferenceLendingPoolsFactory contract to make it upgradeable
-    const referenceLendingPoolsFactoryFactory = await contractFactory(
-      "ReferenceLendingPoolsFactory"
-    );
-    referenceLendingPoolsFactoryInstance = (await upgrades.deployProxy(
-      referenceLendingPoolsFactoryFactory
-    )) as ReferenceLendingPoolsFactory;
-    await referenceLendingPoolsFactoryInstance.deployed();
-    console.log(
-      "ReferenceLendingPoolsFactory deployed to:",
-      referenceLendingPoolsFactoryInstance.address
-    );
-
-    // Create an instance of the ReferenceLendingPools
-    const _lendingProtocols = [0, 0]; // 0 = Goldfinch
-    const _purchaseLimitsInDays = [90, 60];
-    await referenceLendingPoolsFactoryInstance.createReferenceLendingPools(
-      referenceLendingPoolsImplementation.address,
-      GOLDFINCH_LENDING_POOLS,
-      _lendingProtocols,
-      _purchaseLimitsInDays,
-      lendingProtocolAdapterFactoryInstance.address
-    );
-    referenceLendingPoolsInstance =
-      await getLatestReferenceLendingPoolsInstance(
-        referenceLendingPoolsFactoryInstance
-      );
-
-    // Retrieve an instance of GoldfinchAdapter from the LendingProtocolAdapterFactory
-    goldfinchAdapterInstance = (await ethers.getContractAt(
-      "GoldfinchAdapter",
-      await lendingProtocolAdapterFactoryInstance.getLendingProtocolAdapter(0)
-    )) as GoldfinchAdapter;
-
-    console.log(
-      "GoldfinchAdapter is deployed to: ",
-      goldfinchAdapterInstance.address
-    );
-
     // Deploy a proxy to PoolCycleManager contract
     const poolCycleManagerFactory = await contractFactory("PoolCycleManager");
     poolCycleManagerInstance = (await upgrades.deployProxy(
@@ -214,23 +145,78 @@ const deployContracts: Function = async () => {
     console.log("PoolHelper lib is deployed to:", poolHelperInstance.address);
 
     // Deploy a proxy to PoolFactory contract
-    const _poolFactoryFactory = await contractFactory("PoolFactory");
-    poolFactoryInstance = (await upgrades.deployProxy(_poolFactoryFactory, [
-      poolCycleManagerInstance.address,
-      defaultStateManagerInstance.address
-    ])) as PoolFactory;
-    await poolFactoryInstance.deployed();
-    console.log("PoolFactory is deployed to: ", poolFactoryInstance.address);
+    const _poolFactoryFactory = await contractFactory("ContractFactory");
+    cpContractFactoryInstance = (await upgrades.deployProxy(
+      _poolFactoryFactory,
+      [poolCycleManagerInstance.address, defaultStateManagerInstance.address]
+    )) as CPContractFactory;
+    await cpContractFactoryInstance.deployed();
+    console.log(
+      "ContractFactory is deployed to: ",
+      cpContractFactoryInstance.address
+    );
 
     /// Sets pool factory address into the PoolCycleManager & DefaultStateManager
     /// This is required to enable the PoolCycleManager & DefaultStateManager to register a new pool when it is created
     /// "setPoolFactory" must be called by the owner
     await poolCycleManagerInstance
       .connect(deployer)
-      .setPoolFactory(poolFactoryInstance.address);
+      .setPoolFactory(cpContractFactoryInstance.address);
     await defaultStateManagerInstance
       .connect(deployer)
-      .setPoolFactory(poolFactoryInstance.address);
+      .setPoolFactory(cpContractFactoryInstance.address);
+
+    // Deploy GoldfinchAdapter implementation contract
+    const goldfinchAdapterFactory = await contractFactory("GoldfinchAdapter");
+    const goldfinchAdapterImpl = await goldfinchAdapterFactory.deploy();
+    await goldfinchAdapterImpl.deployed();
+    console.log(
+      "GoldfinchAdapter implementation is deployed to:",
+      goldfinchAdapterImpl.address
+    );
+
+    // Create an upgradable instance of GoldfinchAdapter
+    await cpContractFactoryInstance.createLendingProtocolAdapter(
+      0, // Goldfinch
+      goldfinchAdapterImpl.address,
+      goldfinchAdapterImpl.interface.encodeFunctionData("initialize", [])
+    );
+
+    // Retrieve an instance of GoldfinchAdapter from the LendingProtocolAdapterFactory
+    goldfinchAdapterInstance = (await ethers.getContractAt(
+      "GoldfinchAdapter",
+      await cpContractFactoryInstance.getLendingProtocolAdapter(0)
+    )) as GoldfinchAdapter;
+
+    console.log(
+      "GoldfinchAdapter is deployed at: ",
+      goldfinchAdapterInstance.address
+    );
+
+    // Deploy ReferenceLendingPools Implementation contract
+    const referenceLendingPoolsFactory = await contractFactory(
+      "ReferenceLendingPools"
+    );
+    referenceLendingPoolsImplementation =
+      await referenceLendingPoolsFactory.deploy();
+    await referenceLendingPoolsImplementation.deployed();
+    console.log(
+      "ReferenceLendingPools Implementation deployed to:",
+      referenceLendingPoolsImplementation.address
+    );
+
+    // Create an instance of the ReferenceLendingPools
+    const _lendingProtocols = [0, 0]; // 0 = Goldfinch
+    const _purchaseLimitsInDays = [90, 60];
+    await cpContractFactoryInstance.createReferenceLendingPools(
+      referenceLendingPoolsImplementation.address,
+      GOLDFINCH_LENDING_POOLS,
+      _lendingProtocols,
+      _purchaseLimitsInDays,
+      cpContractFactoryInstance.address
+    );
+    referenceLendingPoolsInstance =
+      await getLatestReferenceLendingPoolsInstance(cpContractFactoryInstance);
 
     // Deploy a Pool implementation contract
     const poolFactory = await contractFactory("Pool", {
@@ -244,7 +230,7 @@ const deployContracts: Function = async () => {
       poolImplementation.address
     );
 
-    /// Create an instance of the Pool, which should be upgradable
+    // Create an instance of the Pool, which should be upgradable
     // Create a pool using PoolFactory instead of deploying new pool directly to mimic the prod behavior
     const _poolCycleParams: PoolCycleParamsStruct = {
       openCycleDuration: getDaysInSeconds(10),
@@ -264,7 +250,7 @@ const deployContracts: Function = async () => {
       protectionExtensionGracePeriodInSeconds: getDaysInSeconds(14) // 2 weeks
     };
 
-    await poolFactoryInstance.createPool(
+    await cpContractFactoryInstance.createPool(
       poolImplementation.address,
       _poolParams,
       USDC_ADDRESS,
@@ -274,17 +260,17 @@ const deployContracts: Function = async () => {
       "sT11"
     );
 
-    poolInstance = await getLatestPoolInstance(poolFactoryInstance);
+    poolInstance = await getLatestPoolInstance(cpContractFactoryInstance);
   } catch (e) {
     console.log(e);
   }
 };
 
 async function getLatestReferenceLendingPoolsInstance(
-  referenceLendingPoolsFactoryInstance: ReferenceLendingPoolsFactory
+  cpContractFactory: CPContractFactory
 ): Promise<ReferenceLendingPools> {
   const referenceLendingPoolsList =
-    await referenceLendingPoolsFactoryInstance.getReferenceLendingPoolsList();
+    await cpContractFactory.getReferenceLendingPoolsList();
   const newReferenceLendingPoolsInstance = (await ethers.getContractAt(
     "ReferenceLendingPools",
     referenceLendingPoolsList[referenceLendingPoolsList.length - 1]
@@ -299,7 +285,7 @@ async function getLatestReferenceLendingPoolsInstance(
 }
 
 async function getLatestPoolInstance(
-  poolFactoryInstance: PoolFactory
+  poolFactoryInstance: CPContractFactory
 ): Promise<Pool> {
   const pools = await poolFactoryInstance.getPools();
   const newPoolInstance = (await ethers.getContractAt(
@@ -320,16 +306,14 @@ export {
   deployContracts,
   poolImplementation,
   poolInstance,
-  poolFactoryInstance,
+  cpContractFactoryInstance,
   premiumCalculatorInstance,
   referenceLendingPoolsInstance, // This is the proxy instance cloned from implementation
   poolCycleManagerInstance,
   accruedPremiumCalculatorInstance,
   riskFactorCalculatorInstance,
   goldfinchAdapterInstance,
-  lendingProtocolAdapterFactoryInstance,
   referenceLendingPoolsImplementation, // implementation contract which is used to create proxy contract
-  referenceLendingPoolsFactoryInstance,
   defaultStateManagerInstance,
   GOLDFINCH_LENDING_POOLS,
   getLatestReferenceLendingPoolsInstance,

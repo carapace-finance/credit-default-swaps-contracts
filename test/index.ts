@@ -1,5 +1,5 @@
 import { testPool } from "./contracts/Pool.test";
-import { testPoolFactory } from "./contracts/PoolFactory.test";
+import { testContractFactory } from "./contracts/ContractFactory.test";
 import { testPoolCycleManager } from "./contracts/PoolCycleManager.test";
 import { testAccruedPremiumCalculator } from "./contracts/AccruedPremiumCalculator.test";
 import { testPremiumCalculator } from "./contracts/PremiumCalculator.test";
@@ -7,7 +7,6 @@ import { testRiskFactorCalculator } from "./contracts/RiskFactorCalculator.test"
 
 import { testGoldfinchAdapter } from "./contracts/GoldfinchAdapter.test";
 import { testReferenceLendingPools } from "./contracts/ReferenceLendingPools.test";
-import { testReferenceLendingPoolsFactory } from "./contracts/ReferenceLendingPoolsFactory.test";
 import { testDefaultStateManager } from "./contracts/DefaultStateManager.test";
 
 import {
@@ -19,20 +18,17 @@ import {
   deployContracts,
   poolImplementation,
   poolInstance,
-  poolFactoryInstance,
+  cpContractFactoryInstance,
   premiumCalculatorInstance,
   referenceLendingPoolsInstance,
   poolCycleManagerInstance,
   accruedPremiumCalculatorInstance,
   riskFactorCalculatorInstance,
   goldfinchAdapterInstance,
-  lendingProtocolAdapterFactoryInstance,
-  referenceLendingPoolsFactoryInstance,
   referenceLendingPoolsImplementation,
   defaultStateManagerInstance,
   GOLDFINCH_LENDING_POOLS,
-  getLatestReferenceLendingPoolsInstance,
-  getLatestPoolInstance
+  getLatestReferenceLendingPoolsInstance
 } from "../utils/deploy";
 
 describe("start testing", () => {
@@ -64,27 +60,18 @@ describe("start testing", () => {
       testGoldfinchAdapter(goldfinchAdapterInstance);
     });
 
-    it("run referenceLendingPoolsFactory test", async () => {
-      testReferenceLendingPoolsFactory(
-        deployer,
-        account1,
-        referenceLendingPoolsImplementation,
-        referenceLendingPoolsFactoryInstance,
-        lendingProtocolAdapterFactoryInstance,
-        getLatestReferenceLendingPoolsInstance
-      );
-    });
-
     it("run the PoolFactory test", async () => {
-      testPoolFactory(
+      testContractFactory(
         deployer,
         account1,
-        poolFactoryInstance,
+        cpContractFactoryInstance,
         premiumCalculatorInstance,
         referenceLendingPoolsInstance,
         poolCycleManagerInstance,
         defaultStateManagerInstance,
-        poolImplementation
+        poolImplementation,
+        referenceLendingPoolsImplementation,
+        getLatestReferenceLendingPoolsInstance
       );
     });
 
@@ -94,7 +81,7 @@ describe("start testing", () => {
         account1,
         referenceLendingPoolsImplementation,
         referenceLendingPoolsInstance,
-        referenceLendingPoolsFactoryInstance,
+        cpContractFactoryInstance,
         GOLDFINCH_LENDING_POOLS
       );
     });
@@ -119,7 +106,7 @@ describe("start testing", () => {
         account1,
         account3,
         defaultStateManagerInstance,
-        poolFactoryInstance,
+        cpContractFactoryInstance,
         poolInstance,
         GOLDFINCH_LENDING_POOLS
       );
@@ -131,7 +118,7 @@ describe("start testing", () => {
         deployer,
         account1,
         poolCycleManagerInstance,
-        poolFactoryInstance.address
+        cpContractFactoryInstance.address
       );
     });
   });
