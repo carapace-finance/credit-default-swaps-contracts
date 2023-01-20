@@ -1,19 +1,21 @@
 import { expect } from "chai";
-import { Signer } from "ethers/lib/ethers";
+import { Signer, ContractFactory } from "ethers/lib/ethers";
 import { parseEther } from "ethers/lib/utils";
 import { ZERO_ADDRESS } from "../../test/utils/constants";
 import { ProtectionPurchaseParamsStruct } from "../../typechain-types/contracts/interfaces/IReferenceLendingPools";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
-import { ContractFactory } from "../../typechain-types/contracts/core/ContractFactory";
+import { ContractFactory as CPContractFactory } from "../../typechain-types/contracts/core/ContractFactory";
 import {
   getDaysInSeconds,
   getLatestBlockTimestamp,
   moveForwardTime,
   setNextBlockTimestamp
 } from "../utils/time";
-import { parseUSDC } from "../utils/usdc";
-import { network } from "hardhat";
+import { getUsdcContract, parseUSDC } from "../utils/usdc";
+import { ethers, network, upgrades } from "hardhat";
 import { BigNumber } from "@ethersproject/bignumber";
+import { ReferenceLendingPoolsV2 } from "../../typechain-types/contracts/test/ReferenceLendingPoolsV2";
+import { payToLendingPoolAddress } from "../utils/goldfinch";
 
 const LENDING_POOL_3 = "0x89d7c618a4eef3065da8ad684859a547548e6169";
 const BUYER1 = "0x12c2cfda0a51fe2a68e443868bcbf3d6f6e2dda2";
@@ -21,10 +23,10 @@ const BUYER2 = "0x10a590f528eff3d5de18c90da6e03a4acdde3a7d";
 
 const testReferenceLendingPools: Function = (
   deployer: Signer,
-  implementationDeployer: Signer,
+  account1: Signer,
   referenceLendingPoolsImplementation: ReferenceLendingPools,
   referenceLendingPoolsInstance: ReferenceLendingPools,
-  contractFactory: ContractFactory,
+  contractFactory: CPContractFactory,
   addedLendingPools: string[]
 ) => {
   describe("ReferenceLendingPools", async () => {
@@ -49,8 +51,7 @@ const testReferenceLendingPools: Function = (
 
     before(async () => {
       _deployerAddress = await deployer.getAddress();
-      _implementationDeployerAddress =
-        await implementationDeployer.getAddress();
+      _implementationDeployerAddress = await account1.getAddress();
       _snapshotId = await network.provider.send("evm_snapshot", []);
     });
 
@@ -88,10 +89,19 @@ const testReferenceLendingPools: Function = (
             );
           expect(referenceLendingPoolInfo.addedTimestamp).to.equal(0);
         });
+
+        it("...should be valid implementation", async () => {
+          await upgrades.validateImplementation(
+            await ethers.getContractFactory("ReferenceLendingPools"),
+            {
+              kind: "uups"
+            }
+          );
+        });
       });
     });
 
-    describe("Minimal Proxy", async () => {
+    describe("Proxy", async () => {
       it("...and implementation are different instances", async () => {
         expect(referenceLendingPoolsInstance.address).to.not.equal(
           referenceLendingPoolsImplementation.address
@@ -188,7 +198,7 @@ const testReferenceLendingPools: Function = (
         it("...should revert when not called by owner", async () => {
           await expect(
             referenceLendingPoolsInstance
-              .connect(implementationDeployer)
+              .connect(account1)
               .addReferenceLendingPool(ZERO_ADDRESS, 0, 0)
           ).to.be.revertedWith("Ownable: caller is not the owner");
         });
@@ -490,6 +500,127 @@ const testReferenceLendingPools: Function = (
             )
           ).to.eq(BigNumber.from(30));
         });
+      });
+    });
+
+    describe("upgrade", () => {
+      const LENDING_POOL_4 = "0x759f097f3153f5d62ff1c2d82ba78b6350f223e3";
+
+      let upgradedReferenceLendingPools: ReferenceLendingPoolsV2;
+      let referenceLendingPoolsV2ImplementationAddress: string;
+      let referenceLendingPoolsV2Factory: ContractFactory;
+
+      before(async () => {
+        referenceLendingPoolsV2Factory = await ethers.getContractFactory(
+          "ReferenceLendingPoolsV2"
+        );
+
+        // Forces the import of an existing proxy deployment to be used with hardhat upgrades plugin
+        // because the proxy was deployed by ContractFactory and noy using the hardhat upgrades plugin
+        await upgrades.forceImport(
+          referenceLendingPoolsInstance.address,
+          await ethers.getContractFactory("ReferenceLendingPools")
+        );
+      });
+
+      it("...should revert when upgradeTo is called by non-owner", async () => {
+        await expect(
+          referenceLendingPoolsInstance
+            .connect(account1)
+            .upgradeTo("0xA18173d6cf19e4Cc5a7F63780Fe4738b12E8b781")
+        ).to.be.revertedWith("Ownable: caller is not the owner");
+      });
+
+      it("...should fail upon invalid upgrade", async () => {
+        try {
+          await upgrades.validateUpgrade(
+            referenceLendingPoolsInstance.address,
+            await ethers.getContractFactory(
+              "ReferenceLendingPoolsNotUpgradable"
+            ),
+            {
+              kind: "uups"
+            }
+          );
+        } catch (e: any) {
+          expect(e.message).includes(
+            "Contract `contracts/test/ReferenceLendingPoolsV2.sol:ReferenceLendingPoolsNotUpgradable` is not upgrade safe"
+          );
+        }
+      });
+
+      it("...should be valid upgrade", async () => {
+        await upgrades.validateUpgrade(
+          referenceLendingPoolsInstance.address,
+          referenceLendingPoolsV2Factory,
+          {
+            kind: "uups"
+          }
+        );
+      });
+
+      it("...should upgrade successfully", async () => {
+        const goldfinchAdapterV2Impl =
+          await referenceLendingPoolsV2Factory.deploy();
+        await goldfinchAdapterV2Impl.deployed();
+        referenceLendingPoolsV2ImplementationAddress =
+          goldfinchAdapterV2Impl.address;
+
+        await referenceLendingPoolsInstance
+          .connect(deployer)
+          .upgradeTo(referenceLendingPoolsV2ImplementationAddress);
+
+        // upgrade to v2
+        upgradedReferenceLendingPools = referenceLendingPoolsV2Factory.attach(
+          referenceLendingPoolsInstance.address
+        ) as ReferenceLendingPoolsV2;
+      });
+
+      it("...should have new implementation address after upgrade", async () => {
+        expect(
+          await upgrades.erc1967.getImplementationAddress(
+            upgradedReferenceLendingPools.address
+          )
+        ).to.be.equal(referenceLendingPoolsV2ImplementationAddress);
+      });
+
+      it("...should be able to call existing function in v1", async () => {
+        expect(
+          await upgradedReferenceLendingPools.getPaymentPeriodInDays(
+            "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf"
+          )
+        ).to.eq(BigNumber.from(30));
+      });
+
+      it("...should be able to add new pool by owner", async () => {
+        await payToLendingPoolAddress(
+          LENDING_POOL_4,
+          "500000",
+          await getUsdcContract(deployer)
+        );
+        await expect(
+          upgradedReferenceLendingPools
+            .connect(deployer)
+            .addReferenceLendingPool(LENDING_POOL_4, 0, 10)
+        ).to.emit(upgradedReferenceLendingPools, "ReferenceLendingPoolAdded");
+      });
+
+      it("...should be able to retrieve from existing storage", async () => {
+        const lendingPoolInfo =
+          await upgradedReferenceLendingPools.referenceLendingPools(
+            LENDING_POOL_4
+          );
+        expect(lendingPoolInfo.protocol).to.be.eq(0); // Goldfinch
+        expect(lendingPoolInfo.addedTimestamp).to.be.eq(
+          await getLatestBlockTimestamp()
+        );
+        expect(lendingPoolInfo.protectionPurchaseLimitTimestamp).to.be.gt(0);
+      });
+
+      it("...should be able to set/get new state variable in v2", async () => {
+        expect(await upgradedReferenceLendingPools.getTestVariable()).to.eq(0);
+        await upgradedReferenceLendingPools.setTestVariable(42);
+        expect(await upgradedReferenceLendingPools.getTestVariable()).to.eq(42);
       });
     });
   });

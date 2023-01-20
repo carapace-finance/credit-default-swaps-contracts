@@ -54,7 +54,7 @@ const testGoldfinchAdapter: Function = (
         ).to.be.revertedWith("Initializable: contract is already initialized");
       });
 
-      it("... should be valid implementation", async () => {
+      it("...should be valid implementation", async () => {
         await upgrades.validateImplementation(
           await ethers.getContractFactory("GoldfinchAdapter"),
           {
@@ -360,7 +360,7 @@ const testGoldfinchAdapter: Function = (
         );
       });
 
-      it("... should revert when upgradeTo is called by non-owner", async () => {
+      it("...should revert when upgradeTo is called by non-owner", async () => {
         await expect(
           goldfinchAdapter
             .connect(account1)
@@ -368,7 +368,7 @@ const testGoldfinchAdapter: Function = (
         ).to.be.revertedWith("Ownable: caller is not the owner");
       });
 
-      it("... should fail upon invalid upgrade", async () => {
+      it("...should fail upon invalid upgrade", async () => {
         try {
           await upgrades.validateUpgrade(
             goldfinchAdapter.address,
@@ -384,7 +384,7 @@ const testGoldfinchAdapter: Function = (
         }
       });
 
-      it("... should be valid upgrade", async () => {
+      it("...should be valid upgrade", async () => {
         await upgrades.validateUpgrade(
           goldfinchAdapter.address,
           goldfinchAdapterV2Factory,
@@ -394,13 +394,11 @@ const testGoldfinchAdapter: Function = (
         );
       });
 
-      it("... should upgrade successfully", async () => {
+      it("...should upgrade successfully", async () => {
         const goldfinchAdapterV2Impl = await goldfinchAdapterV2Factory.deploy();
         await goldfinchAdapterV2Impl.deployed();
         goldfinchAdapterV2ImplementationAddress =
           goldfinchAdapterV2Impl.address;
-
-        console.log("GoldfinchAdapter owner: ", await goldfinchAdapter.owner());
 
         await goldfinchAdapter
           .connect(deployer)
@@ -412,20 +410,20 @@ const testGoldfinchAdapter: Function = (
         ) as GoldfinchAdapterV2;
       });
 
-      it("... should have new implementation address after upgrade", async () => {
+      it("...should have new implementation address after upgrade", async () => {
         expect(
           await upgrades.erc1967.getImplementationAddress(
-            goldfinchAdapter.address
+            upgradedGoldfinchAdapter.address
           )
         ).to.be.equal(goldfinchAdapterV2ImplementationAddress);
       });
 
-      it("... should be able to call new function in v2", async () => {
+      it("...should be able to call new function in v2", async () => {
         const value = await upgradedGoldfinchAdapter.getVersion();
         expect(value).to.equal("v2");
       });
 
-      it("... should be able to call existing function in v1", async () => {
+      it("...should be able to call existing function in v1", async () => {
         const value = await upgradedGoldfinchAdapter.getPaymentPeriodInDays(
           "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf"
         );
