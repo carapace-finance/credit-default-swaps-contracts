@@ -146,9 +146,9 @@ const deployContracts: Function = async () => {
     console.log("PoolHelper lib is deployed to:", poolHelperInstance.address);
 
     // Deploy a proxy to PoolFactory contract
-    const _poolFactoryFactory = await contractFactory("ContractFactory");
+    const _cpContractFactoryFactory = await contractFactory("ContractFactory");
     cpContractFactoryInstance = (await upgrades.deployProxy(
-      _poolFactoryFactory,
+      _cpContractFactoryFactory,
       [poolCycleManagerInstance.address, defaultStateManagerInstance.address]
     )) as CPContractFactory;
     await cpContractFactoryInstance.deployed();

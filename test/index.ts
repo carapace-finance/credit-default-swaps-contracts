@@ -66,7 +66,7 @@ describe("start testing", () => {
       );
     });
 
-    it("run the PoolFactory test", async () => {
+    it("run the ContractFactory test", async () => {
       testContractFactory(
         deployer,
         account1,

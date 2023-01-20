@@ -16,7 +16,6 @@ import {
 import { toBytes32, setStorageAt, getStorageAt } from "../utils/storage";
 import { ZERO_ADDRESS } from "../utils/constants";
 import { GoldfinchAdapterV2 } from "../../typechain-types/contracts/test/GoldfinchAdapterV2";
-import { start } from "repl";
 
 const GOLDFINCH_ALMAVEST_BASKET_6_ADDRESS =
   "0x418749e294cabce5a714efccc22a8aade6f9db57";
@@ -43,29 +42,25 @@ const testGoldfinchAdapter: Function = (
     });
 
     describe("implementation", async () => {
-      describe("constructor", async () => {
-        it("...should NOT have an owner on construction", async () => {
-          expect(await goldfinchAdapterImplementation.owner()).to.equal(
-            ZERO_ADDRESS
-          );
-        });
+      it("...should NOT have an owner on construction", async () => {
+        expect(await goldfinchAdapterImplementation.owner()).to.equal(
+          ZERO_ADDRESS
+        );
+      });
 
-        it("...should disable initialize after construction", async () => {
-          await expect(
-            goldfinchAdapterImplementation.initialize(ZERO_ADDRESS)
-          ).to.be.revertedWith(
-            "Initializable: contract is already initialized"
-          );
-        });
+      it("...should disable initialize after construction", async () => {
+        await expect(
+          goldfinchAdapterImplementation.initialize(ZERO_ADDRESS)
+        ).to.be.revertedWith("Initializable: contract is already initialized");
+      });
 
-        it("... should be valid implementation", async () => {
-          await upgrades.validateImplementation(
-            await ethers.getContractFactory("GoldfinchAdapter"),
-            {
-              kind: "uups"
-            }
-          );
-        });
+      it("... should be valid implementation", async () => {
+        await upgrades.validateImplementation(
+          await ethers.getContractFactory("GoldfinchAdapter"),
+          {
+            kind: "uups"
+          }
+        );
       });
     });
 
@@ -76,10 +71,16 @@ const testGoldfinchAdapter: Function = (
         );
       });
 
-      it("...should set have deployer as on owner", async () => {
+      it("...should set deployer as on owner", async () => {
         expect(await goldfinchAdapter.owner()).to.equal(
           await deployer.getAddress()
         );
+      });
+
+      it("... should revert when initialize is called 2nd time", async () => {
+        await expect(
+          goldfinchAdapter.initialize(ZERO_ADDRESS)
+        ).to.be.revertedWith("Initializable: contract is already initialized");
       });
     });
 
@@ -367,7 +368,7 @@ const testGoldfinchAdapter: Function = (
         ).to.be.revertedWith("Ownable: caller is not the owner");
       });
 
-      it("... should NOT be valid upgrade", async () => {
+      it("... should fail upon invalid upgrade", async () => {
         try {
           await upgrades.validateUpgrade(
             goldfinchAdapter.address,

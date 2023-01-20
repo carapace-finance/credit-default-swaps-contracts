@@ -20,8 +20,8 @@ import "../libraries/Constants.sol";
 /**
  * @title ContractFactory
  * @author Carapace Finance
- * @notice This contract is used to create new upgradable {IPool} instances using ERC1967 proxy.
- * This factory also creates upgradable {IReferenceLendingPools} instances
+ * @notice This contract is used to create new upgradable instances of following contracts using ERC1967 proxy:
+ * {IPool}, {IReferenceLendingPools} and {ILendingProtocolAdapter}
  * This factory contract is also upgradeable using the UUPS pattern.
  */
 contract ContractFactory is
@@ -101,6 +101,7 @@ contract ContractFactory is
   }
 
   /*** state-changing functions ***/
+
   /**
    * @param _poolImpl An address of a pool implementation.
    * @param _poolParameters struct containing pool related parameters.
@@ -124,6 +125,7 @@ contract ContractFactory is
       _poolImpl,
       abi.encodeWithSelector(
         IPool(address(0)).initialize.selector,
+        _msgSender(),
         PoolInfo({
           poolAddress: address(0),
           params: _poolParameters,
@@ -158,21 +160,6 @@ contract ContractFactory is
       _underlyingToken,
       _referenceLendingPools,
       _premiumCalculator
-    );
-
-    // TODO: this is not required as PoolFactory is already the owner of the pool
-    // Remove this after testing
-
-    /// transfer pool's ownership to the owner of the pool factory to enable pool's administration functions such as changing pool parameters
-    /// this is done by calling the transferOwnership function via proxy to the pool contract
-    /// In effect following code is doing the same as: pool.transferOwnership(owner())
-    AddressUpgradeable.functionCall(
-      _poolProxyAddress,
-      abi.encodeWithSelector(
-        OwnableUpgradeable(address(0)).transferOwnership.selector,
-        owner()
-      ),
-      "Failed to transferOwnership from Pool's owner to PoolFactory"
     );
 
     return _poolProxyAddress;

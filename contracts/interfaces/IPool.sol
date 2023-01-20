@@ -190,7 +190,18 @@ abstract contract IPool {
   /// @notice Emitted when a pool phase is updated.
   event PoolPhaseUpdated(PoolPhase newPhase);
 
+  /**
+   * @notice Initializes the pool contract
+   * @param _owner The owner of the pool
+   * @param _poolInfo The information about this pool.
+   * @param _premiumCalculator an address of a premium calculator contract
+   * @param _poolCycleManager an address of a pool cycle manager contract
+   * @param _defaultStateManager an address of a default state manager contract
+   * @param _name a name of the sToken
+   * @param _symbol a symbol of the sToken
+   */
   function initialize(
+    address _owner,
     PoolInfo calldata _poolInfo,
     IPremiumCalculator _premiumCalculator,
     IPoolCycleManager _poolCycleManager,

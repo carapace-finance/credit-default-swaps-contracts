@@ -4,7 +4,7 @@ import { parseEther } from "ethers/lib/utils";
 import { expect } from "chai";
 import { Signer } from "ethers";
 import { USDC_ADDRESS, ZERO_ADDRESS } from "../utils/constants";
-import { ethers } from "hardhat";
+import { ethers, upgrades } from "hardhat";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
 import {
   PoolParamsStruct,
@@ -17,7 +17,7 @@ import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool
 import { DefaultStateManager } from "../../typechain-types/contracts/core/DefaultStateManager";
 import { parseUSDC } from "../utils/usdc";
 import { getDaysInSeconds, getLatestBlockTimestamp } from "../utils/time";
-
+import { ContractFactoryV2 } from "../../typechain-types/contracts/test/ContractFactoryV2";
 const LENDING_POOL_1 = "0x759f097f3153f5d62ff1c2d82ba78b6350f223e3";
 
 const testContractFactory: Function = (
@@ -32,18 +32,54 @@ const testContractFactory: Function = (
   referenceLendingPoolsImplementation: ReferenceLendingPools,
   getLatestReferenceLendingPoolsInstance: Function
 ) => {
-  describe("PoolFactory", () => {
+  describe("ContractFactory", () => {
     let _firstPoolAddress: string;
     let _secondPoolAddress: string;
 
     before(async () => {
       _firstPoolAddress = (await cpContractFactory.getPools())[0];
-      console.log("first pool address", _firstPoolAddress);
+    });
+
+    describe("implementation", async () => {
+      let cpContractFactoryImplementation: ContractFactory;
+
+      before(async () => {
+        cpContractFactoryImplementation = (await ethers.getContractAt(
+          "ContractFactory",
+          await upgrades.erc1967.getImplementationAddress(
+            cpContractFactory.address
+          )
+        )) as ContractFactory;
+      });
+
+      it("...should NOT have an owner on construction", async () => {
+        expect(await cpContractFactoryImplementation.owner()).to.equal(
+          ZERO_ADDRESS
+        );
+      });
+
+      it("...should disable initialize after construction", async () => {
+        await expect(
+          cpContractFactoryImplementation.initialize(ZERO_ADDRESS, ZERO_ADDRESS)
+        ).to.be.revertedWith("Initializable: contract is already initialized");
+      });
     });
 
     describe("constructor", () => {
       it("...should be valid instance", async () => {
         expect(cpContractFactory).to.not.equal(undefined);
+      });
+
+      it("...should set deployer as on owner", async () => {
+        expect(await cpContractFactory.owner()).to.equal(
+          await deployer.getAddress()
+        );
+      });
+
+      it("... should revert when initialize is called 2nd time", async () => {
+        await expect(
+          cpContractFactory.initialize(ZERO_ADDRESS, ZERO_ADDRESS)
+        ).to.be.revertedWith("Initializable: contract is already initialized");
       });
     });
 
@@ -93,8 +129,24 @@ const testContractFactory: Function = (
         ).to.equal(1); // 1 = Open
       });
 
+      it("...should revert when new pool is created with zero address by owner", async () => {
+        await expect(
+          cpContractFactory
+            .connect(deployer)
+            .createPool(
+              ZERO_ADDRESS,
+              _poolParams,
+              USDC_ADDRESS,
+              referenceLendingPools.address,
+              premiumCalculator.address,
+              "sToken21",
+              "sT21"
+            )
+        ).to.be.revertedWith("ERC1967: new implementation is not a contract");
+      });
+
       // 1st pool is already created by deploy script
-      it("...create the second pool", async () => {
+      it("...should create the second pool successfully", async () => {
         const expectedCycleStartTimestamp: BigNumber =
           (await getLatestBlockTimestamp()) + 1;
 
@@ -175,7 +227,7 @@ const testContractFactory: Function = (
         ).to.be.revertedWith("Ownable: caller is not the owner");
       });
 
-      it("...should revert when new pool is created with zero address by owner", async () => {
+      it("...should revert when new reference lending pool is created with zero address by owner", async () => {
         await expect(
           cpContractFactory
             .connect(deployer)
@@ -237,7 +289,7 @@ const testContractFactory: Function = (
           _expectedLatestTimestamp +
           getDaysInSeconds(_purchaseLimitInDays).toNumber();
 
-        expect(lendingPoolInfo.protocol).to.be.eq(0); // GoldfinchV2
+        expect(lendingPoolInfo.protocol).to.be.eq(0); // Goldfinch
         expect(lendingPoolInfo.addedTimestamp).to.be.eq(
           _expectedLatestTimestamp
         );
@@ -248,6 +300,87 @@ const testContractFactory: Function = (
         expect(await referenceLendingPoolsInstance.owner()).to.be.eq(
           await deployer.getAddress()
         );
+      });
+    });
+
+    describe("createLendingProtocolAdapter", () => {
+      before(async () => {
+        await upgrades.erc1967.getImplementationAddress(
+          cpContractFactory.address
+        );
+      });
+
+      it("...should revert when not called by owner", async () => {
+        await expect(
+          cpContractFactory
+            .connect(account1)
+            .createLendingProtocolAdapter(0, ZERO_ADDRESS, [])
+        ).to.be.revertedWith("Ownable: caller is not the owner");
+      });
+
+      it("...should revert when new reference lending pool is created for existing protocol", async () => {
+        await expect(
+          cpContractFactory
+            .connect(deployer)
+            .createLendingProtocolAdapter(0, ZERO_ADDRESS, [])
+        ).to.be.revertedWith("LendingProtocolAdapterAlreadyAdded(0)");
+      });
+    });
+
+    describe("upgrade", () => {
+      let upgradedContractFactory: ContractFactoryV2;
+
+      it("... should revert when upgradeTo is called by non-owner", async () => {
+        await expect(
+          cpContractFactory
+            .connect(account1)
+            .upgradeTo("0xA18173d6cf19e4Cc5a7F63780Fe4738b12E8b781")
+        ).to.be.revertedWith("Ownable: caller is not the owner");
+      });
+
+      it("... should fail upon invalid upgrade", async () => {
+        try {
+          await upgrades.validateUpgrade(
+            cpContractFactory.address,
+            await ethers.getContractFactory("ContractFactoryNotUpgradable"),
+            {
+              kind: "uups"
+            }
+          );
+        } catch (e: any) {
+          expect(e.message).includes(
+            "Contract `contracts/test/ContractFactoryV2.sol:ContractFactoryNotUpgradable` is not upgrade safe"
+          );
+        }
+      });
+
+      it("... should upgrade successfully", async () => {
+        const cpContractFactoryV2Factory = await ethers.getContractFactory(
+          "ContractFactoryV2"
+        );
+
+        // upgrade to v2
+        upgradedContractFactory = (await upgrades.upgradeProxy(
+          cpContractFactory.address,
+          cpContractFactoryV2Factory
+        )) as ContractFactoryV2;
+      });
+
+      it("... should have same address after upgrade", async () => {
+        expect(upgradedContractFactory.address).to.be.equal(
+          cpContractFactory.address
+        );
+      });
+
+      it("... should be able to call new function in v2", async () => {
+        const value = await upgradedContractFactory.getVersion();
+        expect(value).to.equal("v2");
+      });
+
+      it("... should be able to call existing function in v1", async () => {
+        expect(
+          await upgradedContractFactory.getReferenceLendingPoolsList()
+        ).to.have.lengthOf(2);
       });
     });
   });

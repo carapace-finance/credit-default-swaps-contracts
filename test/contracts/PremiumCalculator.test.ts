@@ -46,6 +46,20 @@ const testPremiumCalculator: Function = (
       protectionExtensionGracePeriodInSeconds: getDaysInSeconds(10)
     };
 
+    describe("constructor", () => {
+      it("...should set deployer as on owner", async () => {
+        expect(await premiumCalculator.owner()).to.equal(
+          await deployer.getAddress()
+        );
+      });
+
+      it("... should revert when initialize is called 2nd time", async () => {
+        await expect(premiumCalculator.initialize()).to.be.revertedWith(
+          "Initializable: contract is already initialized"
+        );
+      });
+    });
+
     describe("calculatePremium", () => {
       const _totalCapital = parseUSDC("15000");
 
