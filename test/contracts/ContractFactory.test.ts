@@ -171,6 +171,8 @@ const testContractFactory: Function = (
             referenceLendingPools.address,
             premiumCalculator.address
           )
+          .emit(cpContractFactory, "OwnershipTransferred")
+          .withArgs(await account1.getAddress(), await deployer.getAddress())
           // Newly created pool should be registered to PoolCycleManager
           .to.emit(poolCycleManager, "PoolCycleCreated")
           .withArgs(

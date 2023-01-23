@@ -560,11 +560,11 @@ const testReferenceLendingPools: Function = (
       });
 
       it("...should upgrade successfully", async () => {
-        const goldfinchAdapterV2Impl =
+        const referenceLendingPoolsV2Impl =
           await referenceLendingPoolsV2Factory.deploy();
-        await goldfinchAdapterV2Impl.deployed();
+        await referenceLendingPoolsV2Impl.deployed();
         referenceLendingPoolsV2ImplementationAddress =
-          goldfinchAdapterV2Impl.address;
+          referenceLendingPoolsV2Impl.address;
 
         await referenceLendingPoolsInstance
           .connect(deployer)

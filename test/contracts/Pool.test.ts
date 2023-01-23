@@ -1,7 +1,7 @@
 import { BigNumber } from "@ethersproject/bignumber";
 import { expect } from "chai";
-import { Contract, Signer } from "ethers";
-import { ethers, network } from "hardhat";
+import { Contract, Signer, ContractFactory } from "ethers";
+import { ethers, network, upgrades } from "hardhat";
 import { parseEther } from "ethers/lib/utils";
 import {
   Pool,
@@ -14,7 +14,6 @@ import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycle
 import {
   getDaysInSeconds,
   getLatestBlockTimestamp,
-  getUnixTimestampAheadByDays,
   moveForwardTimeByDays,
   setNextBlockTimestamp
 } from "../utils/time";
@@ -22,7 +21,6 @@ import {
   parseUSDC,
   getUsdcContract,
   impersonateCircle,
-  formatUSDC,
   transferAndApproveUsdc
 } from "../utils/usdc";
 import { ITranchedPool } from "../../typechain-types/contracts/external/goldfinch/ITranchedPool";
@@ -31,6 +29,7 @@ import { DefaultStateManager } from "../../typechain-types/contracts/core/Defaul
 import { poolInstance } from "../../utils/deploy";
 import { ZERO_ADDRESS } from "../utils/constants";
 import { getGoldfinchLender1 } from "../utils/goldfinch";
+import { PoolV2 } from "../../typechain-types/contracts/test/PoolV2";
 
 const testPool: Function = (
   deployer: Signer,
@@ -39,9 +38,11 @@ const testPool: Function = (
   seller: Signer,
   account4: Signer,
   pool: Pool,
+  poolImplementation: Pool,
   referenceLendingPools: ReferenceLendingPools,
   poolCycleManager: PoolCycleManager,
-  defaultStateManager: DefaultStateManager
+  defaultStateManager: DefaultStateManager,
+  getPoolContractFactory: Function
 ) => {
   describe("Pool", () => {
     const PROTECTION_BUYER1_ADDRESS =
@@ -246,7 +247,64 @@ const testPool: Function = (
       _lendingPool2 = _goldfinchLendingPools[1];
     });
 
+    describe("Implementation", async () => {
+      describe("constructor", async () => {
+        it("...should NOT have an owner on construction", async () => {
+          expect(await poolImplementation.owner()).to.equal(ZERO_ADDRESS);
+        });
+
+        it("...should disable initialize after construction", async () => {
+          await expect(
+            poolImplementation.initialize(
+              ZERO_ADDRESS,
+              poolInfo,
+              ZERO_ADDRESS,
+              ZERO_ADDRESS,
+              ZERO_ADDRESS,
+              "",
+              ""
+            )
+          ).to.be.revertedWith(
+            "Initializable: contract is already initialized"
+          );
+        });
+
+        it("...should be valid implementation", async () => {
+          await upgrades.validateImplementation(
+            await getPoolContractFactory(),
+            {
+              kind: "uups",
+              unsafeAllowLinkedLibraries: true
+            }
+          );
+        });
+      });
+    });
+
     describe("constructor", () => {
+      it("...and implementation are different instances", async () => {
+        expect(poolInstance.address).to.not.equal(poolImplementation.address);
+      });
+
+      it("...should set the correct owner on construction", async () => {
+        const owner: string = await pool.owner();
+        expect(owner).to.equal(deployerAddress);
+      });
+
+      it("...should disable initialize after construction", async () => {
+        await expect(
+          pool.initialize(
+            ZERO_ADDRESS,
+            poolInfo,
+            ZERO_ADDRESS,
+            ZERO_ADDRESS,
+            ZERO_ADDRESS,
+            "",
+            ""
+          )
+        ).to.be.revertedWith("Initializable: contract is already initialized");
+      });
+
       it("...set the SToken name", async () => {
         const _name: string = await pool.name();
         expect(_name).to.eq("sToken11");
@@ -2213,6 +2271,89 @@ const testPool: Function = (
             )
           ).to.be.revertedWith("LendingPoolHasLatePayment");
         });
+      });
+    });
+
+    describe("upgrade", () => {
+      const LENDING_POOL_4 = "0x759f097f3153f5d62ff1c2d82ba78b6350f223e3";
+
+      let upgradedPool: PoolV2;
+      let poolV2ImplementationAddress: string;
+      let poolV2Factory: ContractFactory;
+
+      before(async () => {
+        poolV2Factory = await getPoolContractFactory("PoolV2");
+
+        // Forces the import of an existing proxy deployment to be used with hardhat upgrades plugin
+        // because the proxy was deployed by ContractFactory and noy using the hardhat upgrades plugin
+        await upgrades.forceImport(
+          pool.address,
+          await getPoolContractFactory()
+        );
+      });
+
+      it("...should revert when upgradeTo is called by non-owner", async () => {
+        await expect(
+          pool
+            .connect(account4)
+            .upgradeTo("0xA18173d6cf19e4Cc5a7F63780Fe4738b12E8b781")
+        ).to.be.revertedWith("Ownable: caller is not the owner");
+      });
+
+      it("...should fail upon invalid upgrade", async () => {
+        try {
+          await upgrades.validateUpgrade(
+            pool.address,
+            await ethers.getContractFactory("PoolNotUpgradable"),
+            {
+              kind: "uups"
+            }
+          );
+        } catch (e: any) {
+          expect(e.message).includes(
+            "Contract `contracts/test/PoolV2.sol:PoolNotUpgradable` is not upgrade safe"
+          );
+        }
+      });
+
+      it("...should be valid upgrade", async () => {
+        await upgrades.validateUpgrade(pool.address, poolV2Factory, {
+          kind: "uups",
+          unsafeAllowLinkedLibraries: true
+        });
+      });
+
+      it("...should upgrade successfully", async () => {
+        const poolV2Impl = await poolV2Factory.deploy();
+        await poolV2Impl.deployed();
+        poolV2ImplementationAddress = poolV2Impl.address;
+
+        await pool.connect(deployer).upgradeTo(poolV2ImplementationAddress);
+
+        // upgrade to v2
+        upgradedPool = poolV2Factory.attach(pool.address) as PoolV2;
+      });
+
+      it("...should have new implementation address after upgrade", async () => {
+        expect(
+          await upgrades.erc1967.getImplementationAddress(upgradedPool.address)
+        ).to.be.equal(poolV2ImplementationAddress);
+      });
+
+      it("...should be able to call existing function in v1", async () => {
+        expect(await poolInstance.totalProtection()).to.equal(
+          parseUSDC("120000")
+        );
+      });
+
+      it("...should be able to retrieve from existing storage", async () => {
+        expect(await upgradedPool.getAllProtections()).to.have.lengthOf(5);
+      });
+
+      it("...should be able to set/get new state variable in v2", async () => {
+        expect(await upgradedPool.testMapping(LENDING_POOL_4)).to.eq(0);
+        await upgradedPool.addToTestMapping(LENDING_POOL_4, 42);
+        expect(await upgradedPool.testMapping(LENDING_POOL_4)).to.eq(42);
       });
     });
 

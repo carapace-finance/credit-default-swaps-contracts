@@ -29,7 +29,8 @@ import {
   referenceLendingPoolsImplementation,
   defaultStateManagerInstance,
   GOLDFINCH_LENDING_POOLS,
-  getLatestReferenceLendingPoolsInstance
+  getLatestReferenceLendingPoolsInstance,
+  getPoolContractFactory
 } from "../utils/deploy";
 
 describe("start testing", () => {
@@ -100,9 +101,11 @@ describe("start testing", () => {
         account3,
         account4,
         poolInstance,
+        poolImplementation,
         referenceLendingPoolsInstance,
         poolCycleManagerInstance,
-        defaultStateManagerInstance
+        defaultStateManagerInstance,
+        getPoolContractFactory
       );
     });
 

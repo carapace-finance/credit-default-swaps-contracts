@@ -1,4 +1,4 @@
-import { ContractFactory, Signer } from "ethers";
+import { ContractFactory, Signer, Contract } from "ethers";
 import { parseEther } from "ethers/lib/utils";
 import { ethers, upgrades } from "hardhat";
 import { USDC_ADDRESS } from "../test/utils/constants";
@@ -37,6 +37,7 @@ let goldfinchAdapterImplementation: GoldfinchAdapter;
 let goldfinchAdapterInstance: GoldfinchAdapter;
 let referenceLendingPoolsImplementation: ReferenceLendingPools;
 let defaultStateManagerInstance: DefaultStateManager;
+let poolHelperInstance: Contract;
 
 const GOLDFINCH_LENDING_POOLS = [
   "0xb26b42dd5771689d0a7faeea32825ff9710b9c11",
@@ -141,7 +142,7 @@ const deployContracts: Function = async () => {
     const poolHelperFactory = await contractFactory("PoolHelper", {
       AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address
     });
-    const poolHelperInstance = await poolHelperFactory.deploy();
+    poolHelperInstance = await poolHelperFactory.deploy();
     await poolHelperInstance.deployed();
     console.log("PoolHelper lib is deployed to:", poolHelperInstance.address);
 
@@ -223,10 +224,7 @@ const deployContracts: Function = async () => {
       await getLatestReferenceLendingPoolsInstance(cpContractFactoryInstance);
 
     // Deploy a Pool implementation contract
-    const poolFactory = await contractFactory("Pool", {
-      AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address,
-      PoolHelper: poolHelperInstance.address
-    });
+    const poolFactory = await getPoolContractFactory();
     poolImplementation = await poolFactory.deploy();
     await poolImplementation.deployed();
     console.log(
@@ -301,6 +299,13 @@ async function getLatestPoolInstance(
   return newPoolInstance;
 }
 
+async function getPoolContractFactory(contractName = "Pool") {
+  return await contractFactory(contractName, {
+    AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address,
+    PoolHelper: poolHelperInstance.address
+  });
+}
+
 export {
   deployer,
   account1,
@@ -322,5 +327,6 @@ export {
   defaultStateManagerInstance,
   GOLDFINCH_LENDING_POOLS,
   getLatestReferenceLendingPoolsInstance,
-  getLatestPoolInstance
+  getLatestPoolInstance,
+  getPoolContractFactory
 };
