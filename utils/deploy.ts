@@ -163,10 +163,10 @@ const deployContracts: Function = async () => {
     /// "setPoolFactory" must be called by the owner
     await poolCycleManagerInstance
       .connect(deployer)
-      .setPoolFactory(cpContractFactoryInstance.address);
+      .setContractFactory(cpContractFactoryInstance.address);
     await defaultStateManagerInstance
       .connect(deployer)
-      .setPoolFactory(cpContractFactoryInstance.address);
+      .setContractFactory(cpContractFactoryInstance.address);
 
     // Deploy GoldfinchAdapter implementation contract
     const goldfinchAdapterFactory = await contractFactory("GoldfinchAdapter");

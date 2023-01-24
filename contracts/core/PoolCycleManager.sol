@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import {UUPSUpgradeableBase} from "../UUPSUpgradeableBase.sol";
 import {IPoolCycleManager, PoolCycle, CycleState} from "../interfaces/IPoolCycleManager.sol";
+import "../libraries/Constants.sol";
 
 /**
  * @title PoolCycleManager
@@ -18,8 +19,8 @@ contract PoolCycleManager is UUPSUpgradeableBase, IPoolCycleManager {
    * @dev DO NOT CHANGE THE ORDER OF THESE VARIABLES ONCE DEPLOYED
    */
 
-  /// @notice address of the pool factory which is the only one allowed to register pools.
-  address private poolFactoryAddress;
+  /// @notice address of the contract factory which is the only one allowed to register pools.
+  address public contractFactoryAddress;
 
   /// @notice tracks the current cycle of all pools in the system by its address.
   mapping(address => PoolCycle) public poolCycles;
@@ -36,9 +37,9 @@ contract PoolCycleManager is UUPSUpgradeableBase, IPoolCycleManager {
   /////////////////////////////////////////////////////
 
   /*** modifiers ***/
-  modifier onlyPoolFactory() {
-    if (msg.sender != poolFactoryAddress) {
-      revert NotPoolFactory(msg.sender);
+  modifier onlyContractFactory() {
+    if (msg.sender != contractFactoryAddress) {
+      revert NotContractFactory(msg.sender);
     }
     _;
   }
@@ -55,12 +56,16 @@ contract PoolCycleManager is UUPSUpgradeableBase, IPoolCycleManager {
   /*** state-changing functions ***/
 
   /// @inheritdoc IPoolCycleManager
-  function setPoolFactory(address _poolFactoryAddress)
+  function setContractFactory(address _contractFactoryAddress)
     external
     override
     onlyOwner
   {
-    poolFactoryAddress = _poolFactoryAddress;
+    if (_contractFactoryAddress == Constants.ZERO_ADDRESS) {
+      revert ZeroContractFactoryAddress();
+    }
+
+    contractFactoryAddress = _contractFactoryAddress;
   }
 
   /// @inheritdoc IPoolCycleManager
@@ -68,7 +73,7 @@ contract PoolCycleManager is UUPSUpgradeableBase, IPoolCycleManager {
     address _poolAddress,
     uint256 _openCycleDuration,
     uint256 _cycleDuration
-  ) external override onlyPoolFactory {
+  ) external override onlyContractFactory {
     PoolCycle storage poolCycle = poolCycles[_poolAddress];
 
     if (poolCycle.currentCycleStartTime > 0) {

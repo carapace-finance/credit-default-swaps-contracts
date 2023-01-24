@@ -3,15 +3,17 @@ import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { expect } from "chai";
 import { assert } from "console";
 import { Signer } from "ethers";
-import { ethers } from "hardhat";
+import { ethers, upgrades } from "hardhat";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
+import { PoolCycleManagerV2 } from "../../typechain-types/contracts/test/PoolCycleManagerV2";
+import { ZERO_ADDRESS } from "../utils/constants";
 import { moveForwardTime } from "../utils/time";
 
 const testPoolCycleManager: Function = (
   deployer: Signer,
   account1: Signer,
   poolCycleManager: PoolCycleManager,
-  poolFactoryAddress: string
+  contractFactoryAddress: string
 ) => {
   describe("PoolCycleManager", () => {
     const _poolAddress: string = "0x395326f1418F65F581693de55719c824ad48A367";
@@ -20,11 +22,76 @@ const testPoolCycleManager: Function = (
     const _openCycleDuration: BigNumber = BigNumber.from(7 * 24 * 60 * 60); // 7 days
     const _cycleDuration: BigNumber = BigNumber.from(30 * 24 * 60 * 60); // 30 days
 
-    before(async () => {
-      // Use deployer as pool factory for tests
-      poolCycleManager
-        .connect(deployer)
-        .setPoolFactory(await deployer.getAddress());
+    describe("implementation", async () => {
+      let poolCycleManagerImplementation: PoolCycleManager;
+
+      before(async () => {
+        poolCycleManagerImplementation = (await ethers.getContractAt(
+          "DefaultStateManager",
+          await upgrades.erc1967.getImplementationAddress(
+            poolCycleManager.address
+          )
+        )) as PoolCycleManager;
+      });
+
+      it("...should NOT have an owner on construction", async () => {
+        expect(await poolCycleManagerImplementation.owner()).to.equal(
+          ZERO_ADDRESS
+        );
+      });
+
+      it("...should disable initialize after construction", async () => {
+        await expect(
+          poolCycleManagerImplementation.initialize()
+        ).to.be.revertedWith("Initializable: contract is already initialized");
+      });
+    });
+
+    describe("constructor", async () => {
+      it("...should be valid instance", async () => {
+        expect(poolCycleManager).to.not.equal(undefined);
+      });
+
+      it("...should set deployer as on owner", async () => {
+        expect(await poolCycleManager.owner()).to.equal(
+          await deployer.getAddress()
+        );
+      });
+
+      it("... should revert when initialize is called 2nd time", async () => {
+        await expect(poolCycleManager.initialize()).to.be.revertedWith(
+          "Initializable: contract is already initialized"
+        );
+      });
+    });
+
+    describe("setContractFactory", async () => {
+      it("...should fail when called by non-owner", async () => {
+        await expect(
+          poolCycleManager.connect(account1).setContractFactory(ZERO_ADDRESS)
+        ).to.be.revertedWith("Ownable: caller is not the owner");
+      });
+
+      it("...should fail when address is zeo", async () => {
+        await expect(
+          poolCycleManager.connect(deployer).setContractFactory(ZERO_ADDRESS)
+        ).to.be.revertedWith("ZeroContractFactoryAddress");
+      });
+
+      it("...should work correctly by owner", async () => {
+        expect(await poolCycleManager.contractFactoryAddress()).to.equal(
+          contractFactoryAddress
+        );
+
+        // Set deployer as contract factory for tests
+        await poolCycleManager
+          .connect(deployer)
+          .setContractFactory(await deployer.getAddress());
+
+        expect(await poolCycleManager.contractFactoryAddress()).to.equal(
+          await deployer.getAddress()
+        );
+      });
     });
 
     describe("registerPool", async () => {
@@ -34,7 +101,7 @@ const testPoolCycleManager: Function = (
             .connect(account1)
             .registerPool(_poolAddress, _openCycleDuration, _cycleDuration)
         ).to.be.revertedWith(
-          `NotPoolFactory("${await account1.getAddress()}")`
+          `NotContractFactory("${await account1.getAddress()}")`
         );
       });
 
@@ -288,8 +355,67 @@ const testPoolCycleManager: Function = (
       });
     });
 
+    describe("upgrade", () => {
+      let upgradedPoolCycleManager: PoolCycleManagerV2;
+
+      it("... should revert when upgradeTo is called by non-owner", async () => {
+        await expect(
+          poolCycleManager
+            .connect(account1)
+            .upgradeTo("0xA18173d6cf19e4Cc5a7F63780Fe4738b12E8b781")
+        ).to.be.revertedWith("Ownable: caller is not the owner");
+      });
+
+      it("... should fail upon invalid upgrade", async () => {
+        try {
+          await upgrades.validateUpgrade(
+            poolCycleManager.address,
+            await ethers.getContractFactory("PoolCycleManagerV2NotUpgradable"),
+            {
+              kind: "uups"
+            }
+          );
+        } catch (e: any) {
+          expect(e.message).includes(
+            "Contract `contracts/test/PoolCycleManagerV2.sol:PoolCycleManagerV2NotUpgradable` is not upgrade safe"
+          );
+        }
+      });
+
+      it("... should upgrade successfully", async () => {
+        const poolCycleManagerV2Factory = await ethers.getContractFactory(
+          "PoolCycleManagerV2"
+        );
+
+        // upgrade to v2
+        upgradedPoolCycleManager = (await upgrades.upgradeProxy(
+          poolCycleManager.address,
+          poolCycleManagerV2Factory
+        )) as PoolCycleManagerV2;
+      });
+
+      it("... should have same address after upgrade", async () => {
+        expect(upgradedPoolCycleManager.address).to.be.equal(
+          poolCycleManager.address
+        );
+      });
+
+      it("... should be able to call new function in v2", async () => {
+        const value = await upgradedPoolCycleManager.getVersion();
+        expect(value).to.equal("v2");
+      });
+
+      it("... should be able to call existing function in v1", async () => {
+        await upgradedPoolCycleManager.calculateAndSetPoolCycleState(
+          _poolAddress
+        );
+      });
+    });
+
     after(async () => {
-      poolCycleManager.connect(deployer).setPoolFactory(poolFactoryAddress);
+      poolCycleManager
+        .connect(deployer)
+        .setContractFactory(contractFactoryAddress);
     });
   });
 };

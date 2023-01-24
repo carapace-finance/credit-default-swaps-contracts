@@ -36,15 +36,16 @@ abstract contract IPoolCycleManager {
   );
 
   /*** errors ***/
-  error NotPoolFactory(address msgSender);
+  error NotContractFactory(address msgSender);
   error PoolAlreadyRegistered(address poolAddress);
   error InvalidCycleDuration(uint256 cycleDuration);
+  error ZeroContractFactoryAddress();
 
   /**
-   * @notice Sets the pool factory address. Only callable by the owner.
-   * @param _poolFactoryAddress address of the pool factory which is the only contract allowed to register pools.
+   * @notice Sets the contract factory address. Only callable by the owner.
+   * @param _contractFactoryAddress address of the contract factory which is the only contract allowed to register pools.
    */
-  function setPoolFactory(address _poolFactoryAddress) external virtual;
+  function setContractFactory(address _contractFactoryAddress) external virtual;
 
   /**
    * @notice Registers the given pool and starts a new cycle for it in `Open` state.

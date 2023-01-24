@@ -61,15 +61,16 @@ abstract contract IDefaultStateManager {
   );
 
   /** errors */
-  error NotPoolFactory(address msgSender);
+  error NotContractFactory(address msgSender);
   error PoolNotRegistered(address pool);
   error PoolAlreadyRegistered(address pool);
+  error ZeroContractFactoryAddress();
 
   /**
-   * @notice Sets the pool factory address. Only callable by the owner.
-   * @param _poolFactoryAddress address of the pool factory which is the only contract allowed to register pools.
+   * @notice Sets the contract factory address. Only callable by the owner.
+   * @param _contractFactoryAddress address of the contract factory which is the only contract allowed to register pools.
    */
-  function setPoolFactory(address _poolFactoryAddress) external virtual;
+  function setContractFactory(address _contractFactoryAddress) external virtual;
 
   /**
    * @notice register a protection pool. Only pool factory can call this function.

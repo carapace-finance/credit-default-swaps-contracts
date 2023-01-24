@@ -26,7 +26,8 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
    * @dev DO NOT CHANGE THE ORDER OF THESE VARIABLES ONCE DEPLOYED
    */
 
-  address private poolFactoryAddress;
+  /// @notice address of the contract factory which is the only contract allowed to register pools.
+  address public contractFactoryAddress;
 
   /// @notice stores the current state of all pools in the system.
   /// @dev Array is used for enumerating all pools during state assessment.
@@ -48,9 +49,9 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
 
   /*** modifiers ***/
 
-  modifier onlyPoolFactory() {
-    if (msg.sender != poolFactoryAddress) {
-      revert NotPoolFactory(msg.sender);
+  modifier onlyContractFactory() {
+    if (msg.sender != contractFactoryAddress) {
+      revert NotContractFactory(msg.sender);
     }
     _;
   }
@@ -72,19 +73,23 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
   /*** state-changing functions ***/
 
   /// @inheritdoc IDefaultStateManager
-  function setPoolFactory(address _poolFactoryAddress)
+  function setContractFactory(address _contractFactoryAddress)
     external
     override
     onlyOwner
   {
-    poolFactoryAddress = _poolFactoryAddress;
+    if (_contractFactoryAddress == Constants.ZERO_ADDRESS) {
+      revert ZeroContractFactoryAddress();
+    }
+
+    contractFactoryAddress = _contractFactoryAddress;
   }
 
   /// @inheritdoc IDefaultStateManager
   function registerPool(address _protectionPoolAddress)
     external
     override
-    onlyPoolFactory
+    onlyContractFactory
   {
     uint256 newIndex = poolStates.length;
 
