@@ -11,6 +11,25 @@ import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/security/
  * Each protection pool will have a corresponding SToken.
  */
 abstract contract SToken is PausableUpgradeable, ERC20SnapshotUpgradeable {
+  /////////////////////////////////////////////////////
+  ///             STORAGE - START                   ///
+  /////////////////////////////////////////////////////
+  /**
+   * @dev DO NOT CHANGE THE ORDER OF THESE VARIABLES ONCE DEPLOYED
+   */
+
+  /**
+   * @dev This empty reserved space is put in place to allow future versions to add new
+   * variables without shifting down storage in the inheritance chain.
+   * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
+   * https://docs.openzeppelin.com/upgrades-plugins/1.x/writing-upgradeable#storage-gaps
+   */
+  uint256[50] private __gap;
+
+  //////////////////////////////////////////////////////
+  ///             STORAGE - END                     ///
+  /////////////////////////////////////////////////////
+
   /*** events ***/
   event STokenCreated(string name, string symbol);
   event Minted(address indexed owner, uint256 amount);
@@ -30,7 +49,7 @@ abstract contract SToken is PausableUpgradeable, ERC20SnapshotUpgradeable {
 
   /*** state-changing functions ***/
   /**
-   * @notice Called by a corresponding tranche contract to mint sToken shares in a particular tranche
+   * @notice Called by a pool contract to mint sToken shares to a user.
    * @param _to The address that should own the position
    * @param _amount the amount of tokens to mint
    */
