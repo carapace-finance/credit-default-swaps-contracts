@@ -107,7 +107,7 @@ struct ProtectionBuyerAccount {
   mapping(address => mapping(uint256 => uint256)) expiredProtectionIndexByLendingPool;
 }
 
-abstract contract IPool {
+abstract contract IProtectionPool {
   using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
 
   /*** errors ***/
@@ -349,4 +349,13 @@ abstract contract IPool {
     view
     virtual
     returns (uint256 _maxAllowedProtectionDurationInSeconds);
+
+  /**
+   * @notice Returns all the protections bought from the pool, active & expired.
+   */
+  function getAllProtections()
+    external
+    view
+    virtual
+    returns (ProtectionInfo[] memory _protections);
 }

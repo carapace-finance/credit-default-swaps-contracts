@@ -2,11 +2,11 @@ import { ContractFactory, Signer, Contract } from "ethers";
 import { parseEther } from "ethers/lib/utils";
 import { ethers, upgrades } from "hardhat";
 import { USDC_ADDRESS } from "../test/utils/constants";
-import { Pool } from "../typechain-types/contracts/core/pool/Pool";
+import { ProtectionPool } from "../typechain-types/contracts/core/pool/ProtectionPool";
 import {
   PoolParamsStruct,
   PoolCycleParamsStruct
-} from "../typechain-types/contracts/interfaces/IPool";
+} from "../typechain-types/contracts/interfaces/IProtectionPool";
 import { ContractFactory as CPContractFactory } from "../typechain-types/contracts/core/ContractFactory";
 import { PremiumCalculator } from "../typechain-types/contracts/core/PremiumCalculator";
 import { ReferenceLendingPools } from "../typechain-types/contracts/core/pool/ReferenceLendingPools";
@@ -25,8 +25,8 @@ let account2: Signer;
 let account3: Signer;
 let account4: Signer;
 
-let poolImplementation: Pool;
-let poolInstance: Pool;
+let protectionPoolImplementation: ProtectionPool;
+let protectionPoolInstance: ProtectionPool;
 let cpContractFactoryInstance: CPContractFactory;
 let premiumCalculatorInstance: PremiumCalculator;
 let referenceLendingPoolsInstance: ReferenceLendingPools;
@@ -37,7 +37,7 @@ let goldfinchAdapterImplementation: GoldfinchAdapter;
 let goldfinchAdapterInstance: GoldfinchAdapter;
 let referenceLendingPoolsImplementation: ReferenceLendingPools;
 let defaultStateManagerInstance: DefaultStateManager;
-let poolHelperInstance: Contract;
+let protectionPoolHelperInstance: Contract;
 
 const GOLDFINCH_LENDING_POOLS = [
   "0xb26b42dd5771689d0a7faeea32825ff9710b9c11",
@@ -138,15 +138,21 @@ const deployContracts: Function = async () => {
       defaultStateManagerInstance.address
     );
 
-    // Deploy PoolHelper library contract
-    const poolHelperFactory = await contractFactory("PoolHelper", {
-      AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address
-    });
-    poolHelperInstance = await poolHelperFactory.deploy();
-    await poolHelperInstance.deployed();
-    console.log("PoolHelper lib is deployed to:", poolHelperInstance.address);
+    // Deploy ProtectionPoolHelper library contract
+    const protectionPoolHelperFactory = await contractFactory(
+      "ProtectionPoolHelper",
+      {
+        AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address
+      }
+    );
+    protectionPoolHelperInstance = await protectionPoolHelperFactory.deploy();
+    await protectionPoolHelperInstance.deployed();
+    console.log(
+      "ProtectionPoolHelper lib is deployed to:",
+      protectionPoolHelperInstance.address
+    );
 
-    // Deploy a proxy to PoolFactory contract
+    // Deploy a proxy to ContractFactory contract
     const _cpContractFactoryFactory = await contractFactory("ContractFactory");
     cpContractFactoryInstance = (await upgrades.deployProxy(
       _cpContractFactoryFactory,
@@ -223,16 +229,16 @@ const deployContracts: Function = async () => {
     referenceLendingPoolsInstance =
       await getLatestReferenceLendingPoolsInstance(cpContractFactoryInstance);
 
-    // Deploy a Pool implementation contract
-    const poolFactory = await getPoolContractFactory();
-    poolImplementation = await poolFactory.deploy();
-    await poolImplementation.deployed();
+    // Deploy a ProtectionPool implementation contract
+    const protectionPoolFactory = await getProtectionPoolContractFactory();
+    protectionPoolImplementation = await protectionPoolFactory.deploy();
+    await protectionPoolImplementation.deployed();
     console.log(
-      "Pool implementation is deployed to: ",
-      poolImplementation.address
+      "ProtectionPool implementation is deployed to: ",
+      protectionPoolImplementation.address
     );
 
-    // Create an instance of the Pool, which should be upgradable
+    // Create an instance of the ProtectionPool, which should be upgradable
     // Create a pool using PoolFactory instead of deploying new pool directly to mimic the prod behavior
     const _poolCycleParams: PoolCycleParamsStruct = {
       openCycleDuration: getDaysInSeconds(10),
@@ -252,8 +258,8 @@ const deployContracts: Function = async () => {
       protectionExtensionGracePeriodInSeconds: getDaysInSeconds(14) // 2 weeks
     };
 
-    await cpContractFactoryInstance.createPool(
-      poolImplementation.address,
+    await cpContractFactoryInstance.createProtectionPool(
+      protectionPoolImplementation.address,
       _poolParams,
       USDC_ADDRESS,
       referenceLendingPoolsInstance.address,
@@ -262,7 +268,9 @@ const deployContracts: Function = async () => {
       "sT11"
     );
 
-    poolInstance = await getLatestPoolInstance(cpContractFactoryInstance);
+    protectionPoolInstance = await getLatestProtectionPoolInstance(
+      cpContractFactoryInstance
+    );
   } catch (e) {
     console.log(e);
   }
@@ -286,23 +294,28 @@ async function getLatestReferenceLendingPoolsInstance(
   return newReferenceLendingPoolsInstance;
 }
 
-async function getLatestPoolInstance(
-  poolFactoryInstance: CPContractFactory
-): Promise<Pool> {
-  const pools = await poolFactoryInstance.getPools();
+async function getLatestProtectionPoolInstance(
+  contractFactoryInstance: CPContractFactory
+): Promise<ProtectionPool> {
+  const pools = await contractFactoryInstance.getPools();
   const newPoolInstance = (await ethers.getContractAt(
-    "Pool",
+    "ProtectionPool",
     pools[pools.length - 1]
-  )) as Pool;
+  )) as ProtectionPool;
 
-  console.log("Latest pool instance is deployed at: ", newPoolInstance.address);
+  console.log(
+    "Latest ProtectionPool instance is deployed at: ",
+    newPoolInstance.address
+  );
   return newPoolInstance;
 }
 
-async function getPoolContractFactory(contractName = "Pool") {
+async function getProtectionPoolContractFactory(
+  contractName = "ProtectionPool"
+) {
   return await contractFactory(contractName, {
     AccruedPremiumCalculator: accruedPremiumCalculatorInstance.address,
-    PoolHelper: poolHelperInstance.address
+    ProtectionPoolHelper: protectionPoolHelperInstance.address
   });
 }
 
@@ -313,8 +326,8 @@ export {
   account3,
   account4,
   deployContracts,
-  poolImplementation,
-  poolInstance,
+  protectionPoolImplementation,
+  protectionPoolInstance,
   cpContractFactoryInstance,
   premiumCalculatorInstance,
   referenceLendingPoolsInstance, // This is the proxy instance cloned from implementation
@@ -327,6 +340,6 @@ export {
   defaultStateManagerInstance,
   GOLDFINCH_LENDING_POOLS,
   getLatestReferenceLendingPoolsInstance,
-  getLatestPoolInstance,
-  getPoolContractFactory
+  getLatestProtectionPoolInstance,
+  getProtectionPoolContractFactory
 };

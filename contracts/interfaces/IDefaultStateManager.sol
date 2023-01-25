@@ -3,7 +3,7 @@
 pragma solidity ^0.8.13;
 
 import {IReferenceLendingPools, LendingPoolStatus} from "./IReferenceLendingPools.sol";
-import {IPool} from "./IPool.sol";
+import {IProtectionPool} from "./IProtectionPool.sol";
 
 struct LockedCapital {
   uint256 snapshotId;
@@ -20,7 +20,7 @@ struct LendingPoolStatusDetail {
 
 struct PoolState {
   /// @notice the protection pool for which state is being tracked
-  IPool protectionPool;
+  IProtectionPool protectionPool;
   /// @notice the timestamp at which the last time pool state was updated
   uint256 updatedTimestamp;
   /// @notice the mapping to track all lending pools referenced by the protection pool to its status details,

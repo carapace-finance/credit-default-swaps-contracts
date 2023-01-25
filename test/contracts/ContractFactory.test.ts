@@ -9,8 +9,8 @@ import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycle
 import {
   PoolParamsStruct,
   PoolCycleParamsStruct
-} from "../../typechain-types/contracts/interfaces/IPool";
-import { Pool } from "../../typechain-types/contracts/core/Pool";
+} from "../../typechain-types/contracts/interfaces/IProtectionPool";
+import { ProtectionPool } from "../../typechain-types/contracts/core/pool/ProtectionPool";
 import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";
 import { ContractFactory } from "../../typechain-types/contracts/core/ContractFactory";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
@@ -28,7 +28,7 @@ const testContractFactory: Function = (
   referenceLendingPools: ReferenceLendingPools,
   poolCycleManager: PoolCycleManager,
   defaultStateManager: DefaultStateManager,
-  poolImplementation: Pool,
+  poolImplementation: ProtectionPool,
   referenceLendingPoolsImplementation: ReferenceLendingPools,
   getLatestReferenceLendingPoolsInstance: Function
 ) => {
@@ -107,7 +107,7 @@ const testContractFactory: Function = (
         await expect(
           cpContractFactory
             .connect(account1)
-            .createPool(
+            .createProtectionPool(
               poolImplementation.address,
               _poolParams,
               USDC_ADDRESS,
@@ -133,7 +133,7 @@ const testContractFactory: Function = (
         await expect(
           cpContractFactory
             .connect(deployer)
-            .createPool(
+            .createProtectionPool(
               ZERO_ADDRESS,
               _poolParams,
               USDC_ADDRESS,
@@ -151,7 +151,7 @@ const testContractFactory: Function = (
           (await getLatestBlockTimestamp()) + 1;
 
         await expect(
-          cpContractFactory.createPool(
+          cpContractFactory.createProtectionPool(
             poolImplementation.address,
             _poolParams,
             USDC_ADDRESS,
@@ -200,16 +200,16 @@ const testContractFactory: Function = (
         ).to.equal((await ethers.provider.getBlock("latest")).timestamp);
       });
 
-      it("...should transfer pool's ownership to poolFactory's owner", async () => {
+      it("...should transfer pool's ownership to contractFactory's owner", async () => {
         const deployerAddress: string = await deployer.getAddress();
         expect(cpContractFactory)
           .to.emit(cpContractFactory, "OwnershipTransferred")
           .withArgs(cpContractFactory.address, deployerAddress);
 
-        const secondPool: Pool = (await ethers.getContractAt(
-          "Pool",
+        const secondPool: ProtectionPool = (await ethers.getContractAt(
+          "ProtectionPool",
           _secondPoolAddress
-        )) as Pool;
+        )) as ProtectionPool;
         expect(await secondPool.owner()).to.equal(deployerAddress);
       });
     });

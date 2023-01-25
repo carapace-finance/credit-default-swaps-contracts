@@ -5,7 +5,7 @@ import "@prb/math/contracts/PRBMathSD59x18.sol";
 
 import {UUPSUpgradeableBase} from "../UUPSUpgradeableBase.sol";
 import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
-import {IPool, PoolParams} from "../interfaces/IPool.sol";
+import {PoolParams} from "../interfaces/IProtectionPool.sol";
 
 import "../libraries/Constants.sol";
 import "../libraries/RiskFactorCalculator.sol";

@@ -1,4 +1,4 @@
-import { testPool } from "./contracts/Pool.test";
+import { testProtectionPool } from "./contracts/ProtectionPool.test";
 import { testContractFactory } from "./contracts/ContractFactory.test";
 import { testPoolCycleManager } from "./contracts/PoolCycleManager.test";
 import { testAccruedPremiumCalculator } from "./contracts/AccruedPremiumCalculator.test";
@@ -16,8 +16,8 @@ import {
   account3,
   account4,
   deployContracts,
-  poolImplementation,
-  poolInstance,
+  protectionPoolImplementation,
+  protectionPoolInstance,
   cpContractFactoryInstance,
   premiumCalculatorInstance,
   referenceLendingPoolsInstance,
@@ -30,7 +30,7 @@ import {
   defaultStateManagerInstance,
   GOLDFINCH_LENDING_POOLS,
   getLatestReferenceLendingPoolsInstance,
-  getPoolContractFactory
+  getProtectionPoolContractFactory
 } from "../utils/deploy";
 
 describe("start testing", () => {
@@ -76,7 +76,7 @@ describe("start testing", () => {
         referenceLendingPoolsInstance,
         poolCycleManagerInstance,
         defaultStateManagerInstance,
-        poolImplementation,
+        protectionPoolImplementation,
         referenceLendingPoolsImplementation,
         getLatestReferenceLendingPoolsInstance
       );
@@ -93,19 +93,19 @@ describe("start testing", () => {
       );
     });
 
-    it("run the Pool test", async () => {
-      testPool(
+    it("run the ProtectionPool test", async () => {
+      testProtectionPool(
         deployer,
         account1,
         account2,
         account3,
         account4,
-        poolInstance,
-        poolImplementation,
+        protectionPoolInstance,
+        protectionPoolImplementation,
         referenceLendingPoolsInstance,
         poolCycleManagerInstance,
         defaultStateManagerInstance,
-        getPoolContractFactory
+        getProtectionPoolContractFactory
       );
     });
 
@@ -116,7 +116,7 @@ describe("start testing", () => {
         account3,
         defaultStateManagerInstance,
         cpContractFactoryInstance,
-        poolInstance,
+        protectionPoolInstance,
         GOLDFINCH_LENDING_POOLS
       );
     });

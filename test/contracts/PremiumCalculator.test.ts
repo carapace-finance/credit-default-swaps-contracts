@@ -5,7 +5,7 @@ import { Signer } from "ethers/lib/ethers";
 import {
   PoolParamsStruct,
   PoolCycleParamsStruct
-} from "../../typechain-types/contracts/interfaces/IPool";
+} from "../../typechain-types/contracts/interfaces/IProtectionPool";
 import { parseUSDC } from "../utils/usdc";
 
 import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";

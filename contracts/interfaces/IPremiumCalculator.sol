@@ -1,7 +1,7 @@
 // // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {IPool, PoolParams} from "./IPool.sol";
+import {PoolParams} from "./IProtectionPool.sol";
 
 abstract contract IPremiumCalculator {
   /**

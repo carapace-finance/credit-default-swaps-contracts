@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {Pool} from "../core/pool/Pool.sol";
+import {ProtectionPool} from "../core/pool/ProtectionPool.sol";
 
-/// Contract to test the Pool upgradeability
-contract PoolV2 is Pool {
+/// Contract to test the ProtectionPool upgradeability
+contract ProtectionPoolV2 is ProtectionPool {
   mapping(address => uint256) public testMapping;
 
   function addToTestMapping(address _address, uint256 _testVariable) external {
@@ -12,4 +12,4 @@ contract PoolV2 is Pool {
   }
 }
 
-contract PoolNotUpgradable {}
+contract ProtectionPoolV2NotUpgradable {}
