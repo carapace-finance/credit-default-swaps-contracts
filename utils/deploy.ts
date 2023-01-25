@@ -4,8 +4,8 @@ import { ethers, upgrades } from "hardhat";
 import { USDC_ADDRESS } from "../test/utils/constants";
 import { ProtectionPool } from "../typechain-types/contracts/core/pool/ProtectionPool";
 import {
-  PoolParamsStruct,
-  PoolCycleParamsStruct
+  ProtectionPoolParamsStruct,
+  ProtectionPoolCycleParamsStruct
 } from "../typechain-types/contracts/interfaces/IProtectionPool";
 import { ContractFactory as CPContractFactory } from "../typechain-types/contracts/core/ContractFactory";
 import { PremiumCalculator } from "../typechain-types/contracts/core/PremiumCalculator";
@@ -240,12 +240,12 @@ const deployContracts: Function = async () => {
 
     // Create an instance of the ProtectionPool, which should be upgradable
     // Create a pool using PoolFactory instead of deploying new pool directly to mimic the prod behavior
-    const _poolCycleParams: PoolCycleParamsStruct = {
+    const _poolCycleParams: ProtectionPoolCycleParamsStruct = {
       openCycleDuration: getDaysInSeconds(10),
       cycleDuration: getDaysInSeconds(30)
     };
 
-    const _poolParams: PoolParamsStruct = {
+    const _poolParams: ProtectionPoolParamsStruct = {
       leverageRatioFloor: parseEther("0.5"),
       leverageRatioCeiling: parseEther("1"),
       leverageRatioBuffer: parseEther("0.05"),

@@ -7,7 +7,7 @@ import {
   ProtectionPool,
   ProtectionInfoStructOutput
 } from "../../typechain-types/contracts/core/pool/ProtectionPool";
-import { PoolInfoStructOutput } from "../../typechain-types/contracts/interfaces/IProtectionPool";
+import { ProtectionPoolInfoStructOutput } from "../../typechain-types/contracts/interfaces/IProtectionPool";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { ProtectionPurchaseParamsStruct } from "../../typechain-types/contracts/interfaces/IReferenceLendingPools";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
@@ -55,7 +55,7 @@ const testProtectionPool: Function = (
     let buyerAddress: string;
     let ownerAddress: string;
     let USDC: Contract;
-    let poolInfo: PoolInfoStructOutput;
+    let poolInfo: ProtectionPoolInfoStructOutput;
     let before1stDepositSnapshotId: string;
     let snapshotId2: string;
     let _protectionBuyer1: Signer;
@@ -550,7 +550,7 @@ const testProtectionPool: Function = (
         it("...movePoolPhase should not move to BuyProtectionOnly state when pool does NOT have min capital required", async () => {
           await expect(
             protectionPool.connect(deployer).movePoolPhase()
-          ).to.not.emit(protectionPool, "PoolPhaseUpdated");
+          ).to.not.emit(protectionPool, "ProtectionPoolPhaseUpdated");
 
           expect((await protectionPool.getPoolInfo()).currentPhase).to.eq(0); // 0 = Deposit Only
         });
@@ -588,7 +588,7 @@ const testProtectionPool: Function = (
               },
               parseUSDC("10000")
             )
-          ).to.be.revertedWith(`PoolInOpenToSellersPhase()`);
+          ).to.be.revertedWith(`ProtectionPoolInOpenToSellersPhase()`);
         });
       });
 
@@ -601,7 +601,7 @@ const testProtectionPool: Function = (
 
         it("...should succeed if caller is owner and pool has min capital required", async () => {
           await expect(protectionPool.connect(deployer).movePoolPhase())
-            .to.emit(protectionPool, "PoolPhaseUpdated")
+            .to.emit(protectionPool, "ProtectionPoolPhaseUpdated")
             .withArgs(1); // 1 = BuyProtectionOnly
 
           expect((await protectionPool.getPoolInfo()).currentPhase).to.eq(1);
@@ -954,7 +954,7 @@ const testProtectionPool: Function = (
 
           await expect(
             protectionPool.connect(deployer).movePoolPhase()
-          ).to.not.emit(protectionPool, "PoolPhaseUpdated");
+          ).to.not.emit(protectionPool, "ProtectionPoolPhaseUpdated");
 
           expect((await protectionPool.getPoolInfo()).currentPhase).to.eq(1); // 1 = BuyProtectionOnly
         });
@@ -1018,7 +1018,7 @@ const testProtectionPool: Function = (
             poolInfo.params.leverageRatioCeiling
           );
           await expect(protectionPool.connect(deployer).movePoolPhase())
-            .to.emit(protectionPool, "PoolPhaseUpdated")
+            .to.emit(protectionPool, "ProtectionPoolPhaseUpdated")
             .withArgs(2); // 2 = Open
 
           expect((await protectionPool.getPoolInfo()).currentPhase).to.eq(2);

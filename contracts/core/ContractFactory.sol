@@ -6,7 +6,7 @@ import {AddressUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Addr
 
 import {OwnableUpgradeable, UUPSUpgradeableBase} from "../UUPSUpgradeableBase.sol";
 import {ERC1967Proxy} from "../external/openzeppelin/ERC1967/ERC1967Proxy.sol";
-import {IProtectionPool, PoolParams, PoolInfo, PoolPhase} from "../interfaces/IProtectionPool.sol";
+import {IProtectionPool, ProtectionPoolParams, ProtectionPoolInfo, ProtectionPoolPhase} from "../interfaces/IProtectionPool.sol";
 import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools} from "../interfaces/IReferenceLendingPools.sol";
 import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
@@ -106,7 +106,7 @@ contract ContractFactory is
    */
   function createProtectionPool(
     address _poolImpl,
-    PoolParams calldata _poolParameters,
+    ProtectionPoolParams calldata _poolParameters,
     IERC20MetadataUpgradeable _underlyingToken,
     IReferenceLendingPools _referenceLendingPools,
     IPremiumCalculator _premiumCalculator,
@@ -119,12 +119,12 @@ contract ContractFactory is
       abi.encodeWithSelector(
         IProtectionPool(address(0)).initialize.selector,
         _msgSender(),
-        PoolInfo({
+        ProtectionPoolInfo({
           poolAddress: address(0),
           params: _poolParameters,
           underlyingToken: _underlyingToken,
           referenceLendingPools: _referenceLendingPools,
-          currentPhase: PoolPhase.OpenToSellers
+          currentPhase: ProtectionPoolPhase.OpenToSellers
         }),
         _premiumCalculator,
         poolCycleManager,

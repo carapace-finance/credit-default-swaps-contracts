@@ -11,7 +11,7 @@ import {SToken} from "./SToken.sol";
 import {IPremiumCalculator} from "../../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools, LendingPoolStatus, ProtectionPurchaseParams} from "../../interfaces/IReferenceLendingPools.sol";
 import {IPoolCycleManager, CycleState} from "../../interfaces/IPoolCycleManager.sol";
-import {IProtectionPool, PoolParams, PoolCycleParams, PoolInfo, ProtectionInfo, LendingPoolDetail, WithdrawalCycleDetail, ProtectionBuyerAccount, PoolPhase} from "../../interfaces/IProtectionPool.sol";
+import {IProtectionPool, ProtectionPoolParams, ProtectionPoolCycleParams, ProtectionPoolInfo, ProtectionInfo, LendingPoolDetail, WithdrawalCycleDetail, ProtectionBuyerAccount, ProtectionPoolPhase} from "../../interfaces/IProtectionPool.sol";
 import {IDefaultStateManager} from "../../interfaces/IDefaultStateManager.sol";
 
 import "../../libraries/AccruedPremiumCalculator.sol";
@@ -53,8 +53,8 @@ contract ProtectionPool is
   /// @notice Reference to default state manager contract
   IDefaultStateManager private defaultStateManager;
 
-  /// @notice information about this pool
-  PoolInfo private poolInfo;
+  /// @notice information about this protection pool
+  ProtectionPoolInfo private poolInfo;
 
   /// @notice The total underlying amount of premium from protection buyers accumulated in the pool
   uint256 public totalPremium;
@@ -96,7 +96,7 @@ contract ProtectionPool is
     );
 
     if (cycleState != CycleState.Open) {
-      revert PoolIsNotOpen();
+      revert ProtectionPoolIsNotOpen();
     }
     _;
   }
@@ -113,7 +113,7 @@ contract ProtectionPool is
   /// @inheritdoc IProtectionPool
   function initialize(
     address _owner,
-    PoolInfo calldata _poolInfo,
+    ProtectionPoolInfo calldata _poolInfo,
     IPremiumCalculator _premiumCalculator,
     IPoolCycleManager _poolCycleManager,
     IDefaultStateManager _defaultStateManager,
@@ -131,7 +131,7 @@ contract ProtectionPool is
     poolCycleManager = _poolCycleManager;
     defaultStateManager = _defaultStateManager;
 
-    emit PoolInitialized(
+    emit ProtectionPoolInitialized(
       _name,
       _symbol,
       poolInfo.underlyingToken,
@@ -188,8 +188,8 @@ contract ProtectionPool is
     nonReentrant
   {
     /// Verify that the pool is not in OpenToBuyers phase
-    if (poolInfo.currentPhase == PoolPhase.OpenToBuyers) {
-      revert PoolInOpenToBuyersPhase();
+    if (poolInfo.currentPhase == ProtectionPoolPhase.OpenToBuyers) {
+      revert ProtectionPoolInOpenToBuyersPhase();
     }
 
     uint256 _sTokenShares = convertToSToken(_underlyingAmount);
@@ -207,7 +207,7 @@ contract ProtectionPool is
       uint256 _leverageRatio = calculateLeverageRatio();
 
       if (_leverageRatio > poolInfo.params.leverageRatioCeiling) {
-        revert PoolLeverageRatioTooHigh(_leverageRatio);
+        revert ProtectionPoolLeverageRatioTooHigh(_leverageRatio);
       }
     }
 
@@ -449,7 +449,7 @@ contract ProtectionPool is
       }
     }
 
-    /// step 3: Update total locked & available capital in Pool
+    /// step 3: Update total locked & available capital in ProtectionPool
     if (totalSTokenUnderlying < _lockedAmount) {
       /// If totalSTokenUnderlying < _lockedAmount, then lock all available capital
       _lockedAmount = totalSTokenUnderlying;
@@ -504,19 +504,19 @@ contract ProtectionPool is
    * @notice Allows the owner to move pool phase after verification
    * @return _newPhase the new phase of the pool, if the phase is updated
    */
-  function movePoolPhase() external onlyOwner returns (PoolPhase _newPhase) {
-    PoolPhase _currentPhase = poolInfo.currentPhase;
+  function movePoolPhase() external onlyOwner returns (ProtectionPoolPhase _newPhase) {
+    ProtectionPoolPhase _currentPhase = poolInfo.currentPhase;
 
     /// when the pool is in OpenToSellers phase, it can be moved to OpenToBuyers phase
-    if (_currentPhase == PoolPhase.OpenToSellers && _hasMinRequiredCapital()) {
-      poolInfo.currentPhase = _newPhase = PoolPhase.OpenToBuyers;
-      emit PoolPhaseUpdated(_newPhase);
-    } else if (_currentPhase == PoolPhase.OpenToBuyers) {
+    if (_currentPhase == ProtectionPoolPhase.OpenToSellers && _hasMinRequiredCapital()) {
+      poolInfo.currentPhase = _newPhase = ProtectionPoolPhase.OpenToBuyers;
+      emit ProtectionPoolPhaseUpdated(_newPhase);
+    } else if (_currentPhase == ProtectionPoolPhase.OpenToBuyers) {
       /// when the pool is in OpenToBuyers phase, it can be moved to Open phase
       /// if the leverage ratio is below the ceiling
       if (calculateLeverageRatio() <= poolInfo.params.leverageRatioCeiling) {
-        poolInfo.currentPhase = _newPhase = PoolPhase.Open;
-        emit PoolPhaseUpdated(_newPhase);
+        poolInfo.currentPhase = _newPhase = ProtectionPoolPhase.Open;
+        emit ProtectionPoolPhaseUpdated(_newPhase);
       }
     }
 
@@ -526,7 +526,7 @@ contract ProtectionPool is
   /** view functions */
 
   /// @inheritdoc IProtectionPool
-  function getPoolInfo() external view override returns (PoolInfo memory) {
+  function getPoolInfo() external view override returns (ProtectionPoolInfo memory) {
     return poolInfo;
   }
 
@@ -757,7 +757,7 @@ contract ProtectionPool is
     totalProtection += _protectionPurchaseParams.protectionAmount;
     uint256 _leverageRatio = calculateLeverageRatio();
     if (_leverageRatio < poolInfo.params.leverageRatioFloor) {
-      revert PoolLeverageRatioTooLow(_leverageRatio);
+      revert ProtectionPoolLeverageRatioTooLow(_leverageRatio);
     }
 
     LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[

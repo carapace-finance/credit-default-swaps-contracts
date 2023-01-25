@@ -7,8 +7,8 @@ import { USDC_ADDRESS, ZERO_ADDRESS } from "../utils/constants";
 import { ethers, upgrades } from "hardhat";
 import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
 import {
-  PoolParamsStruct,
-  PoolCycleParamsStruct
+  ProtectionPoolParamsStruct,
+  ProtectionPoolCycleParamsStruct
 } from "../../typechain-types/contracts/interfaces/IProtectionPool";
 import { ProtectionPool } from "../../typechain-types/contracts/core/pool/ProtectionPool";
 import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";
@@ -84,13 +84,13 @@ const testContractFactory: Function = (
     });
 
     describe("createPool", async () => {
-      const poolCycleParams: PoolCycleParamsStruct = {
+      const poolCycleParams: ProtectionPoolCycleParamsStruct = {
         openCycleDuration: BigNumber.from(10 * 86400), // 10 days
         cycleDuration: BigNumber.from(30 * 86400) // 30 days
       };
       const _floor: BigNumber = BigNumber.from(100);
       const _ceiling: BigNumber = BigNumber.from(500);
-      const _poolParams: PoolParamsStruct = {
+      const _poolParams: ProtectionPoolParamsStruct = {
         leverageRatioFloor: _floor,
         leverageRatioCeiling: _ceiling,
         leverageRatioBuffer: BigNumber.from(5),

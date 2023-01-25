@@ -5,7 +5,7 @@ import "@prb/math/contracts/PRBMathSD59x18.sol";
 
 import {UUPSUpgradeableBase} from "../UUPSUpgradeableBase.sol";
 import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
-import {PoolParams} from "../interfaces/IProtectionPool.sol";
+import {ProtectionPoolParams} from "../interfaces/IProtectionPool.sol";
 
 import "../libraries/Constants.sol";
 import "../libraries/RiskFactorCalculator.sol";
@@ -31,7 +31,7 @@ contract PremiumCalculator is UUPSUpgradeableBase, IPremiumCalculator {
     uint256 _protectionBuyerApy,
     uint256 _leverageRatio,
     uint256 _totalCapital,
-    PoolParams calldata _poolParameters
+    ProtectionPoolParams calldata _poolParameters
   )
     external
     view

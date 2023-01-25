@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import {EnumerableSetUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
 
 import {ProtectionPurchaseParams, LendingPoolStatus, IReferenceLendingPools} from "../interfaces/IReferenceLendingPools.sol";
-import {PoolInfo, ProtectionInfo, ProtectionBuyerAccount, IProtectionPool, LendingPoolDetail, PoolPhase} from "../interfaces/IProtectionPool.sol";
+import {ProtectionPoolInfo, ProtectionInfo, ProtectionBuyerAccount, IProtectionPool, LendingPoolDetail, ProtectionPoolPhase} from "../interfaces/IProtectionPool.sol";
 import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
 import {IDefaultStateManager} from "../interfaces/IDefaultStateManager.sol";
 import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
@@ -15,7 +15,7 @@ import "./Constants.sol";
 import "hardhat/console.sol";
 
 /**
- * @notice Helper library for Pool contract, mainly for size reduction.
+ * @notice Helper library for ProtectionPool contract, mainly for size reduction.
  */
 library ProtectionPoolHelper {
   using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
@@ -28,14 +28,14 @@ library ProtectionPoolHelper {
     IPoolCycleManager poolCycleManager,
     IDefaultStateManager defaultStateManager,
     address _protectionPool,
-    PoolInfo storage poolInfo,
+    ProtectionPoolInfo storage poolInfo,
     uint256 _protectionStartTimestamp,
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
     bool _isExtension
   ) external {
     /// Verify that the pool is not in OpenToSellers phase
-    if (poolInfo.currentPhase == PoolPhase.OpenToSellers) {
-      revert IProtectionPool.PoolInOpenToSellersPhase();
+    if (poolInfo.currentPhase == ProtectionPoolPhase.OpenToSellers) {
+      revert IProtectionPool.ProtectionPoolInOpenToSellersPhase();
     }
 
     /// a buyer needs to buy protection longer than min protection duration specified in the pool params
@@ -78,7 +78,7 @@ library ProtectionPoolHelper {
    */
   function calculateProtectionPremium(
     IPremiumCalculator premiumCalculator,
-    PoolInfo storage poolInfo,
+    ProtectionPoolInfo storage poolInfo,
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
     uint256 totalSTokenUnderlying,
     uint256 _leverageRatio
@@ -123,7 +123,7 @@ library ProtectionPoolHelper {
   function calculateAndTrackPremium(
     IPremiumCalculator premiumCalculator,
     mapping(address => ProtectionBuyerAccount) storage protectionBuyerAccounts,
-    PoolInfo storage poolInfo,
+    ProtectionPoolInfo storage poolInfo,
     LendingPoolDetail storage lendingPoolDetail,
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
     uint256 _maxPremiumAmount,
@@ -175,7 +175,7 @@ library ProtectionPoolHelper {
    * @return _protectionExpired Whether the loan protection has expired or not.
    */
   function verifyAndAccruePremium(
-    PoolInfo storage poolInfo,
+    ProtectionPoolInfo storage poolInfo,
     ProtectionInfo storage protectionInfo,
     uint256 _lastPremiumAccrualTimestamp,
     uint256 _latestPaymentTimestamp

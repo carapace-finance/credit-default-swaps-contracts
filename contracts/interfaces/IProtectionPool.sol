@@ -9,14 +9,14 @@ import {IPremiumCalculator} from "./IPremiumCalculator.sol";
 import {IPoolCycleManager} from "./IPoolCycleManager.sol";
 import {IDefaultStateManager} from "./IDefaultStateManager.sol";
 
-enum PoolPhase {
+enum ProtectionPoolPhase {
   OpenToSellers,
   OpenToBuyers,
   Open
 }
 
 /// @notice Contains pool cycle related parameters.
-struct PoolCycleParams {
+struct ProtectionPoolCycleParams {
   /// @notice Time duration for which cycle is OPEN, meaning deposit & withdraw from pool is allowed.
   uint256 openCycleDuration;
   /// @notice Total time duration of a cycle.
@@ -24,7 +24,7 @@ struct PoolCycleParams {
 }
 
 /// @notice Contains pool related parameters.
-struct PoolParams {
+struct ProtectionPoolParams {
   /// @notice the minimum leverage ratio allowed in the pool scaled to 18 decimals
   uint256 leverageRatioFloor;
   /// @notice the maximum leverage ratio allowed in the pool scaled to 18 decimals
@@ -42,19 +42,19 @@ struct PoolParams {
   /// @notice the minimum duration of the protection coverage in seconds that buyer has to buy
   uint256 minProtectionDurationInSeconds;
   /// @notice pool cycle related parameters
-  PoolCycleParams poolCycleParams;
+  ProtectionPoolCycleParams poolCycleParams;
   /// @notice the maximum duration in seconds during which a protection can be extended after it expires
   uint256 protectionExtensionGracePeriodInSeconds;
 }
 
 /// @notice Contains pool information
-struct PoolInfo {
+struct ProtectionPoolInfo {
   address poolAddress;
-  PoolParams params;
+  ProtectionPoolParams params;
   IERC20MetadataUpgradeable underlyingToken;
   IReferenceLendingPools referenceLendingPools;
   /// @notice A enum indicating current phase of the pool.
-  PoolPhase currentPhase;
+  ProtectionPoolPhase currentPhase;
 }
 
 struct ProtectionInfo {
@@ -118,10 +118,10 @@ abstract contract IProtectionPool {
   error ProtectionPurchaseNotAllowed(ProtectionPurchaseParams params);
   error ProtectionDurationTooShort(uint256 protectionDurationInSeconds);
   error ProtectionDurationTooLong(uint256 protectionDurationInSeconds);
-  error PoolIsNotOpen();
-  error PoolLeverageRatioTooHigh(uint256 leverageRatio);
-  error PoolLeverageRatioTooLow(uint256 leverageRatio);
-  error PoolHasNoMinCapitalRequired(uint256 totalSTokenUnderlying);
+  error ProtectionPoolIsNotOpen();
+  error ProtectionPoolLeverageRatioTooHigh(uint256 leverageRatio);
+  error ProtectionPoolLeverageRatioTooLow(uint256 leverageRatio);
+  error ProtectionPoolHasNoMinCapitalRequired(uint256 totalSTokenUnderlying);
   error NoWithdrawalRequested(address msgSender, uint256 poolCycleIndex);
   error WithdrawalHigherThanRequested(
     address msgSender,
@@ -129,8 +129,8 @@ abstract contract IProtectionPool {
   );
   error InsufficientSTokenBalance(address msgSender, uint256 sTokenBalance);
   error OnlyDefaultStateManager(address msgSender);
-  error PoolInOpenToSellersPhase();
-  error PoolInOpenToBuyersPhase();
+  error ProtectionPoolInOpenToSellersPhase();
+  error ProtectionPoolInOpenToBuyersPhase();
   error NoExpiredProtectionToExtend();
   error CanNotExtendProtectionAfterGracePeriod();
   error PremiumExceedsMaxPremiumAmount(
@@ -140,7 +140,7 @@ abstract contract IProtectionPool {
   /*** events ***/
 
   /// @notice Emitted when a new pool is created.
-  event PoolInitialized(
+  event ProtectionPoolInitialized(
     string name,
     string symbol,
     IERC20MetadataUpgradeable underlyingToken,
@@ -188,7 +188,7 @@ abstract contract IProtectionPool {
   );
 
   /// @notice Emitted when a pool phase is updated.
-  event PoolPhaseUpdated(PoolPhase newPhase);
+  event ProtectionPoolPhaseUpdated(ProtectionPoolPhase newPhase);
 
   /**
    * @notice Initializes the pool contract
@@ -202,7 +202,7 @@ abstract contract IProtectionPool {
    */
   function initialize(
     address _owner,
-    PoolInfo calldata _poolInfo,
+    ProtectionPoolInfo calldata _poolInfo,
     IPremiumCalculator _premiumCalculator,
     IPoolCycleManager _poolCycleManager,
     IDefaultStateManager _defaultStateManager,
@@ -292,7 +292,7 @@ abstract contract IProtectionPool {
   /**
    * @notice Returns various parameters and other pool related info.
    */
-  function getPoolInfo() external view virtual returns (PoolInfo memory);
+  function getPoolInfo() external view virtual returns (ProtectionPoolInfo memory);
 
   /**
    * @notice Calculates and returns leverage ratio scaled to 18 decimals.

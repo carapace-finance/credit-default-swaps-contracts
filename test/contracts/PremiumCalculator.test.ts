@@ -3,8 +3,8 @@ import { expect } from "chai";
 import { parseEther } from "ethers/lib/utils";
 import { Signer } from "ethers/lib/ethers";
 import {
-  PoolParamsStruct,
-  PoolCycleParamsStruct
+  ProtectionPoolParamsStruct,
+  ProtectionPoolCycleParamsStruct
 } from "../../typechain-types/contracts/interfaces/IProtectionPool";
 import { parseUSDC } from "../utils/usdc";
 
@@ -28,12 +28,12 @@ const testPremiumCalculator: Function = (
     const _protectionAmt = parseEther("100000"); // 100k
     const _currentLeverageRatio = parseEther("0.15"); // 15%
     const _protectionBuyerApy = parseEther("0.17"); // 17%
-    const poolCycleParams: PoolCycleParamsStruct = {
+    const poolCycleParams: ProtectionPoolCycleParamsStruct = {
       openCycleDuration: BigNumber.from(10 * 86400), // 10 days
       cycleDuration: BigNumber.from(30 * 86400) // 30 days
     };
     const _minRequiredCapital = parseUSDC("10000");
-    const _poolParams: PoolParamsStruct = {
+    const _poolParams: ProtectionPoolParamsStruct = {
       leverageRatioFloor: _leverageRatioFloor,
       leverageRatioCeiling: _leverageRatioCeiling,
       leverageRatioBuffer: _leverageRatioBuffer,
