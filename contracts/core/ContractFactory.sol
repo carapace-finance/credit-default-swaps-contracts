@@ -42,7 +42,7 @@ contract ContractFactory is
   IDefaultStateManager private defaultStateManager;
 
   /// @notice list of all pools created by this factory
-  address[] private pools;
+  address[] private protectionPools;
 
   /// @notice list of all reference lending pools created by this factory
   address[] private referenceLendingPoolsList;
@@ -134,7 +134,7 @@ contract ContractFactory is
       )
     );
     address _poolProxyAddress = address(_poolProxy);
-    pools.push(_poolProxyAddress);
+    protectionPools.push(_poolProxyAddress);
 
     /// register newly created pool to the pool cycle manager
     poolCycleManager.registerPool(
@@ -220,10 +220,10 @@ contract ContractFactory is
   /*** view functions ***/
 
   /**
-   * @notice Returns all pools created by this factory.
+   * @notice Returns all protection pools created by this factory.
    */
-  function getPools() external view returns (address[] memory) {
-    return pools;
+  function getProtectionPools() external view returns (address[] memory) {
+    return protectionPools;
   }
 
   /**

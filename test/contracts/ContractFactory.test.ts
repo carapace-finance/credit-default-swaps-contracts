@@ -37,7 +37,7 @@ const testContractFactory: Function = (
     let _secondPoolAddress: string;
 
     before(async () => {
-      _firstPoolAddress = (await cpContractFactory.getPools())[0];
+      _firstPoolAddress = (await cpContractFactory.getProtectionPools())[0];
     });
 
     describe("implementation", async () => {
@@ -184,7 +184,7 @@ const testContractFactory: Function = (
           )
           .emit(defaultStateManager, "PoolRegistered");
 
-        _secondPoolAddress = (await cpContractFactory.getPools())[1];
+        _secondPoolAddress = (await cpContractFactory.getProtectionPools())[1];
       });
 
       it("...should start new pool cycle for the second pool", async () => {

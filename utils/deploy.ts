@@ -297,7 +297,7 @@ async function getLatestReferenceLendingPoolsInstance(
 async function getLatestProtectionPoolInstance(
   contractFactoryInstance: CPContractFactory
 ): Promise<ProtectionPool> {
-  const pools = await contractFactoryInstance.getPools();
+  const pools = await contractFactoryInstance.getProtectionPools();
   const newPoolInstance = (await ethers.getContractAt(
     "ProtectionPool",
     pools[pools.length - 1]
