@@ -9,7 +9,7 @@ import {ERC1967Proxy} from "../external/openzeppelin/ERC1967/ERC1967Proxy.sol";
 import {IProtectionPool, ProtectionPoolParams, ProtectionPoolInfo, ProtectionPoolPhase} from "../interfaces/IProtectionPool.sol";
 import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools} from "../interfaces/IReferenceLendingPools.sol";
-import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
+import {ProtectionPoolCycleParams, IProtectionPoolCycleManager} from "../interfaces/IProtectionPoolCycleManager.sol";
 import {IDefaultStateManager} from "../interfaces/IDefaultStateManager.sol";
 import {IReferenceLendingPools, LendingProtocol} from "../interfaces/IReferenceLendingPools.sol";
 import {ILendingProtocolAdapter} from "../interfaces/ILendingProtocolAdapter.sol";
@@ -35,8 +35,8 @@ contract ContractFactory is
    * @dev DO NOT CHANGE THE ORDER OF THESE VARIABLES ONCE DEPLOYED
    */
 
-  /// @notice reference to the pool cycle manager
-  IPoolCycleManager private poolCycleManager;
+  /// @notice reference to the protection pool cycle manager
+  IProtectionPoolCycleManager private protectionPoolCycleManager;
 
   /// @notice reference to the default state manager
   IDefaultStateManager private defaultStateManager;
@@ -59,7 +59,7 @@ contract ContractFactory is
   /*** events ***/
 
   /// @notice Emitted when a new pool is created.
-  event PoolCreated(
+  event ProtectionPoolCreated(
     address poolAddress,
     uint256 floor,
     uint256 ceiling,
@@ -84,12 +84,12 @@ contract ContractFactory is
   /*** initializer ***/
 
   function initialize(
-    IPoolCycleManager _poolCycleManager,
+    IProtectionPoolCycleManager _protectionPoolCycleManager,
     IDefaultStateManager _defaultStateManager
   ) public initializer {
     __UUPSUpgradeableBase_init();
 
-    poolCycleManager = _poolCycleManager;
+    protectionPoolCycleManager = _protectionPoolCycleManager;
     defaultStateManager = _defaultStateManager;
   }
 
@@ -107,6 +107,7 @@ contract ContractFactory is
   function createProtectionPool(
     address _poolImpl,
     ProtectionPoolParams calldata _poolParameters,
+    ProtectionPoolCycleParams calldata _poolCycleParams,
     IERC20MetadataUpgradeable _underlyingToken,
     IReferenceLendingPools _referenceLendingPools,
     IPremiumCalculator _premiumCalculator,
@@ -127,7 +128,7 @@ contract ContractFactory is
           currentPhase: ProtectionPoolPhase.OpenToSellers
         }),
         _premiumCalculator,
-        poolCycleManager,
+        protectionPoolCycleManager,
         defaultStateManager,
         _name,
         _symbol
@@ -137,16 +138,15 @@ contract ContractFactory is
     protectionPools.push(_poolProxyAddress);
 
     /// register newly created pool to the pool cycle manager
-    poolCycleManager.registerPool(
+    protectionPoolCycleManager.registerProtectionPool(
       _poolProxyAddress,
-      _poolParameters.poolCycleParams.openCycleDuration,
-      _poolParameters.poolCycleParams.cycleDuration
+      _poolCycleParams
     );
 
     /// register newly created pool to the default state manager
     defaultStateManager.registerPool(_poolProxyAddress);
 
-    emit PoolCreated(
+    emit ProtectionPoolCreated(
       _poolProxyAddress,
       _poolParameters.leverageRatioFloor,
       _poolParameters.leverageRatioCeiling,

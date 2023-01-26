@@ -6,21 +6,13 @@ import {EnumerableSetUpgradeable} from "@openzeppelin/contracts-upgradeable/util
 
 import {IReferenceLendingPools, ProtectionPurchaseParams} from "./IReferenceLendingPools.sol";
 import {IPremiumCalculator} from "./IPremiumCalculator.sol";
-import {IPoolCycleManager} from "./IPoolCycleManager.sol";
+import {IProtectionPoolCycleManager} from "./IProtectionPoolCycleManager.sol";
 import {IDefaultStateManager} from "./IDefaultStateManager.sol";
 
 enum ProtectionPoolPhase {
   OpenToSellers,
   OpenToBuyers,
   Open
-}
-
-/// @notice Contains pool cycle related parameters.
-struct ProtectionPoolCycleParams {
-  /// @notice Time duration for which cycle is OPEN, meaning deposit & withdraw from pool is allowed.
-  uint256 openCycleDuration;
-  /// @notice Total time duration of a cycle.
-  uint256 cycleDuration;
 }
 
 /// @notice Contains pool related parameters.
@@ -41,8 +33,6 @@ struct ProtectionPoolParams {
   uint256 underlyingRiskPremiumPercent;
   /// @notice the minimum duration of the protection coverage in seconds that buyer has to buy
   uint256 minProtectionDurationInSeconds;
-  /// @notice pool cycle related parameters
-  ProtectionPoolCycleParams poolCycleParams;
   /// @notice the maximum duration in seconds during which a protection can be extended after it expires
   uint256 protectionExtensionGracePeriodInSeconds;
 }
@@ -204,7 +194,7 @@ abstract contract IProtectionPool {
     address _owner,
     ProtectionPoolInfo calldata _poolInfo,
     IPremiumCalculator _premiumCalculator,
-    IPoolCycleManager _poolCycleManager,
+    IProtectionPoolCycleManager _poolCycleManager,
     IDefaultStateManager _defaultStateManager,
     string calldata _name,
     string calldata _symbol

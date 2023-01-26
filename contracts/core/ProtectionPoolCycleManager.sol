@@ -2,16 +2,16 @@
 pragma solidity ^0.8.13;
 
 import {UUPSUpgradeableBase} from "../UUPSUpgradeableBase.sol";
-import {IPoolCycleManager, PoolCycle, CycleState} from "../interfaces/IPoolCycleManager.sol";
+import {IProtectionPoolCycleManager, ProtectionPoolCycleParams, ProtectionPoolCycle, ProtectionPoolCycleState} from "../interfaces/IProtectionPoolCycleManager.sol";
 import "../libraries/Constants.sol";
 
 /**
- * @title PoolCycleManager
+ * @title ProtectionPoolCycleManager
  * @author Carapace Finance
- * @notice Contract to manage the current cycle of various pools.
+ * @notice Contract to manage the current cycle of all protection pools.
  * This contract is upgradeable using the UUPS pattern.
  */
-contract PoolCycleManager is UUPSUpgradeableBase, IPoolCycleManager {
+contract ProtectionPoolCycleManager is UUPSUpgradeableBase, IProtectionPoolCycleManager {
   /////////////////////////////////////////////////////
   ///             STORAGE - START                   ///
   /////////////////////////////////////////////////////
@@ -23,7 +23,7 @@ contract PoolCycleManager is UUPSUpgradeableBase, IPoolCycleManager {
   address public contractFactoryAddress;
 
   /// @notice tracks the current cycle of all pools in the system by its address.
-  mapping(address => PoolCycle) public poolCycles;
+  mapping(address => ProtectionPoolCycle) public protectionPoolCycles;
 
   //////////////////////////////////////////////////////
   ///             STORAGE - END                     ///
@@ -48,7 +48,7 @@ contract PoolCycleManager is UUPSUpgradeableBase, IPoolCycleManager {
 
   /*** state-changing functions ***/
 
-  /// @inheritdoc IPoolCycleManager
+  /// @inheritdoc IProtectionPoolCycleManager
   function setContractFactory(address _contractFactoryAddress)
     external
     override
@@ -61,62 +61,60 @@ contract PoolCycleManager is UUPSUpgradeableBase, IPoolCycleManager {
     contractFactoryAddress = _contractFactoryAddress;
   }
 
-  /// @inheritdoc IPoolCycleManager
-  function registerPool(
+  /// @inheritdoc IProtectionPoolCycleManager
+  function registerProtectionPool(
     address _poolAddress,
-    uint256 _openCycleDuration,
-    uint256 _cycleDuration
+    ProtectionPoolCycleParams calldata _cycleParams
   ) external override onlyContractFactory {
-    PoolCycle storage poolCycle = poolCycles[_poolAddress];
+    ProtectionPoolCycle storage poolCycle = protectionPoolCycles[_poolAddress];
 
     if (poolCycle.currentCycleStartTime > 0) {
-      revert PoolAlreadyRegistered(_poolAddress);
+      revert ProtectionPoolAlreadyRegistered(_poolAddress);
     }
 
-    if (_openCycleDuration > _cycleDuration) {
-      revert InvalidCycleDuration(_cycleDuration);
+    if (_cycleParams.openCycleDuration > _cycleParams.cycleDuration) {
+      revert InvalidCycleDuration(_cycleParams.cycleDuration);
     }
 
-    poolCycle.openCycleDuration = _openCycleDuration;
-    poolCycle.cycleDuration = _cycleDuration;
+    poolCycle.params = _cycleParams;
     _startNewCycle(_poolAddress, poolCycle, 0);
   }
 
-  /// @inheritdoc IPoolCycleManager
-  function calculateAndSetPoolCycleState(address _poolAddress)
+  /// @inheritdoc IProtectionPoolCycleManager
+  function calculateAndSetPoolCycleState(address _protectionPoolAddress)
     external
     override
-    returns (CycleState)
+    returns (ProtectionPoolCycleState)
   {
-    PoolCycle storage poolCycle = poolCycles[_poolAddress];
+    ProtectionPoolCycle storage poolCycle = protectionPoolCycles[_protectionPoolAddress];
 
     /// Gas optimization:
     /// Store the current cycle state in memory instead of reading it from the storage each time.
-    CycleState currentState = poolCycle.currentCycleState;
+    ProtectionPoolCycleState currentState = poolCycle.currentCycleState;
 
     /// If cycle is not started, that means pool is NOT registered yet.
     /// So, we can't move the cycle state
-    if (currentState == CycleState.None) {
+    if (currentState == ProtectionPoolCycleState.None) {
       return currentState;
     }
 
-    if (currentState == CycleState.Open) {
+    if (currentState == ProtectionPoolCycleState.Open) {
       /// If current time is past the initial open duration, then move to LOCKED state.
       if (
         block.timestamp - poolCycle.currentCycleStartTime >
-        poolCycle.openCycleDuration
+        poolCycle.params.openCycleDuration
       ) {
-        poolCycle.currentCycleState = CycleState.Locked;
+        poolCycle.currentCycleState = ProtectionPoolCycleState.Locked;
       }
-    } else if (currentState == CycleState.Locked) {
+    } else if (currentState == ProtectionPoolCycleState.Locked) {
       /// If current time is past the total cycle duration, then start a new cycle.
       if (
         block.timestamp - poolCycle.currentCycleStartTime >
-        poolCycle.cycleDuration
+        poolCycle.params.cycleDuration
       ) {
         /// move current cycle to a new cycle
         _startNewCycle(
-          _poolAddress,
+          _protectionPoolAddress,
           poolCycle,
           poolCycle.currentCycleIndex + 1
         );
@@ -128,34 +126,34 @@ contract PoolCycleManager is UUPSUpgradeableBase, IPoolCycleManager {
 
   /*** view functions ***/
 
-  /// @inheritdoc IPoolCycleManager
+  /// @inheritdoc IProtectionPoolCycleManager
   function getCurrentCycleState(address _poolAddress)
     external
     view
     override
-    returns (CycleState)
+    returns (ProtectionPoolCycleState)
   {
-    return poolCycles[_poolAddress].currentCycleState;
+    return protectionPoolCycles[_poolAddress].currentCycleState;
   }
 
-  /// @inheritdoc IPoolCycleManager
+  /// @inheritdoc IProtectionPoolCycleManager
   function getCurrentCycleIndex(address _poolAddress)
     external
     view
     override
     returns (uint256)
   {
-    return poolCycles[_poolAddress].currentCycleIndex;
+    return protectionPoolCycles[_poolAddress].currentCycleIndex;
   }
 
-  /// @inheritdoc IPoolCycleManager
+  /// @inheritdoc IProtectionPoolCycleManager
   function getCurrentPoolCycle(address _poolAddress)
     external
     view
     override
-    returns (PoolCycle memory)
+    returns (ProtectionPoolCycle memory)
   {
-    return poolCycles[_poolAddress];
+    return protectionPoolCycles[_poolAddress];
   }
 
   function getNextCycleEndTimestamp(address _poolAddress)
@@ -164,30 +162,30 @@ contract PoolCycleManager is UUPSUpgradeableBase, IPoolCycleManager {
     override
     returns (uint256 _nextCycleEndTimestamp)
   {
-    PoolCycle storage poolCycle = poolCycles[_poolAddress];
+    ProtectionPoolCycle storage poolCycle = protectionPoolCycles[_poolAddress];
     _nextCycleEndTimestamp =
       poolCycle.currentCycleStartTime +
-      (2 * poolCycle.cycleDuration);
+      (2 * poolCycle.params.cycleDuration);
   }
 
   /*** internal/private functions ***/
 
-  /// @dev Starts a new pool cycle using specified cycle index
+  /// @dev Starts a new protection pool cycle using specified cycle index
   function _startNewCycle(
-    address _poolAddress,
-    PoolCycle storage _poolCycle,
+    address _protectionPoolAddress,
+    ProtectionPoolCycle storage _poolCycle,
     uint256 _cycleIndex
   ) internal {
     _poolCycle.currentCycleIndex = _cycleIndex;
     _poolCycle.currentCycleStartTime = block.timestamp;
-    _poolCycle.currentCycleState = CycleState.Open;
+    _poolCycle.currentCycleState = ProtectionPoolCycleState.Open;
 
-    emit PoolCycleCreated(
-      _poolAddress,
+    emit ProtectionPoolCycleCreated(
+      _protectionPoolAddress,
       _cycleIndex,
       block.timestamp,
-      _poolCycle.openCycleDuration,
-      _poolCycle.cycleDuration
+      _poolCycle.params.openCycleDuration,
+      _poolCycle.params.cycleDuration
     );
   }
 }

@@ -10,8 +10,8 @@ import {UUPSUpgradeableBase} from "../../UUPSUpgradeableBase.sol";
 import {SToken} from "./SToken.sol";
 import {IPremiumCalculator} from "../../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools, LendingPoolStatus, ProtectionPurchaseParams} from "../../interfaces/IReferenceLendingPools.sol";
-import {IPoolCycleManager, CycleState} from "../../interfaces/IPoolCycleManager.sol";
-import {IProtectionPool, ProtectionPoolParams, ProtectionPoolCycleParams, ProtectionPoolInfo, ProtectionInfo, LendingPoolDetail, WithdrawalCycleDetail, ProtectionBuyerAccount, ProtectionPoolPhase} from "../../interfaces/IProtectionPool.sol";
+import {IProtectionPoolCycleManager, ProtectionPoolCycleState} from "../../interfaces/IProtectionPoolCycleManager.sol";
+import {IProtectionPool, ProtectionPoolParams, ProtectionPoolInfo, ProtectionInfo, LendingPoolDetail, WithdrawalCycleDetail, ProtectionBuyerAccount, ProtectionPoolPhase} from "../../interfaces/IProtectionPool.sol";
 import {IDefaultStateManager} from "../../interfaces/IDefaultStateManager.sol";
 
 import "../../libraries/AccruedPremiumCalculator.sol";
@@ -47,8 +47,8 @@ contract ProtectionPool is
   /// @notice Reference to the PremiumPricing contract
   IPremiumCalculator private premiumCalculator;
 
-  /// @notice Reference to the PoolCycleManager contract
-  IPoolCycleManager private poolCycleManager;
+  /// @notice Reference to the ProtectionPoolCycleManager contract
+  IProtectionPoolCycleManager private poolCycleManager;
 
   /// @notice Reference to default state manager contract
   IDefaultStateManager private defaultStateManager;
@@ -91,11 +91,11 @@ contract ProtectionPool is
   /// @notice Checks whether pool cycle is in open state. If not, reverts.
   modifier whenPoolIsOpen() {
     /// Update the pool cycle state
-    CycleState cycleState = poolCycleManager.calculateAndSetPoolCycleState(
+    ProtectionPoolCycleState cycleState = poolCycleManager.calculateAndSetPoolCycleState(
       address(this)
     );
 
-    if (cycleState != CycleState.Open) {
+    if (cycleState != ProtectionPoolCycleState.Open) {
       revert ProtectionPoolIsNotOpen();
     }
     _;
@@ -115,7 +115,7 @@ contract ProtectionPool is
     address _owner,
     ProtectionPoolInfo calldata _poolInfo,
     IPremiumCalculator _premiumCalculator,
-    IPoolCycleManager _poolCycleManager,
+    IProtectionPoolCycleManager _poolCycleManager,
     IDefaultStateManager _defaultStateManager,
     string calldata _name,
     string calldata _symbol

@@ -10,7 +10,7 @@ import {
 import { ProtectionPoolInfoStructOutput } from "../../typechain-types/contracts/interfaces/IProtectionPool";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { ProtectionPurchaseParamsStruct } from "../../typechain-types/contracts/interfaces/IReferenceLendingPools";
-import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
+import { ProtectionPoolCycleManager } from "../../typechain-types/contracts/core/ProtectionPoolCycleManager";
 import {
   getDaysInSeconds,
   getLatestBlockTimestamp,
@@ -39,7 +39,7 @@ const testProtectionPool: Function = (
   protectionPool: ProtectionPool,
   protectionPoolImplementation: ProtectionPool,
   referenceLendingPools: ReferenceLendingPools,
-  poolCycleManager: PoolCycleManager,
+  protectionPoolCycleManager: ProtectionPoolCycleManager,
   defaultStateManager: DefaultStateManager,
   getPoolContractFactory: Function
 ) => {
@@ -152,12 +152,13 @@ const testProtectionPool: Function = (
       expectedCycleIndex: number,
       expectedState: number
     ) => {
-      await poolCycleManager.calculateAndSetPoolCycleState(
+      await protectionPoolCycleManager.calculateAndSetPoolCycleState(
         poolInfo.poolAddress
       );
-      const currentPoolCycle = await poolCycleManager.getCurrentPoolCycle(
-        poolInfo.poolAddress
-      );
+      const currentPoolCycle =
+        await protectionPoolCycleManager.getCurrentPoolCycle(
+          poolInfo.poolAddress
+        );
       expect(currentPoolCycle.currentCycleIndex).to.equal(expectedCycleIndex);
       expect(currentPoolCycle.currentCycleState).to.eq(expectedState);
     };
@@ -215,16 +216,17 @@ const testProtectionPool: Function = (
 
     const verifyMaxAllowedProtectionDuration = async () => {
       const currentTimestamp = await getLatestBlockTimestamp();
-      const currentPoolCycle = await poolCycleManager.getCurrentPoolCycle(
-        poolInfo.poolAddress
-      );
+      const currentPoolCycle =
+        await protectionPoolCycleManager.getCurrentPoolCycle(
+          poolInfo.poolAddress
+        );
 
       // max duration = next cycle's end timestamp - currentTimestamp
       expect(
         await protectionPool.calculateMaxAllowedProtectionDuration()
       ).to.eq(
         currentPoolCycle.currentCycleStartTime
-          .add(currentPoolCycle.cycleDuration.mul(2))
+          .add(currentPoolCycle.params.cycleDuration.mul(2))
           .sub(currentTimestamp)
       );
     };
@@ -480,7 +482,9 @@ const testProtectionPool: Function = (
             []
           );
           expect(
-            await poolCycleManager.getCurrentCycleState(poolInfo.poolAddress)
+            await protectionPoolCycleManager.getCurrentCycleState(
+              poolInfo.poolAddress
+            )
           ).to.equal(1); // 1 = Open
 
           // pause the pool
@@ -1220,9 +1224,10 @@ const testProtectionPool: Function = (
         });
 
         it("...fails because there was no previous cycle", async () => {
-          const currentPoolCycle = await poolCycleManager.getCurrentPoolCycle(
-            poolInfo.poolAddress
-          );
+          const currentPoolCycle =
+            await protectionPoolCycleManager.getCurrentPoolCycle(
+              poolInfo.poolAddress
+            );
           await expect(
             protectionPool.withdraw(parseEther("1"), deployerAddress)
           ).to.be.revertedWith(

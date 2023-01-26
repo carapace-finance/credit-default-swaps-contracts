@@ -4,34 +4,38 @@ import { expect } from "chai";
 import { assert } from "console";
 import { Signer } from "ethers";
 import { ethers, upgrades } from "hardhat";
-import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
-import { PoolCycleManagerV2 } from "../../typechain-types/contracts/test/PoolCycleManagerV2";
+import { ProtectionPoolCycleManager } from "../../typechain-types/contracts/core/ProtectionPoolCycleManager";
+import { ProtectionPoolCycleParamsStruct } from "../../typechain-types/contracts/interfaces/IProtectionPoolCycleManager";
+import { ProtectionPoolCycleManagerV2 } from "../../typechain-types/contracts/test/ProtectionPoolCycleManagerV2";
 import { ZERO_ADDRESS } from "../utils/constants";
-import { moveForwardTime } from "../utils/time";
+import { getDaysInSeconds, moveForwardTime } from "../utils/time";
 
-const testPoolCycleManager: Function = (
+const testProtectionPoolCycleManager: Function = (
   deployer: Signer,
   account1: Signer,
-  poolCycleManager: PoolCycleManager,
+  protectionPoolCycleManager: ProtectionPoolCycleManager,
   contractFactoryAddress: string
 ) => {
-  describe("PoolCycleManager", () => {
+  describe("ProtectionPoolCycleManager", () => {
     const _poolAddress: string = "0x395326f1418F65F581693de55719c824ad48A367";
     const _secondPoolAddress: string =
       "0x7dA5E231478d5F5ACB45DBC122DE7846b676F715";
-    const _openCycleDuration: BigNumber = BigNumber.from(7 * 24 * 60 * 60); // 7 days
-    const _cycleDuration: BigNumber = BigNumber.from(30 * 24 * 60 * 60); // 30 days
-
+    const _openCycleDuration = getDaysInSeconds(7);
+    const _cycleDuration = getDaysInSeconds(30);
+    const _poolCycleParams: ProtectionPoolCycleParamsStruct = {
+      openCycleDuration: _openCycleDuration,
+      cycleDuration: _cycleDuration
+    };
     describe("implementation", async () => {
-      let poolCycleManagerImplementation: PoolCycleManager;
+      let poolCycleManagerImplementation: ProtectionPoolCycleManager;
 
       before(async () => {
         poolCycleManagerImplementation = (await ethers.getContractAt(
           "DefaultStateManager",
           await upgrades.erc1967.getImplementationAddress(
-            poolCycleManager.address
+            protectionPoolCycleManager.address
           )
-        )) as PoolCycleManager;
+        )) as ProtectionPoolCycleManager;
       });
 
       it("...should NOT have an owner on construction", async () => {
@@ -49,57 +53,61 @@ const testPoolCycleManager: Function = (
 
     describe("constructor", async () => {
       it("...should be valid instance", async () => {
-        expect(poolCycleManager).to.not.equal(undefined);
+        expect(protectionPoolCycleManager).to.not.equal(undefined);
       });
 
       it("...should set deployer as on owner", async () => {
-        expect(await poolCycleManager.owner()).to.equal(
+        expect(await protectionPoolCycleManager.owner()).to.equal(
           await deployer.getAddress()
         );
       });
 
       it("... should revert when initialize is called 2nd time", async () => {
-        await expect(poolCycleManager.initialize()).to.be.revertedWith(
-          "Initializable: contract is already initialized"
-        );
+        await expect(
+          protectionPoolCycleManager.initialize()
+        ).to.be.revertedWith("Initializable: contract is already initialized");
       });
     });
 
     describe("setContractFactory", async () => {
       it("...should fail when called by non-owner", async () => {
         await expect(
-          poolCycleManager.connect(account1).setContractFactory(ZERO_ADDRESS)
+          protectionPoolCycleManager
+            .connect(account1)
+            .setContractFactory(ZERO_ADDRESS)
         ).to.be.revertedWith("Ownable: caller is not the owner");
       });
 
       it("...should fail when address is zeo", async () => {
         await expect(
-          poolCycleManager.connect(deployer).setContractFactory(ZERO_ADDRESS)
+          protectionPoolCycleManager
+            .connect(deployer)
+            .setContractFactory(ZERO_ADDRESS)
         ).to.be.revertedWith("ZeroContractFactoryAddress");
       });
 
       it("...should work correctly by owner", async () => {
-        expect(await poolCycleManager.contractFactoryAddress()).to.equal(
-          contractFactoryAddress
-        );
+        expect(
+          await protectionPoolCycleManager.contractFactoryAddress()
+        ).to.equal(contractFactoryAddress);
 
         // Set deployer as contract factory for tests
-        await poolCycleManager
+        await protectionPoolCycleManager
           .connect(deployer)
           .setContractFactory(await deployer.getAddress());
 
-        expect(await poolCycleManager.contractFactoryAddress()).to.equal(
-          await deployer.getAddress()
-        );
+        expect(
+          await protectionPoolCycleManager.contractFactoryAddress()
+        ).to.equal(await deployer.getAddress());
       });
     });
 
     describe("registerPool", async () => {
       it("...should NOT be callable by non-pool-factory address", async () => {
         await expect(
-          poolCycleManager
+          protectionPoolCycleManager
             .connect(account1)
-            .registerPool(_poolAddress, _openCycleDuration, _cycleDuration)
+            .registerProtectionPool(_poolAddress, _poolCycleParams)
         ).to.be.revertedWith(
           `NotContractFactory("${await account1.getAddress()}")`
         );
@@ -107,55 +115,69 @@ const testPoolCycleManager: Function = (
 
       it("...should be able callable by only pool factory contract", async () => {
         await expect(
-          poolCycleManager
+          protectionPoolCycleManager
             .connect(deployer)
-            .registerPool(_poolAddress, _openCycleDuration, _cycleDuration)
+            .registerProtectionPool(_poolAddress, _poolCycleParams)
         )
-          .to.emit(poolCycleManager, "PoolCycleCreated")
+          .to.emit(protectionPoolCycleManager, "ProtectionPoolCycleCreated")
           .withArgs(
             _poolAddress,
             0,
             anyValue,
-            _openCycleDuration,
-            _cycleDuration
+            _poolCycleParams.openCycleDuration,
+            _poolCycleParams.cycleDuration
           );
       });
 
       it("...should NOT be able to register pool twice", async () => {
         await expect(
-          poolCycleManager
+          protectionPoolCycleManager
             .connect(deployer)
-            .registerPool(_poolAddress, _openCycleDuration, _cycleDuration)
+            .registerProtectionPool(_poolAddress, _poolCycleParams)
         ).to.be.revertedWith(`PoolAlreadyRegistered("${_poolAddress}")`);
       });
 
       it("...should NOT be able to register pool with openCycleDuration > cycleDuration", async () => {
+        const _newCycleParams: ProtectionPoolCycleParamsStruct = {
+          openCycleDuration: _openCycleDuration.add(
+            _poolCycleParams.cycleDuration
+          ),
+          cycleDuration: _poolCycleParams.cycleDuration
+        };
         await expect(
-          poolCycleManager
+          protectionPoolCycleManager
             .connect(deployer)
-            .registerPool(
-              _secondPoolAddress,
-              _openCycleDuration.add(_cycleDuration),
-              _cycleDuration
-            )
-        ).to.be.revertedWith(`InvalidCycleDuration(${_cycleDuration})`);
+            .registerProtectionPool(_secondPoolAddress, _newCycleParams)
+        ).to.be.revertedWith(
+          `InvalidCycleDuration(${_poolCycleParams.cycleDuration})`
+        );
       });
 
       it("...should create new cycle for the pool with correct params", async () => {
-        await poolCycleManager
+        await protectionPoolCycleManager
           .connect(deployer)
-          .registerPool(_secondPoolAddress, _openCycleDuration, _cycleDuration);
+          .registerProtectionPool(_secondPoolAddress, _poolCycleParams);
 
         expect(
-          await poolCycleManager.getCurrentCycleIndex(_secondPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleIndex(
+            _secondPoolAddress
+          )
         ).to.equal(0);
         expect(
-          await poolCycleManager.getCurrentCycleState(_secondPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleState(
+            _secondPoolAddress
+          )
         ).to.equal(1); // 1 = Open
 
-        const poolCycle = await poolCycleManager.poolCycles(_secondPoolAddress);
-        expect(poolCycle.openCycleDuration).to.equal(_openCycleDuration);
-        expect(poolCycle.cycleDuration).to.equal(_cycleDuration);
+        const poolCycle = await protectionPoolCycleManager.protectionPoolCycles(
+          _secondPoolAddress
+        );
+        expect(poolCycle.params.openCycleDuration).to.equal(
+          _poolCycleParams.openCycleDuration
+        );
+        expect(poolCycle.params.cycleDuration).to.equal(
+          _poolCycleParams.cycleDuration
+        );
         expect(poolCycle.currentCycleStartTime).to.equal(
           (await ethers.provider.getBlock("latest")).timestamp
         );
@@ -169,28 +191,35 @@ const testPoolCycleManager: Function = (
           2 * 24 * 60 * 60
         );
         const thirdCycleDuration: BigNumber = BigNumber.from(12 * 24 * 60 * 60);
-        await poolCycleManager
+        const thirdPoolCycleParams: ProtectionPoolCycleParamsStruct = {
+          openCycleDuration: thirdOpenCycleDuration,
+          cycleDuration: thirdCycleDuration
+        };
+        await protectionPoolCycleManager
           .connect(deployer)
-          .registerPool(
-            thirdPoolAddress,
-            thirdOpenCycleDuration,
-            thirdCycleDuration
-          );
+          .registerProtectionPool(thirdPoolAddress, thirdPoolCycleParams);
 
         expect(
-          await poolCycleManager.getCurrentCycleIndex(thirdPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleIndex(
+            thirdPoolAddress
+          )
         ).to.equal(0);
         expect(
-          await poolCycleManager.getCurrentCycleState(thirdPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleState(
+            thirdPoolAddress
+          )
         ).to.equal(1); // 1 = Open
 
-        const thirdPoolCycle = await poolCycleManager.poolCycles(
-          thirdPoolAddress
-        );
-        expect(thirdPoolCycle.openCycleDuration).to.equal(
+        const thirdPoolCycle =
+          await protectionPoolCycleManager.protectionPoolCycles(
+            thirdPoolAddress
+          );
+        expect(thirdPoolCycle.params.openCycleDuration).to.equal(
           thirdOpenCycleDuration
         );
-        expect(thirdPoolCycle.cycleDuration).to.equal(thirdCycleDuration);
+        expect(thirdPoolCycle.params.cycleDuration).to.equal(
+          thirdCycleDuration
+        );
         expect(thirdPoolCycle.currentCycleStartTime).to.equal(
           (await ethers.provider.getBlock("latest")).timestamp
         );
@@ -204,28 +233,34 @@ const testPoolCycleManager: Function = (
         const fourthCycleDuration: BigNumber = BigNumber.from(
           15 * 24 * 60 * 60
         );
-        await poolCycleManager
+        await protectionPoolCycleManager
           .connect(deployer)
-          .registerPool(
-            fourthPoolAddress,
-            fourthOpenCycleDuration,
-            fourthCycleDuration
-          );
+          .registerProtectionPool(fourthPoolAddress, {
+            openCycleDuration: fourthOpenCycleDuration,
+            cycleDuration: fourthCycleDuration
+          });
 
         expect(
-          await poolCycleManager.getCurrentCycleIndex(fourthPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleIndex(
+            fourthPoolAddress
+          )
         ).to.equal(0);
         expect(
-          await poolCycleManager.getCurrentCycleState(fourthPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleState(
+            fourthPoolAddress
+          )
         ).to.equal(1); // 1 = Open
 
-        const fourthPoolCycle = await poolCycleManager.poolCycles(
-          fourthPoolAddress
-        );
-        expect(fourthPoolCycle.openCycleDuration).to.equal(
+        const fourthPoolCycle =
+          await protectionPoolCycleManager.protectionPoolCycles(
+            fourthPoolAddress
+          );
+        expect(fourthPoolCycle.params.openCycleDuration).to.equal(
           fourthOpenCycleDuration
         );
-        expect(fourthPoolCycle.cycleDuration).to.equal(fourthCycleDuration);
+        expect(fourthPoolCycle.params.cycleDuration).to.equal(
+          fourthCycleDuration
+        );
         expect(fourthPoolCycle.currentCycleStartTime).to.equal(
           (await ethers.provider.getBlock("latest")).timestamp
         );
@@ -235,13 +270,16 @@ const testPoolCycleManager: Function = (
     describe("calculateAndSetPoolCycleState", async () => {
       let cycleStartTime: BigNumber;
       before(async () => {
-        cycleStartTime = (await poolCycleManager.poolCycles(_secondPoolAddress))
-          .currentCycleStartTime;
+        cycleStartTime = (
+          await protectionPoolCycleManager.protectionPoolCycles(
+            _secondPoolAddress
+          )
+        ).currentCycleStartTime;
       });
 
       it("...should have 'None' state for non-registered pool", async () => {
         expect(
-          await poolCycleManager.getCurrentCycleState(
+          await protectionPoolCycleManager.getCurrentCycleState(
             "0x9E775D89857E9ff1e76923fB45e296d3bf43b31f"
           )
         ).to.equal(0); // 0 = None
@@ -249,7 +287,9 @@ const testPoolCycleManager: Function = (
 
       it("...should stay in 'Open' state when less time than openCycleDuration has passed", async () => {
         expect(
-          await poolCycleManager.getCurrentCycleState(_secondPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleState(
+            _secondPoolAddress
+          )
         ).to.equal(1); // 1 = Open
 
         // Move time forward by openCycleDuration - 30 seconds
@@ -261,21 +301,27 @@ const testPoolCycleManager: Function = (
         );
         assert(currentTime < cycleStartTime.add(_openCycleDuration));
 
-        await poolCycleManager.calculateAndSetPoolCycleState(
+        await protectionPoolCycleManager.calculateAndSetPoolCycleState(
           _secondPoolAddress
         );
 
         expect(
-          await poolCycleManager.getCurrentCycleState(_secondPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleState(
+            _secondPoolAddress
+          )
         ).to.equal(1); // 1 = Open
         expect(
-          await poolCycleManager.getCurrentCycleIndex(_secondPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleIndex(
+            _secondPoolAddress
+          )
         ).to.equal(0);
       });
 
       it("...should move to 'Locked' state after openCycleDuration has passed", async () => {
         expect(
-          await poolCycleManager.getCurrentCycleState(_secondPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleState(
+            _secondPoolAddress
+          )
         ).to.equal(1); // 1 = Open
 
         // Move time forward by time left in openCycleDuration
@@ -287,21 +333,27 @@ const testPoolCycleManager: Function = (
         );
         assert(currentTime > cycleStartTime.add(_openCycleDuration));
 
-        await poolCycleManager.calculateAndSetPoolCycleState(
+        await protectionPoolCycleManager.calculateAndSetPoolCycleState(
           _secondPoolAddress
         );
 
         expect(
-          await poolCycleManager.getCurrentCycleState(_secondPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleState(
+            _secondPoolAddress
+          )
         ).to.equal(2); // 2 = Locked
         expect(
-          await poolCycleManager.getCurrentCycleIndex(_secondPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleIndex(
+            _secondPoolAddress
+          )
         ).to.equal(0);
       });
 
       it("...should stay in 'Locked' state when less time than cycleDuration has passed", async () => {
         expect(
-          await poolCycleManager.getCurrentCycleState(_secondPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleState(
+            _secondPoolAddress
+          )
         ).to.equal(2); // 2 = Locked
 
         // Move time forward by cycleDuration - 30 seconds
@@ -316,27 +368,33 @@ const testPoolCycleManager: Function = (
         );
         assert(currentTime < cycleStartTime.add(_cycleDuration));
 
-        await poolCycleManager.calculateAndSetPoolCycleState(
+        await protectionPoolCycleManager.calculateAndSetPoolCycleState(
           _secondPoolAddress
         );
 
         expect(
-          await poolCycleManager.getCurrentCycleState(_secondPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleState(
+            _secondPoolAddress
+          )
         ).to.equal(2); // 2 = Locked
         expect(
-          await poolCycleManager.getCurrentCycleIndex(_secondPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleIndex(
+            _secondPoolAddress
+          )
         ).to.equal(0);
       });
 
       it("...should create new cycle with 'Open' state after cycleDuration has passed", async () => {
         expect(
-          await poolCycleManager.getCurrentCycleState(_secondPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleState(
+            _secondPoolAddress
+          )
         ).to.equal(2); // 2 = Locked
 
         // Move time forward by time left in cycle
         await moveForwardTime(BigNumber.from(30));
 
-        await poolCycleManager.calculateAndSetPoolCycleState(
+        await protectionPoolCycleManager.calculateAndSetPoolCycleState(
           _secondPoolAddress
         );
 
@@ -347,20 +405,24 @@ const testPoolCycleManager: Function = (
         assert(currentTime > cycleStartTime.add(_cycleDuration));
 
         expect(
-          await poolCycleManager.getCurrentCycleState(_secondPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleState(
+            _secondPoolAddress
+          )
         ).to.equal(1); // 1 = Open
         expect(
-          await poolCycleManager.getCurrentCycleIndex(_secondPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleIndex(
+            _secondPoolAddress
+          )
         ).to.equal(1);
       });
     });
 
     describe("upgrade", () => {
-      let upgradedPoolCycleManager: PoolCycleManagerV2;
+      let upgradedPoolCycleManager: ProtectionPoolCycleManagerV2;
 
       it("... should revert when upgradeTo is called by non-owner", async () => {
         await expect(
-          poolCycleManager
+          protectionPoolCycleManager
             .connect(account1)
             .upgradeTo("0xA18173d6cf19e4Cc5a7F63780Fe4738b12E8b781")
         ).to.be.revertedWith("Ownable: caller is not the owner");
@@ -369,34 +431,36 @@ const testPoolCycleManager: Function = (
       it("... should fail upon invalid upgrade", async () => {
         try {
           await upgrades.validateUpgrade(
-            poolCycleManager.address,
-            await ethers.getContractFactory("PoolCycleManagerV2NotUpgradable"),
+            protectionPoolCycleManager.address,
+            await ethers.getContractFactory(
+              "ProtectionPoolCycleManagerV2NotUpgradable"
+            ),
             {
               kind: "uups"
             }
           );
         } catch (e: any) {
           expect(e.message).includes(
-            "Contract `contracts/test/PoolCycleManagerV2.sol:PoolCycleManagerV2NotUpgradable` is not upgrade safe"
+            "Contract `contracts/test/ProtectionPoolCycleManagerV2.sol:ProtectionPoolCycleManagerV2NotUpgradable` is not upgrade safe"
           );
         }
       });
 
       it("... should upgrade successfully", async () => {
         const poolCycleManagerV2Factory = await ethers.getContractFactory(
-          "PoolCycleManagerV2"
+          "ProtectionPoolCycleManagerV2"
         );
 
         // upgrade to v2
         upgradedPoolCycleManager = (await upgrades.upgradeProxy(
-          poolCycleManager.address,
+          protectionPoolCycleManager.address,
           poolCycleManagerV2Factory
-        )) as PoolCycleManagerV2;
+        )) as ProtectionPoolCycleManagerV2;
       });
 
       it("... should have same address after upgrade", async () => {
         expect(upgradedPoolCycleManager.address).to.be.equal(
-          poolCycleManager.address
+          protectionPoolCycleManager.address
         );
       });
 
@@ -413,11 +477,11 @@ const testPoolCycleManager: Function = (
     });
 
     after(async () => {
-      poolCycleManager
+      protectionPoolCycleManager
         .connect(deployer)
         .setContractFactory(contractFactoryAddress);
     });
   });
 };
 
-export { testPoolCycleManager };
+export { testProtectionPoolCycleManager };

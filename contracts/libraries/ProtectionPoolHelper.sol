@@ -5,7 +5,7 @@ import {EnumerableSetUpgradeable} from "@openzeppelin/contracts-upgradeable/util
 
 import {ProtectionPurchaseParams, LendingPoolStatus, IReferenceLendingPools} from "../interfaces/IReferenceLendingPools.sol";
 import {ProtectionPoolInfo, ProtectionInfo, ProtectionBuyerAccount, IProtectionPool, LendingPoolDetail, ProtectionPoolPhase} from "../interfaces/IProtectionPool.sol";
-import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
+import {IProtectionPoolCycleManager} from "../interfaces/IProtectionPoolCycleManager.sol";
 import {IDefaultStateManager} from "../interfaces/IDefaultStateManager.sol";
 import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
 
@@ -25,7 +25,7 @@ library ProtectionPoolHelper {
    * otherwise reverts with the appropriate error message.
    */
   function verifyProtection(
-    IPoolCycleManager poolCycleManager,
+    IProtectionPoolCycleManager poolCycleManager,
     IDefaultStateManager defaultStateManager,
     address _protectionPool,
     ProtectionPoolInfo storage poolInfo,
@@ -390,7 +390,7 @@ library ProtectionPoolHelper {
    * @dev Verify that the protection duration is valid, otherwise revert.
    */
   function _verifyProtectionDuration(
-    IPoolCycleManager poolCycleManager,
+    IProtectionPoolCycleManager poolCycleManager,
     address _poolAddress,
     uint256 _protectionStartTimestamp,
     uint256 _protectionDurationInSeconds,
