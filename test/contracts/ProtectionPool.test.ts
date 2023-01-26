@@ -47,8 +47,8 @@ const testProtectionPool: Function = (
     const PROTECTION_BUYER1_ADDRESS =
       "0x008c84421da5527f462886cec43d2717b686a7e4";
 
-    const _newFloor: BigNumber = BigNumber.from(100);
-    const _newCeiling: BigNumber = BigNumber.from(500);
+    const _newFloor: BigNumber = parseEther("0.4");
+    const _newCeiling: BigNumber = parseEther("1.1");
     let deployerAddress: string;
     let sellerAddress: string;
     let account4Address: string;
@@ -397,22 +397,6 @@ const testProtectionPool: Function = (
 
       it("...getAllProtections should return empty array", async () => {
         expect((await protectionPool.getAllProtections()).length).to.eq(0);
-      });
-    });
-
-    describe("updateFloor", () => {
-      it("...only the owner should be able to call the updateFloor function", async () => {
-        await expect(
-          protectionPool.connect(owner).updateFloor(_newFloor)
-        ).to.be.revertedWith("Ownable: caller is not the owner");
-      });
-    });
-
-    describe("updateCeiling", () => {
-      it("...only the owner should be able to call the updateCeiling function", async () => {
-        await expect(
-          protectionPool.connect(owner).updateCeiling(_newCeiling)
-        ).to.be.revertedWith("Ownable: caller is not the owner");
       });
     });
 
@@ -2395,6 +2379,88 @@ const testProtectionPool: Function = (
             )
           ).to.be.revertedWith("LendingPoolHasLatePayment");
         });
+      });
+    });
+
+    describe("updateLeverageRatioParams", () => {
+      const _newBuffer = parseEther("0.06");
+
+      it("...should revert when called by non-owner", async () => {
+        await expect(
+          protectionPool
+            .connect(account4)
+            .updateLeverageRatioParams(_newFloor, _newCeiling, _newBuffer)
+        ).to.be.revertedWith("Ownable: caller is not the owner");
+      });
+
+      it("...should be updatable by owner", async () => {
+        await protectionPool
+          .connect(deployer)
+          .updateLeverageRatioParams(_newFloor, _newCeiling, _newBuffer);
+
+        const poolInfo = await protectionPool.getPoolInfo();
+        expect(poolInfo.params.leverageRatioFloor).to.eq(_newFloor);
+        expect(poolInfo.params.leverageRatioCeiling).to.eq(_newCeiling);
+        expect(poolInfo.params.leverageRatioBuffer).to.eq(_newBuffer);
+      });
+    });
+
+    describe("updateRiskPremiumParams", () => {
+      const _newCurvature = parseEther("0.06");
+      const _newMinCarapaceRiskPremiumPercent = parseEther("0.04");
+      const _newUnderlyingRiskPremiumPercent = parseEther("0.12");
+
+      it("...should revert when called by non-owner", async () => {
+        await expect(
+          protectionPool
+            .connect(account4)
+            .updateRiskPremiumParams(
+              _newCurvature,
+              _newMinCarapaceRiskPremiumPercent,
+              _newUnderlyingRiskPremiumPercent
+            )
+        ).to.be.revertedWith("Ownable: caller is not the owner");
+      });
+
+      it("...should be updatable by owner", async () => {
+        await protectionPool
+          .connect(deployer)
+          .updateRiskPremiumParams(
+            _newCurvature,
+            _newMinCarapaceRiskPremiumPercent,
+            _newUnderlyingRiskPremiumPercent
+          );
+
+        const poolInfo = await protectionPool.getPoolInfo();
+        expect(poolInfo.params.curvature).to.eq(_newCurvature);
+        expect(poolInfo.params.minCarapaceRiskPremiumPercent).to.eq(
+          _newMinCarapaceRiskPremiumPercent
+        );
+        expect(poolInfo.params.underlyingRiskPremiumPercent).to.eq(
+          _newUnderlyingRiskPremiumPercent
+        );
+      });
+    });
+
+    describe("updateMinRequiredCapital", () => {
+      const _newMinRequiredCapital = parseUSDC("110000");
+      it("...should revert when called by non-owner", async () => {
+        await expect(
+          protectionPool
+            .connect(account4)
+            .updateMinRequiredCapital(_newMinRequiredCapital)
+        ).to.be.revertedWith("Ownable: caller is not the owner");
+      });
+
+      it("...should be updatable by owner", async () => {
+        await protectionPool
+          .connect(deployer)
+          .updateMinRequiredCapital(_newMinRequiredCapital);
+
+        const poolInfo = await protectionPool.getPoolInfo();
+        expect(poolInfo.params.minRequiredCapital).to.eq(
+          _newMinRequiredCapital
+        );
       });
     });
 

@@ -492,12 +492,49 @@ contract ProtectionPool is
     _unpause();
   }
 
-  function updateFloor(uint256 newFloor) external onlyOwner {
-    poolInfo.params.leverageRatioFloor = newFloor;
+  /**
+   * @notice Updates the leverage ratio parameters: floor, ceiling, and buffer.
+   * @notice Only callable by the owner.
+   * @param _leverageRatioFloor the new floor for the leverage ratio scaled by 18 decimals. i.e. 0.5 is 5 * 10^17
+   * @param _leverageRatioCeiling the new ceiling for the leverage ratio scaled by 18 decimals. i.e. 1.5 is 1.5 * 10^18
+   * @param _leverageRatioBuffer the new buffer for the leverage ratio scaled by 18 decimals. i.e. 0.05 is 5 * 10^16
+   */
+  function updateLeverageRatioParams(
+    uint256 _leverageRatioFloor,
+    uint256 _leverageRatioCeiling,
+    uint256 _leverageRatioBuffer
+  ) external onlyOwner {
+    poolInfo.params.leverageRatioFloor = _leverageRatioFloor;
+    poolInfo.params.leverageRatioCeiling = _leverageRatioCeiling;
+    poolInfo.params.leverageRatioBuffer = _leverageRatioBuffer;
   }
 
-  function updateCeiling(uint256 newCeiling) external onlyOwner {
-    poolInfo.params.leverageRatioCeiling = newCeiling;
+  /**
+   * @notice Updates risk premium calculation params: curvature, minCarapaceRiskPremiumPercent & underlyingRiskPremiumPercent
+   * @notice Only callable by the owner.
+   * @param _curvature the new curvature parameter scaled by 18 decimals. i.e. 0.05 curvature is 5 * 10^16
+   * @param _minCarapaceRiskPremiumPercent the new minCarapaceRiskPremiumPercent parameter scaled by 18 decimals. i.e. 0.03 is 3 * 10^16
+   * @param _underlyingRiskPremiumPercent the new underlyingRiskPremiumPercent parameter scaled by 18 decimals. i.e. 0.10 is 1 * 10^17
+   */
+  function updateRiskPremiumParams(uint256 _curvature, uint256 _minCarapaceRiskPremiumPercent, uint256 _underlyingRiskPremiumPercent)
+    external
+    onlyOwner
+  {
+    poolInfo.params.curvature = _curvature;
+    poolInfo.params.minCarapaceRiskPremiumPercent = _minCarapaceRiskPremiumPercent;
+    poolInfo.params.underlyingRiskPremiumPercent = _underlyingRiskPremiumPercent;
+  }
+
+  /**
+   * @notice Updates the minimum required capital for the protection pool
+   * @notice Only callable by the owner.
+   * @param _minRequiredCapital the new minimum required capital for the protection pool in underlying token
+   */
+  function updateMinRequiredCapital(uint256 _minRequiredCapital)
+    external
+    onlyOwner
+  {
+    poolInfo.params.minRequiredCapital = _minRequiredCapital;
   }
 
   /**
