@@ -10,8 +10,8 @@ import {UUPSUpgradeableBase} from "../../UUPSUpgradeableBase.sol";
 import {SToken} from "./SToken.sol";
 import {IPremiumCalculator} from "../../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools, LendingPoolStatus, ProtectionPurchaseParams} from "../../interfaces/IReferenceLendingPools.sol";
-import {IPoolCycleManager, CycleState} from "../../interfaces/IPoolCycleManager.sol";
-import {IProtectionPool, ProtectionPoolParams, ProtectionPoolCycleParams, ProtectionPoolInfo, ProtectionInfo, LendingPoolDetail, WithdrawalCycleDetail, ProtectionBuyerAccount, ProtectionPoolPhase} from "../../interfaces/IProtectionPool.sol";
+import {IProtectionPoolCycleManager, ProtectionPoolCycleState} from "../../interfaces/IProtectionPoolCycleManager.sol";
+import {IProtectionPool, ProtectionPoolParams, ProtectionPoolInfo, ProtectionInfo, LendingPoolDetail, WithdrawalCycleDetail, ProtectionBuyerAccount, ProtectionPoolPhase} from "../../interfaces/IProtectionPool.sol";
 import {IDefaultStateManager} from "../../interfaces/IDefaultStateManager.sol";
 
 import "../../libraries/AccruedPremiumCalculator.sol";
@@ -47,8 +47,8 @@ contract ProtectionPool is
   /// @notice Reference to the PremiumPricing contract
   IPremiumCalculator private premiumCalculator;
 
-  /// @notice Reference to the PoolCycleManager contract
-  IPoolCycleManager private poolCycleManager;
+  /// @notice Reference to the ProtectionPoolCycleManager contract
+  IProtectionPoolCycleManager private poolCycleManager;
 
   /// @notice Reference to default state manager contract
   IDefaultStateManager private defaultStateManager;
@@ -91,11 +91,11 @@ contract ProtectionPool is
   /// @notice Checks whether pool cycle is in open state. If not, reverts.
   modifier whenPoolIsOpen() {
     /// Update the pool cycle state
-    CycleState cycleState = poolCycleManager.calculateAndSetPoolCycleState(
+    ProtectionPoolCycleState cycleState = poolCycleManager.calculateAndSetPoolCycleState(
       address(this)
     );
 
-    if (cycleState != CycleState.Open) {
+    if (cycleState != ProtectionPoolCycleState.Open) {
       revert ProtectionPoolIsNotOpen();
     }
     _;
@@ -115,7 +115,7 @@ contract ProtectionPool is
     address _owner,
     ProtectionPoolInfo calldata _poolInfo,
     IPremiumCalculator _premiumCalculator,
-    IPoolCycleManager _poolCycleManager,
+    IProtectionPoolCycleManager _poolCycleManager,
     IDefaultStateManager _defaultStateManager,
     string calldata _name,
     string calldata _symbol
@@ -492,12 +492,49 @@ contract ProtectionPool is
     _unpause();
   }
 
-  function updateFloor(uint256 newFloor) external onlyOwner {
-    poolInfo.params.leverageRatioFloor = newFloor;
+  /**
+   * @notice Updates the leverage ratio parameters: floor, ceiling, and buffer.
+   * @notice Only callable by the owner.
+   * @param _leverageRatioFloor the new floor for the leverage ratio scaled by 18 decimals. i.e. 0.5 is 5 * 10^17
+   * @param _leverageRatioCeiling the new ceiling for the leverage ratio scaled by 18 decimals. i.e. 1.5 is 1.5 * 10^18
+   * @param _leverageRatioBuffer the new buffer for the leverage ratio scaled by 18 decimals. i.e. 0.05 is 5 * 10^16
+   */
+  function updateLeverageRatioParams(
+    uint256 _leverageRatioFloor,
+    uint256 _leverageRatioCeiling,
+    uint256 _leverageRatioBuffer
+  ) external onlyOwner {
+    poolInfo.params.leverageRatioFloor = _leverageRatioFloor;
+    poolInfo.params.leverageRatioCeiling = _leverageRatioCeiling;
+    poolInfo.params.leverageRatioBuffer = _leverageRatioBuffer;
   }
 
-  function updateCeiling(uint256 newCeiling) external onlyOwner {
-    poolInfo.params.leverageRatioCeiling = newCeiling;
+  /**
+   * @notice Updates risk premium calculation params: curvature, minCarapaceRiskPremiumPercent & underlyingRiskPremiumPercent
+   * @notice Only callable by the owner.
+   * @param _curvature the new curvature parameter scaled by 18 decimals. i.e. 0.05 curvature is 5 * 10^16
+   * @param _minCarapaceRiskPremiumPercent the new minCarapaceRiskPremiumPercent parameter scaled by 18 decimals. i.e. 0.03 is 3 * 10^16
+   * @param _underlyingRiskPremiumPercent the new underlyingRiskPremiumPercent parameter scaled by 18 decimals. i.e. 0.10 is 1 * 10^17
+   */
+  function updateRiskPremiumParams(uint256 _curvature, uint256 _minCarapaceRiskPremiumPercent, uint256 _underlyingRiskPremiumPercent)
+    external
+    onlyOwner
+  {
+    poolInfo.params.curvature = _curvature;
+    poolInfo.params.minCarapaceRiskPremiumPercent = _minCarapaceRiskPremiumPercent;
+    poolInfo.params.underlyingRiskPremiumPercent = _underlyingRiskPremiumPercent;
+  }
+
+  /**
+   * @notice Updates the minimum required capital for the protection pool
+   * @notice Only callable by the owner.
+   * @param _minRequiredCapital the new minimum required capital for the protection pool in underlying token
+   */
+  function updateMinRequiredCapital(uint256 _minRequiredCapital)
+    external
+    onlyOwner
+  {
+    poolInfo.params.minRequiredCapital = _minRequiredCapital;
   }
 
   /**

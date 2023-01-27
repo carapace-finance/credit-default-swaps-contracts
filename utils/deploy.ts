@@ -3,14 +3,12 @@ import { parseEther } from "ethers/lib/utils";
 import { ethers, upgrades } from "hardhat";
 import { USDC_ADDRESS } from "../test/utils/constants";
 import { ProtectionPool } from "../typechain-types/contracts/core/pool/ProtectionPool";
-import {
-  ProtectionPoolParamsStruct,
-  ProtectionPoolCycleParamsStruct
-} from "../typechain-types/contracts/interfaces/IProtectionPool";
+import { ProtectionPoolParamsStruct } from "../typechain-types/contracts/interfaces/IProtectionPool";
+import { ProtectionPoolCycleParamsStruct } from "../typechain-types/contracts/interfaces/IProtectionPoolCycleManager";
 import { ContractFactory as CPContractFactory } from "../typechain-types/contracts/core/ContractFactory";
 import { PremiumCalculator } from "../typechain-types/contracts/core/PremiumCalculator";
 import { ReferenceLendingPools } from "../typechain-types/contracts/core/pool/ReferenceLendingPools";
-import { PoolCycleManager } from "../typechain-types/contracts/core/PoolCycleManager";
+import { ProtectionPoolCycleManager } from "../typechain-types/contracts/core/ProtectionPoolCycleManager";
 import { AccruedPremiumCalculator } from "../typechain-types/contracts/libraries/AccruedPremiumCalculator";
 import { RiskFactorCalculator } from "../typechain-types/contracts/libraries/RiskFactorCalculator";
 import { GoldfinchAdapter } from "../typechain-types/contracts/adapters/GoldfinchAdapter";
@@ -30,7 +28,7 @@ let protectionPoolInstance: ProtectionPool;
 let cpContractFactoryInstance: CPContractFactory;
 let premiumCalculatorInstance: PremiumCalculator;
 let referenceLendingPoolsInstance: ReferenceLendingPools;
-let poolCycleManagerInstance: PoolCycleManager;
+let protectionPoolCycleManagerInstance: ProtectionPoolCycleManager;
 let accruedPremiumCalculatorInstance: AccruedPremiumCalculator;
 let riskFactorCalculatorInstance: RiskFactorCalculator;
 let goldfinchAdapterImplementation: GoldfinchAdapter;
@@ -114,15 +112,17 @@ const deployContracts: Function = async () => {
       premiumCalculatorInstance.address
     );
 
-    // Deploy a proxy to PoolCycleManager contract
-    const poolCycleManagerFactory = await contractFactory("PoolCycleManager");
-    poolCycleManagerInstance = (await upgrades.deployProxy(
-      poolCycleManagerFactory
-    )) as PoolCycleManager;
-    await poolCycleManagerInstance.deployed();
+    // Deploy a proxy to ProtectionPoolCycleManager contract
+    const protectionPoolCycleManagerFactory = await contractFactory(
+      "ProtectionPoolCycleManager"
+    );
+    protectionPoolCycleManagerInstance = (await upgrades.deployProxy(
+      protectionPoolCycleManagerFactory
+    )) as ProtectionPoolCycleManager;
+    await protectionPoolCycleManagerInstance.deployed();
     console.log(
-      "PoolCycleManager is deployed to: ",
-      poolCycleManagerInstance.address
+      "ProtectionPoolCycleManager is deployed to: ",
+      protectionPoolCycleManagerInstance.address
     );
 
     // Deploy a proxy to DefaultStateManager contract
@@ -156,7 +156,10 @@ const deployContracts: Function = async () => {
     const _cpContractFactoryFactory = await contractFactory("ContractFactory");
     cpContractFactoryInstance = (await upgrades.deployProxy(
       _cpContractFactoryFactory,
-      [poolCycleManagerInstance.address, defaultStateManagerInstance.address]
+      [
+        protectionPoolCycleManagerInstance.address,
+        defaultStateManagerInstance.address
+      ]
     )) as CPContractFactory;
     await cpContractFactoryInstance.deployed();
     console.log(
@@ -164,10 +167,10 @@ const deployContracts: Function = async () => {
       cpContractFactoryInstance.address
     );
 
-    /// Sets pool factory address into the PoolCycleManager & DefaultStateManager
-    /// This is required to enable the PoolCycleManager & DefaultStateManager to register a new pool when it is created
+    /// Sets pool factory address into the ProtectionPoolCycleManager & DefaultStateManager
+    /// This is required to enable the ProtectionPoolCycleManager & DefaultStateManager to register a new pool when it is created
     /// "setPoolFactory" must be called by the owner
-    await poolCycleManagerInstance
+    await protectionPoolCycleManagerInstance
       .connect(deployer)
       .setContractFactory(cpContractFactoryInstance.address);
     await defaultStateManagerInstance
@@ -254,13 +257,13 @@ const deployContracts: Function = async () => {
       minCarapaceRiskPremiumPercent: parseEther("0.02"),
       underlyingRiskPremiumPercent: parseEther("0.1"),
       minProtectionDurationInSeconds: getDaysInSeconds(10),
-      poolCycleParams: _poolCycleParams,
       protectionExtensionGracePeriodInSeconds: getDaysInSeconds(14) // 2 weeks
     };
 
     await cpContractFactoryInstance.createProtectionPool(
       protectionPoolImplementation.address,
       _poolParams,
+      _poolCycleParams,
       USDC_ADDRESS,
       referenceLendingPoolsInstance.address,
       premiumCalculatorInstance.address,
@@ -331,7 +334,7 @@ export {
   cpContractFactoryInstance,
   premiumCalculatorInstance,
   referenceLendingPoolsInstance, // This is the proxy instance cloned from implementation
-  poolCycleManagerInstance,
+  protectionPoolCycleManagerInstance,
   accruedPremiumCalculatorInstance,
   riskFactorCalculatorInstance,
   goldfinchAdapterImplementation,

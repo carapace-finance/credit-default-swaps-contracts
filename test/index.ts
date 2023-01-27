@@ -1,6 +1,6 @@
 import { testProtectionPool } from "./contracts/ProtectionPool.test";
 import { testContractFactory } from "./contracts/ContractFactory.test";
-import { testPoolCycleManager } from "./contracts/PoolCycleManager.test";
+import { testProtectionPoolCycleManager } from "./contracts/ProtectionPoolCycleManager.test";
 import { testAccruedPremiumCalculator } from "./contracts/AccruedPremiumCalculator.test";
 import { testPremiumCalculator } from "./contracts/PremiumCalculator.test";
 import { testRiskFactorCalculator } from "./contracts/RiskFactorCalculator.test";
@@ -21,7 +21,7 @@ import {
   cpContractFactoryInstance,
   premiumCalculatorInstance,
   referenceLendingPoolsInstance,
-  poolCycleManagerInstance,
+  protectionPoolCycleManagerInstance,
   accruedPremiumCalculatorInstance,
   riskFactorCalculatorInstance,
   goldfinchAdapterImplementation,
@@ -74,7 +74,7 @@ describe("start testing", () => {
         cpContractFactoryInstance,
         premiumCalculatorInstance,
         referenceLendingPoolsInstance,
-        poolCycleManagerInstance,
+        protectionPoolCycleManagerInstance,
         defaultStateManagerInstance,
         protectionPoolImplementation,
         referenceLendingPoolsImplementation,
@@ -103,7 +103,7 @@ describe("start testing", () => {
         protectionPoolInstance,
         protectionPoolImplementation,
         referenceLendingPoolsInstance,
-        poolCycleManagerInstance,
+        protectionPoolCycleManagerInstance,
         defaultStateManagerInstance,
         getProtectionPoolContractFactory
       );
@@ -122,11 +122,11 @@ describe("start testing", () => {
     });
 
     // Run this spec last because it moves time forward a lot and that impacts the pool tests
-    it("run the PoolCycleManager test", async () => {
-      testPoolCycleManager(
+    it("run the ProtectionPoolCycleManager test", async () => {
+      testProtectionPoolCycleManager(
         deployer,
         account1,
-        poolCycleManagerInstance,
+        protectionPoolCycleManagerInstance,
         cpContractFactoryInstance.address
       );
     });

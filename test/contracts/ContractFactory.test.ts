@@ -5,11 +5,9 @@ import { expect } from "chai";
 import { Signer } from "ethers";
 import { USDC_ADDRESS, ZERO_ADDRESS } from "../utils/constants";
 import { ethers, upgrades } from "hardhat";
-import { PoolCycleManager } from "../../typechain-types/contracts/core/PoolCycleManager";
-import {
-  ProtectionPoolParamsStruct,
-  ProtectionPoolCycleParamsStruct
-} from "../../typechain-types/contracts/interfaces/IProtectionPool";
+import { ProtectionPoolCycleManager } from "../../typechain-types/contracts/core/ProtectionPoolCycleManager";
+import { ProtectionPoolParamsStruct } from "../../typechain-types/contracts/interfaces/IProtectionPool";
+import { ProtectionPoolCycleParamsStruct } from "../../typechain-types/contracts/interfaces/IProtectionPoolCycleManager";
 import { ProtectionPool } from "../../typechain-types/contracts/core/pool/ProtectionPool";
 import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";
 import { ContractFactory } from "../../typechain-types/contracts/core/ContractFactory";
@@ -26,7 +24,7 @@ const testContractFactory: Function = (
   cpContractFactory: ContractFactory,
   premiumCalculator: PremiumCalculator,
   referenceLendingPools: ReferenceLendingPools,
-  poolCycleManager: PoolCycleManager,
+  protectionPoolCycleManager: ProtectionPoolCycleManager,
   defaultStateManager: DefaultStateManager,
   poolImplementation: ProtectionPool,
   referenceLendingPoolsImplementation: ReferenceLendingPools,
@@ -84,9 +82,9 @@ const testContractFactory: Function = (
     });
 
     describe("createPool", async () => {
-      const poolCycleParams: ProtectionPoolCycleParamsStruct = {
-        openCycleDuration: BigNumber.from(10 * 86400), // 10 days
-        cycleDuration: BigNumber.from(30 * 86400) // 30 days
+      const _poolCycleParams: ProtectionPoolCycleParamsStruct = {
+        openCycleDuration: getDaysInSeconds(10), // 10 days
+        cycleDuration: getDaysInSeconds(30) // 30 days
       };
       const _floor: BigNumber = BigNumber.from(100);
       const _ceiling: BigNumber = BigNumber.from(500);
@@ -99,7 +97,6 @@ const testContractFactory: Function = (
         minCarapaceRiskPremiumPercent: parseEther("0.02"),
         underlyingRiskPremiumPercent: parseEther("0.1"),
         minProtectionDurationInSeconds: getDaysInSeconds(10),
-        poolCycleParams: poolCycleParams,
         protectionExtensionGracePeriodInSeconds: getDaysInSeconds(14) // 2 weeks
       };
 
@@ -110,6 +107,7 @@ const testContractFactory: Function = (
             .createProtectionPool(
               poolImplementation.address,
               _poolParams,
+              _poolCycleParams,
               USDC_ADDRESS,
               referenceLendingPools.address,
               premiumCalculator.address,
@@ -122,10 +120,14 @@ const testContractFactory: Function = (
 
       it("...should have started a new pool cycle for 1st pool created", async () => {
         expect(
-          await poolCycleManager.getCurrentCycleIndex(_firstPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleIndex(
+            _firstPoolAddress
+          )
         ).to.equal(0);
         expect(
-          await poolCycleManager.getCurrentCycleState(_firstPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleState(
+            _firstPoolAddress
+          )
         ).to.equal(1); // 1 = Open
       });
 
@@ -136,6 +138,7 @@ const testContractFactory: Function = (
             .createProtectionPool(
               ZERO_ADDRESS,
               _poolParams,
+              _poolCycleParams,
               USDC_ADDRESS,
               referenceLendingPools.address,
               premiumCalculator.address,
@@ -154,6 +157,7 @@ const testContractFactory: Function = (
           cpContractFactory.createProtectionPool(
             poolImplementation.address,
             _poolParams,
+            _poolCycleParams,
             USDC_ADDRESS,
             referenceLendingPools.address,
             premiumCalculator.address,
@@ -173,14 +177,14 @@ const testContractFactory: Function = (
           )
           .emit(cpContractFactory, "OwnershipTransferred")
           .withArgs(await account1.getAddress(), await deployer.getAddress())
-          // Newly created pool should be registered to PoolCycleManager
-          .to.emit(poolCycleManager, "PoolCycleCreated")
+          // Newly created pool should be registered to ProtectionPoolCycleManager
+          .to.emit(protectionPoolCycleManager, "ProtectionPoolCycleCreated")
           .withArgs(
             _secondPoolAddress,
             0,
             expectedCycleStartTimestamp,
-            poolCycleParams.openCycleDuration,
-            poolCycleParams.cycleDuration
+            _poolCycleParams.openCycleDuration,
+            _poolCycleParams.cycleDuration
           )
           .emit(defaultStateManager, "PoolRegistered");
 
@@ -189,14 +193,21 @@ const testContractFactory: Function = (
 
       it("...should start new pool cycle for the second pool", async () => {
         expect(
-          await poolCycleManager.getCurrentCycleIndex(_secondPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleIndex(
+            _secondPoolAddress
+          )
         ).to.equal(0);
         expect(
-          await poolCycleManager.getCurrentCycleState(_secondPoolAddress)
+          await protectionPoolCycleManager.getCurrentCycleState(
+            _secondPoolAddress
+          )
         ).to.equal(1); // 1 = Open
         expect(
-          (await poolCycleManager.poolCycles(_secondPoolAddress))
-            .currentCycleStartTime
+          (
+            await protectionPoolCycleManager.protectionPoolCycles(
+              _secondPoolAddress
+            )
+          ).currentCycleStartTime
         ).to.equal((await ethers.provider.getBlock("latest")).timestamp);
       });
 

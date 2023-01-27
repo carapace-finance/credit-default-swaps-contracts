@@ -2,32 +2,38 @@
 pragma solidity ^0.8.13;
 
 /// @notice Represents various states of a pool cycle.
-enum CycleState {
+enum ProtectionPoolCycleState {
   None, // The cycle state for unregistered pools.
   Open, // The cycle is open for deposit & withdraw
   Locked // The cycle is in progress & locked for deposit & withdraw
 }
 
+/// @notice Contains pool cycle related parameters.
+struct ProtectionPoolCycleParams {
+  /// @notice Time duration for which cycle is OPEN, meaning withdraw from pool is allowed.
+  uint256 openCycleDuration;
+  /// @notice Total time duration of a cycle.
+  uint256 cycleDuration;
+}
+
 /// @notice Contains the current pool cycle info.
-struct PoolCycle {
+struct ProtectionPoolCycle {
+  /// @notice The pool cycle parameters.
+  ProtectionPoolCycleParams params;
   /// @notice The current cycle index of the pool.
   uint256 currentCycleIndex;
   /// @notice The start timestamp of the current cycle in seconds since unix epoch.
   uint256 currentCycleStartTime;
-  /// @notice Time duration in seconds for which cycle is OPEN, meaning deposits & withdrawals are allowed.
-  uint256 openCycleDuration;
-  /// @notice Total time duration of a cycle  in seconds.
-  uint256 cycleDuration;
   /// @notice Current state of the cycle.
-  CycleState currentCycleState;
+  ProtectionPoolCycleState currentCycleState;
 }
 
 /// @notice Contract to manage the current cycle of various pools.
-abstract contract IPoolCycleManager {
+abstract contract IProtectionPoolCycleManager {
   /*** events ***/
 
   /// @notice Emitted when a new pool cycle is created.
-  event PoolCycleCreated(
+  event ProtectionPoolCycleCreated(
     address poolAddress,
     uint256 cycleIndex,
     uint256 cycleStartTime,
@@ -37,7 +43,7 @@ abstract contract IPoolCycleManager {
 
   /*** errors ***/
   error NotContractFactory(address msgSender);
-  error PoolAlreadyRegistered(address poolAddress);
+  error ProtectionPoolAlreadyRegistered(address poolAddress);
   error InvalidCycleDuration(uint256 cycleDuration);
   error ZeroContractFactoryAddress();
 
@@ -48,15 +54,13 @@ abstract contract IPoolCycleManager {
   function setContractFactory(address _contractFactoryAddress) external virtual;
 
   /**
-   * @notice Registers the given pool and starts a new cycle for it in `Open` state.
+   * @notice Registers the given protection pool and starts a new cycle for it in `Open` state.
    * @param _poolAddress The address of the pool.
-   * @param _openCycleDuration Time duration for which cycle is OPEN, meaning deposit & withdraw is allowed.
-   * @param _cycleDuration The total duration of each pool cycle.
+   * @param _cycleParams The pool cycle parameters.
    */
-  function registerPool(
+  function registerProtectionPool(
     address _poolAddress,
-    uint256 _openCycleDuration,
-    uint256 _cycleDuration
+    ProtectionPoolCycleParams calldata _cycleParams
   ) external virtual;
 
   /**
@@ -68,7 +72,7 @@ abstract contract IPoolCycleManager {
   function calculateAndSetPoolCycleState(address _poolAddress)
     external
     virtual
-    returns (CycleState);
+    returns (ProtectionPoolCycleState);
 
   /**
    * @notice Provides the current cycle state of the pool with specified address.
@@ -79,7 +83,7 @@ abstract contract IPoolCycleManager {
     external
     view
     virtual
-    returns (CycleState);
+    returns (ProtectionPoolCycleState);
 
   /**
    * @notice Provides the current cycle index of the pool with specified address.
@@ -100,7 +104,7 @@ abstract contract IPoolCycleManager {
     external
     view
     virtual
-    returns (PoolCycle memory);
+    returns (ProtectionPoolCycle memory);
 
   /**
    * @notice Provides the timestamp of the end of the next cycle for the pool with specified address.

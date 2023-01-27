@@ -2,10 +2,8 @@ import { BigNumber } from "@ethersproject/bignumber";
 import { expect } from "chai";
 import { parseEther } from "ethers/lib/utils";
 import { Signer } from "ethers/lib/ethers";
-import {
-  ProtectionPoolParamsStruct,
-  ProtectionPoolCycleParamsStruct
-} from "../../typechain-types/contracts/interfaces/IProtectionPool";
+import { ProtectionPoolParamsStruct } from "../../typechain-types/contracts/interfaces/IProtectionPool";
+import { ProtectionPoolCycleParamsStruct } from "../../typechain-types/contracts/interfaces/IProtectionPoolCycleManager";
 import { parseUSDC } from "../utils/usdc";
 
 import { PremiumCalculator } from "../../typechain-types/contracts/core/PremiumCalculator";
@@ -28,7 +26,7 @@ const testPremiumCalculator: Function = (
     const _protectionAmt = parseEther("100000"); // 100k
     const _currentLeverageRatio = parseEther("0.15"); // 15%
     const _protectionBuyerApy = parseEther("0.17"); // 17%
-    const poolCycleParams: ProtectionPoolCycleParamsStruct = {
+    const _poolCycleParams: ProtectionPoolCycleParamsStruct = {
       openCycleDuration: BigNumber.from(10 * 86400), // 10 days
       cycleDuration: BigNumber.from(30 * 86400) // 30 days
     };
@@ -42,7 +40,6 @@ const testPremiumCalculator: Function = (
       minCarapaceRiskPremiumPercent: parseEther("0.02"), // 2%
       underlyingRiskPremiumPercent: parseEther("0.1"), // 10%
       minProtectionDurationInSeconds: getDaysInSeconds(10),
-      poolCycleParams: poolCycleParams,
       protectionExtensionGracePeriodInSeconds: getDaysInSeconds(10)
     };
 
