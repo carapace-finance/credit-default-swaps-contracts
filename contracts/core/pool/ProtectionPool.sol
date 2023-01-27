@@ -91,9 +91,8 @@ contract ProtectionPool is
   /// @notice Checks whether pool cycle is in open state. If not, reverts.
   modifier whenPoolIsOpen() {
     /// Update the pool cycle state
-    ProtectionPoolCycleState cycleState = poolCycleManager.calculateAndSetPoolCycleState(
-      address(this)
-    );
+    ProtectionPoolCycleState cycleState = poolCycleManager
+      .calculateAndSetPoolCycleState(address(this));
 
     if (cycleState != ProtectionPoolCycleState.Open) {
       revert ProtectionPoolIsNotOpen();
@@ -306,13 +305,19 @@ contract ProtectionPool is
   }
 
   /// @inheritdoc IProtectionPool
+  /// @dev Can't use 'calldata` for _lendingPools parameter because of potential re-assignment in the function
   function accruePremiumAndExpireProtections(address[] memory _lendingPools)
     external
     override
   {
+    /// When no lending pools are passed, accrue premium for all lending pools
     if (_lendingPools.length == 0) {
       _lendingPools = poolInfo.referenceLendingPools.getLendingPools();
     }
+
+    /// Track total premium accrued and protection removed for all lending pools
+    uint256 _totalPremiumAccrued;
+    uint256 _totalProtectionRemoved;
 
     /// Iterate all lending pools of this protection pool to check if there is new payment after last premium accrual
     uint256 length = _lendingPools.length;
@@ -327,6 +332,7 @@ contract ProtectionPool is
         .referenceLendingPools
         .getLatestPaymentTimestamp(_lendingPool);
 
+      /// Get the last premium accrual timestamp for the lending pool from the storage
       uint256 _lastPremiumAccrualTimestamp = lendingPoolDetail
         .lastPremiumAccrualTimestamp;
 
@@ -337,58 +343,22 @@ contract ProtectionPool is
         _latestPaymentTimestamp
       );
 
-      uint256[] memory _protectionIndexes = lendingPoolDetail
-        .activeProtectionIndexes
-        .values();
+      /// Iterate all active protections for this lending pool and
+      /// accrue premium and expire protections if there is new payment
+      (
+        uint256 _accruedPremiumForLendingPool,
+        uint256 _totalProtectionRemovedForLendingPool
+      ) = _accruePremiumAndExpireProtections(
+          lendingPoolDetail,
+          _lastPremiumAccrualTimestamp,
+          _latestPaymentTimestamp
+        );
+      _totalPremiumAccrued += _accruedPremiumForLendingPool;
+      _totalProtectionRemoved += _totalProtectionRemovedForLendingPool;
 
-      /// Iterate all protections for this lending pool
-      uint256 _accruedPremiumForLendingPool;
-      uint256 _length = _protectionIndexes.length;
-      for (uint256 j; j < _length; ) {
-        uint256 _protectionIndex = _protectionIndexes[j];
-        ProtectionInfo storage protectionInfo = protectionInfos[
-          _protectionIndex
-        ];
-
-        /// Verify & accrue premium for the protection and
-        /// if the protection is expired, then mark it as expired
-        (
-          uint256 _accruedPremiumInUnderlying,
-          bool _expired
-        ) = ProtectionPoolHelper.verifyAndAccruePremium(
-            poolInfo,
-            protectionInfo,
-            _lastPremiumAccrualTimestamp,
-            _latestPaymentTimestamp
-          );
-        totalPremiumAccrued += _accruedPremiumInUnderlying;
-        totalSTokenUnderlying += _accruedPremiumInUnderlying;
-        _accruedPremiumForLendingPool += _accruedPremiumInUnderlying;
-
-        if (_expired) {
-          /// Reduce the total protection amount of this protection pool
-          totalProtection -= protectionInfo.purchaseParams.protectionAmount;
-
-          ProtectionPoolHelper.expireProtection(
-            protectionBuyerAccounts,
-            protectionInfo,
-            lendingPoolDetail,
-            _protectionIndex
-          );
-          emit ProtectionExpired(
-            protectionInfo.buyer,
-            protectionInfo.purchaseParams.lendingPoolAddress,
-            protectionInfo.purchaseParams.protectionAmount
-          );
-        }
-
-        unchecked {
-          ++j;
-        }
-      }
-
+      /// Persist the last premium accrual of the lending pool in the storage,
+      /// only if there was premium accrued
       if (_accruedPremiumForLendingPool > 0) {
-        /// Persist the latest payment timestamp for the lending pool
         lendingPoolDetail.lastPremiumAccrualTimestamp = _latestPaymentTimestamp;
 
         emit PremiumAccrued(_lendingPool, _latestPaymentTimestamp);
@@ -397,6 +367,18 @@ contract ProtectionPool is
       unchecked {
         ++_lendingPoolIndex;
       }
+    }
+
+    /// Update the storage vars only when there was premium accrued
+    if (_totalPremiumAccrued > 0) {
+      totalPremiumAccrued += _totalPremiumAccrued;
+      totalSTokenUnderlying += _totalPremiumAccrued;
+    }
+
+    /// Reduce the total protection amount of this protection pool
+    /// by the total protection amount of the expired protections
+    if (_totalProtectionRemoved > 0) {
+      totalProtection -= _totalProtectionRemoved;
     }
   }
 
@@ -516,13 +498,18 @@ contract ProtectionPool is
    * @param _minCarapaceRiskPremiumPercent the new minCarapaceRiskPremiumPercent parameter scaled by 18 decimals. i.e. 0.03 is 3 * 10^16
    * @param _underlyingRiskPremiumPercent the new underlyingRiskPremiumPercent parameter scaled by 18 decimals. i.e. 0.10 is 1 * 10^17
    */
-  function updateRiskPremiumParams(uint256 _curvature, uint256 _minCarapaceRiskPremiumPercent, uint256 _underlyingRiskPremiumPercent)
-    external
-    onlyOwner
-  {
+  function updateRiskPremiumParams(
+    uint256 _curvature,
+    uint256 _minCarapaceRiskPremiumPercent,
+    uint256 _underlyingRiskPremiumPercent
+  ) external onlyOwner {
     poolInfo.params.curvature = _curvature;
-    poolInfo.params.minCarapaceRiskPremiumPercent = _minCarapaceRiskPremiumPercent;
-    poolInfo.params.underlyingRiskPremiumPercent = _underlyingRiskPremiumPercent;
+    poolInfo
+      .params
+      .minCarapaceRiskPremiumPercent = _minCarapaceRiskPremiumPercent;
+    poolInfo
+      .params
+      .underlyingRiskPremiumPercent = _underlyingRiskPremiumPercent;
   }
 
   /**
@@ -541,11 +528,18 @@ contract ProtectionPool is
    * @notice Allows the owner to move pool phase after verification
    * @return _newPhase the new phase of the pool, if the phase is updated
    */
-  function movePoolPhase() external onlyOwner returns (ProtectionPoolPhase _newPhase) {
+  function movePoolPhase()
+    external
+    onlyOwner
+    returns (ProtectionPoolPhase _newPhase)
+  {
     ProtectionPoolPhase _currentPhase = poolInfo.currentPhase;
 
     /// when the pool is in OpenToSellers phase, it can be moved to OpenToBuyers phase
-    if (_currentPhase == ProtectionPoolPhase.OpenToSellers && _hasMinRequiredCapital()) {
+    if (
+      _currentPhase == ProtectionPoolPhase.OpenToSellers &&
+      _hasMinRequiredCapital()
+    ) {
       poolInfo.currentPhase = _newPhase = ProtectionPoolPhase.OpenToBuyers;
       emit ProtectionPoolPhaseUpdated(_newPhase);
     } else if (_currentPhase == ProtectionPoolPhase.OpenToBuyers) {
@@ -563,7 +557,12 @@ contract ProtectionPool is
   /** view functions */
 
   /// @inheritdoc IProtectionPool
-  function getPoolInfo() external view override returns (ProtectionPoolInfo memory) {
+  function getPoolInfo()
+    external
+    view
+    override
+    returns (ProtectionPoolInfo memory)
+  {
     return poolInfo;
   }
 
@@ -879,7 +878,6 @@ contract ProtectionPool is
       address(this),
       _premiumAmount
     );
-
   }
 
   /**
@@ -922,5 +920,71 @@ contract ProtectionPool is
     }
 
     return (_totalCapital * Constants.SCALE_18_DECIMALS) / totalProtection;
+  }
+
+  /**
+   * @dev Accrue premium for all active protections and mark expired protections for the specified lending pool.
+   * Premium is only accrued when the lending pool has a new payment.
+   * @return _accruedPremiumForLendingPool the total premium accrued for the lending pool
+   * @return _totalProtectionRemoved the total protection removed because of expired protections
+   */
+  function _accruePremiumAndExpireProtections(
+    LendingPoolDetail storage lendingPoolDetail,
+    uint256 _lastPremiumAccrualTimestamp,
+    uint256 _latestPaymentTimestamp
+  )
+    internal
+    returns (
+      uint256 _accruedPremiumForLendingPool,
+      uint256 _totalProtectionRemoved
+    )
+  {
+    /// Get all active protection indexes for the lending pool
+    uint256[] memory _protectionIndexes = lendingPoolDetail
+      .activeProtectionIndexes
+      .values();
+
+    /// Iterate through all active protection indexes for the lending pool
+    uint256 _length = _protectionIndexes.length;
+    for (uint256 j; j < _length; ) {
+      uint256 _protectionIndex = _protectionIndexes[j];
+      ProtectionInfo storage protectionInfo = protectionInfos[_protectionIndex];
+
+      /// Verify & accrue premium for the protection and
+      /// if the protection is expired, then mark it as expired
+      (
+        uint256 _accruedPremiumInUnderlying,
+        bool _expired
+      ) = ProtectionPoolHelper.verifyAndAccruePremium(
+          poolInfo,
+          protectionInfo,
+          _lastPremiumAccrualTimestamp,
+          _latestPaymentTimestamp
+        );
+      _accruedPremiumForLendingPool += _accruedPremiumInUnderlying;
+
+      if (_expired) {
+        /// Add removed protection amount to the total protection removed
+        _totalProtectionRemoved += protectionInfo
+          .purchaseParams
+          .protectionAmount;
+
+        ProtectionPoolHelper.expireProtection(
+          protectionBuyerAccounts,
+          protectionInfo,
+          lendingPoolDetail,
+          _protectionIndex
+        );
+        emit ProtectionExpired(
+          protectionInfo.buyer,
+          protectionInfo.purchaseParams.lendingPoolAddress,
+          protectionInfo.purchaseParams.protectionAmount
+        );
+      }
+
+      unchecked {
+        ++j;
+      }
+    }
   }
 }
