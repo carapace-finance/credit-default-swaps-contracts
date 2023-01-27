@@ -6,7 +6,7 @@ import {AddressUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Addr
 
 import {OwnableUpgradeable, UUPSUpgradeableBase} from "../UUPSUpgradeableBase.sol";
 import {ERC1967Proxy} from "../external/openzeppelin/ERC1967/ERC1967Proxy.sol";
-import {IPool, PoolParams, PoolInfo, PoolPhase} from "../interfaces/IPool.sol";
+import {IProtectionPool, ProtectionPoolParams, ProtectionPoolInfo, ProtectionPoolPhase} from "../interfaces/IProtectionPool.sol";
 import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools} from "../interfaces/IReferenceLendingPools.sol";
 import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
@@ -21,7 +21,7 @@ import "../libraries/Constants.sol";
  * @title ContractFactory
  * @author Carapace Finance
  * @notice This contract is used to create new upgradable instances of following contracts using ERC1967 proxy:
- * {IPool}, {IReferenceLendingPools} and {ILendingProtocolAdapter}
+ * {IProtectionPool}, {IReferenceLendingPools} and {ILendingProtocolAdapter}
  * This factory contract is also upgradeable using the UUPS pattern.
  */
 contract ContractFactory is
@@ -42,7 +42,7 @@ contract ContractFactory is
   IDefaultStateManager private defaultStateManager;
 
   /// @notice list of all pools created by this factory
-  address[] private pools;
+  address[] private protectionPools;
 
   /// @notice list of all reference lending pools created by this factory
   address[] private referenceLendingPoolsList;
@@ -96,7 +96,7 @@ contract ContractFactory is
   /*** state-changing functions ***/
 
   /**
-   * @param _poolImpl An address of a pool implementation.
+   * @param _poolImpl An address of a ProtectionPool implementation.
    * @param _poolParameters struct containing pool related parameters.
    * @param _underlyingToken an address of an underlying token
    * @param _referenceLendingPools an address of the ReferenceLendingPools contract
@@ -104,9 +104,9 @@ contract ContractFactory is
    * @param _name a name of the sToken
    * @param _symbol a symbol of the sToken
    */
-  function createPool(
+  function createProtectionPool(
     address _poolImpl,
-    PoolParams calldata _poolParameters,
+    ProtectionPoolParams calldata _poolParameters,
     IERC20MetadataUpgradeable _underlyingToken,
     IReferenceLendingPools _referenceLendingPools,
     IPremiumCalculator _premiumCalculator,
@@ -117,14 +117,14 @@ contract ContractFactory is
     ERC1967Proxy _poolProxy = new ERC1967Proxy(
       _poolImpl,
       abi.encodeWithSelector(
-        IPool(address(0)).initialize.selector,
+        IProtectionPool(address(0)).initialize.selector,
         _msgSender(),
-        PoolInfo({
+        ProtectionPoolInfo({
           poolAddress: address(0),
           params: _poolParameters,
           underlyingToken: _underlyingToken,
           referenceLendingPools: _referenceLendingPools,
-          currentPhase: PoolPhase.OpenToSellers
+          currentPhase: ProtectionPoolPhase.OpenToSellers
         }),
         _premiumCalculator,
         poolCycleManager,
@@ -134,7 +134,7 @@ contract ContractFactory is
       )
     );
     address _poolProxyAddress = address(_poolProxy);
-    pools.push(_poolProxyAddress);
+    protectionPools.push(_poolProxyAddress);
 
     /// register newly created pool to the pool cycle manager
     poolCycleManager.registerPool(
@@ -220,10 +220,10 @@ contract ContractFactory is
   /*** view functions ***/
 
   /**
-   * @notice Returns all pools created by this factory.
+   * @notice Returns all protection pools created by this factory.
    */
-  function getPools() external view returns (address[] memory) {
-    return pools;
+  function getProtectionPools() external view returns (address[] memory) {
+    return protectionPools;
   }
 
   /**

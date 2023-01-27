@@ -2,7 +2,7 @@ import { DefaultStateManager } from "../../typechain-types/contracts/core/Defaul
 import { expect } from "chai";
 import { Contract, Signer, ContractFactory } from "ethers";
 import { ZERO_ADDRESS } from "../utils/constants";
-import { Pool } from "../../typechain-types/contracts/core/pool/Pool";
+import { ProtectionPool } from "../../typechain-types/contracts/core/pool/ProtectionPool";
 import { ContractFactory as CPContractFactory } from "../../typechain-types/contracts/core/ContractFactory";
 import { ethers, upgrades } from "hardhat";
 import {
@@ -29,7 +29,7 @@ const testDefaultStateManager: Function = (
   seller: Signer,
   defaultStateManager: DefaultStateManager,
   contractFactory: CPContractFactory,
-  poolInstance: Pool,
+  poolInstance: ProtectionPool,
   lendingPools: string[]
 ) => {
   describe("DefaultStateManager", () => {
@@ -80,7 +80,7 @@ const testDefaultStateManager: Function = (
 
       usdcContract = getUsdcContract(deployer);
       pool1 = poolInstance.address;
-      pool2 = (await contractFactory.getPools())[1];
+      pool2 = (await contractFactory.getProtectionPools())[1];
       sellerAddress = await seller.getAddress();
 
       referenceLendingPoolsInstance = (await ethers.getContractAt(

@@ -6,7 +6,7 @@ import {ERC20SnapshotUpgradeable} from "@openzeppelin/contracts-upgradeable/toke
 import {UUPSUpgradeableBase} from "../UUPSUpgradeableBase.sol";
 import {IReferenceLendingPools, LendingPoolStatus} from "../interfaces/IReferenceLendingPools.sol";
 import {ILendingProtocolAdapter} from "../interfaces/ILendingProtocolAdapter.sol";
-import {IPool} from "../interfaces/IPool.sol";
+import {IProtectionPool} from "../interfaces/IProtectionPool.sol";
 import {IDefaultStateManager, PoolState, LockedCapital, LendingPoolStatusDetail} from "../interfaces/IDefaultStateManager.sol";
 import "../libraries/Constants.sol";
 
@@ -95,7 +95,9 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
     }
 
     poolStates.push();
-    poolStates[newIndex].protectionPool = IPool(_protectionPoolAddress);
+    poolStates[newIndex].protectionPool = IProtectionPool(
+      _protectionPoolAddress
+    );
     poolStateIndex[_protectionPoolAddress] = newIndex;
 
     _assessState(poolStates[newIndex]);
@@ -334,7 +336,7 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
     PoolState storage poolState,
     address _lendingPool
   ) internal {
-    IPool _protectionPool = poolState.protectionPool;
+    IProtectionPool _protectionPool = poolState.protectionPool;
 
     /// step 1: calculate the capital amount to be locked
     (uint256 _capitalToLock, uint256 _snapshotId) = _protectionPool.lockCapital(

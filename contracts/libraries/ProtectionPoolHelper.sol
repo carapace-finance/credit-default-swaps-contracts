@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import {EnumerableSetUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
 
 import {ProtectionPurchaseParams, LendingPoolStatus, IReferenceLendingPools} from "../interfaces/IReferenceLendingPools.sol";
-import {PoolInfo, ProtectionInfo, ProtectionBuyerAccount, IPool, LendingPoolDetail, PoolPhase} from "../interfaces/IPool.sol";
+import {ProtectionPoolInfo, ProtectionInfo, ProtectionBuyerAccount, IProtectionPool, LendingPoolDetail, ProtectionPoolPhase} from "../interfaces/IProtectionPool.sol";
 import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
 import {IDefaultStateManager} from "../interfaces/IDefaultStateManager.sol";
 import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
@@ -15,9 +15,9 @@ import "./Constants.sol";
 import "hardhat/console.sol";
 
 /**
- * @notice Helper library for Pool contract, mainly for size reduction.
+ * @notice Helper library for ProtectionPool contract, mainly for size reduction.
  */
-library PoolHelper {
+library ProtectionPoolHelper {
   using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
 
   /**
@@ -28,14 +28,14 @@ library PoolHelper {
     IPoolCycleManager poolCycleManager,
     IDefaultStateManager defaultStateManager,
     address _protectionPool,
-    PoolInfo storage poolInfo,
+    ProtectionPoolInfo storage poolInfo,
     uint256 _protectionStartTimestamp,
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
     bool _isExtension
   ) external {
     /// Verify that the pool is not in OpenToSellers phase
-    if (poolInfo.currentPhase == PoolPhase.OpenToSellers) {
-      revert IPool.PoolInOpenToSellersPhase();
+    if (poolInfo.currentPhase == ProtectionPoolPhase.OpenToSellers) {
+      revert IProtectionPool.ProtectionPoolInOpenToSellersPhase();
     }
 
     /// a buyer needs to buy protection longer than min protection duration specified in the pool params
@@ -64,7 +64,9 @@ library PoolHelper {
         _isExtension
       )
     ) {
-      revert IPool.ProtectionPurchaseNotAllowed(_protectionPurchaseParams);
+      revert IProtectionPool.ProtectionPurchaseNotAllowed(
+        _protectionPurchaseParams
+      );
     }
   }
 
@@ -76,7 +78,7 @@ library PoolHelper {
    */
   function calculateProtectionPremium(
     IPremiumCalculator premiumCalculator,
-    PoolInfo storage poolInfo,
+    ProtectionPoolInfo storage poolInfo,
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
     uint256 totalSTokenUnderlying,
     uint256 _leverageRatio
@@ -121,7 +123,7 @@ library PoolHelper {
   function calculateAndTrackPremium(
     IPremiumCalculator premiumCalculator,
     mapping(address => ProtectionBuyerAccount) storage protectionBuyerAccounts,
-    PoolInfo storage poolInfo,
+    ProtectionPoolInfo storage poolInfo,
     LendingPoolDetail storage lendingPoolDetail,
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
     uint256 _maxPremiumAmount,
@@ -150,7 +152,7 @@ library PoolHelper {
 
     // If calculated premium amount is higher than the max premium amount, revert.
     if (_premiumAmount > _maxPremiumAmount) {
-      revert IPool.PremiumExceedsMaxPremiumAmount(
+      revert IProtectionPool.PremiumExceedsMaxPremiumAmount(
         _premiumAmount,
         _maxPremiumAmount
       );
@@ -173,7 +175,7 @@ library PoolHelper {
    * @return _protectionExpired Whether the loan protection has expired or not.
    */
   function verifyAndAccruePremium(
-    PoolInfo storage poolInfo,
+    ProtectionPoolInfo storage poolInfo,
     ProtectionInfo storage protectionInfo,
     uint256 _lastPremiumAccrualTimestamp,
     uint256 _latestPaymentTimestamp
@@ -322,7 +324,7 @@ library PoolHelper {
       ][_protectionPurchaseParams.nftLpTokenId];
 
     if (_expiredProtectionIndex == 0) {
-      revert IPool.NoExpiredProtectionToExtend();
+      revert IProtectionPool.NoExpiredProtectionToExtend();
     }
 
     ProtectionInfo storage expiredProtectionInfo = protectionInfos[
@@ -346,7 +348,7 @@ library PoolHelper {
           expiredProtectionPurchaseParams.protectionDurationInSeconds +
           _extensionGracePeriodInSeconds)
       ) {
-        revert IPool.CanNotExtendProtectionAfterGracePeriod();
+        revert IProtectionPool.CanNotExtendProtectionAfterGracePeriod();
       }
     }
   }
@@ -365,22 +367,22 @@ library PoolHelper {
     );
 
     if (poolStatus == LendingPoolStatus.NotSupported) {
-      revert IPool.LendingPoolNotSupported(_lendingPoolAddress);
+      revert IProtectionPool.LendingPoolNotSupported(_lendingPoolAddress);
     }
 
     if (
       poolStatus == LendingPoolStatus.LateWithinGracePeriod ||
       poolStatus == LendingPoolStatus.Late
     ) {
-      revert IPool.LendingPoolHasLatePayment(_lendingPoolAddress);
+      revert IProtectionPool.LendingPoolHasLatePayment(_lendingPoolAddress);
     }
 
     if (poolStatus == LendingPoolStatus.Expired) {
-      revert IPool.LendingPoolExpired(_lendingPoolAddress);
+      revert IProtectionPool.LendingPoolExpired(_lendingPoolAddress);
     }
 
     if (poolStatus == LendingPoolStatus.Defaulted) {
-      revert IPool.LendingPoolDefaulted(_lendingPoolAddress);
+      revert IProtectionPool.LendingPoolDefaulted(_lendingPoolAddress);
     }
   }
 
@@ -398,7 +400,9 @@ library PoolHelper {
       _protectionDurationInSeconds;
     /// protection duration must be longer than specified minimum
     if (_protectionDurationInSeconds < _minProtectionDurationInSeconds) {
-      revert IPool.ProtectionDurationTooShort(_protectionDurationInSeconds);
+      revert IProtectionPool.ProtectionDurationTooShort(
+        _protectionDurationInSeconds
+      );
     }
 
     /// protection expiry can not be be after the next cycle end
@@ -408,7 +412,9 @@ library PoolHelper {
     );
 
     if (_protectionExpirationTimestamp > _nextCycleEndTimestamp) {
-      revert IPool.ProtectionDurationTooLong(_protectionDurationInSeconds);
+      revert IProtectionPool.ProtectionDurationTooLong(
+        _protectionDurationInSeconds
+      );
     }
   }
 }

@@ -11,26 +11,26 @@ import {SToken} from "./SToken.sol";
 import {IPremiumCalculator} from "../../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools, LendingPoolStatus, ProtectionPurchaseParams} from "../../interfaces/IReferenceLendingPools.sol";
 import {IPoolCycleManager, CycleState} from "../../interfaces/IPoolCycleManager.sol";
-import {IPool, PoolParams, PoolCycleParams, PoolInfo, ProtectionInfo, LendingPoolDetail, WithdrawalCycleDetail, ProtectionBuyerAccount, PoolPhase} from "../../interfaces/IPool.sol";
+import {IProtectionPool, ProtectionPoolParams, ProtectionPoolCycleParams, ProtectionPoolInfo, ProtectionInfo, LendingPoolDetail, WithdrawalCycleDetail, ProtectionBuyerAccount, ProtectionPoolPhase} from "../../interfaces/IProtectionPool.sol";
 import {IDefaultStateManager} from "../../interfaces/IDefaultStateManager.sol";
 
 import "../../libraries/AccruedPremiumCalculator.sol";
 import "../../libraries/Constants.sol";
-import "../../libraries/PoolHelper.sol";
+import "../../libraries/ProtectionPoolHelper.sol";
 
 import "hardhat/console.sol";
 
 /**
- * @title Pool
+ * @title ProtectionPool
  * @author Carapace Finance
- * @notice Each pool is a market where protection sellers
+ * @notice Each protection pool is a market where protection sellers
  * and buyers can swap credit default risks of designated/referenced underlying loans.
  * This contract is upgradeable using the UUPS pattern.
  */
-contract Pool is
+contract ProtectionPool is
   UUPSUpgradeableBase,
   ReentrancyGuardUpgradeable,
-  IPool,
+  IProtectionPool,
   SToken
 {
   /*** libraries ***/
@@ -53,8 +53,8 @@ contract Pool is
   /// @notice Reference to default state manager contract
   IDefaultStateManager private defaultStateManager;
 
-  /// @notice information about this pool
-  PoolInfo private poolInfo;
+  /// @notice information about this protection pool
+  ProtectionPoolInfo private poolInfo;
 
   /// @notice The total underlying amount of premium from protection buyers accumulated in the pool
   uint256 public totalPremium;
@@ -96,7 +96,7 @@ contract Pool is
     );
 
     if (cycleState != CycleState.Open) {
-      revert PoolIsNotOpen();
+      revert ProtectionPoolIsNotOpen();
     }
     _;
   }
@@ -110,10 +110,10 @@ contract Pool is
 
   /*** initializer ***/
 
-  /// @inheritdoc IPool
+  /// @inheritdoc IProtectionPool
   function initialize(
     address _owner,
-    PoolInfo calldata _poolInfo,
+    ProtectionPoolInfo calldata _poolInfo,
     IPremiumCalculator _premiumCalculator,
     IPoolCycleManager _poolCycleManager,
     IDefaultStateManager _defaultStateManager,
@@ -131,7 +131,7 @@ contract Pool is
     poolCycleManager = _poolCycleManager;
     defaultStateManager = _defaultStateManager;
 
-    emit PoolInitialized(
+    emit ProtectionPoolInitialized(
       _name,
       _symbol,
       poolInfo.underlyingToken,
@@ -146,7 +146,7 @@ contract Pool is
 
   /*** state-changing functions ***/
 
-  /// @inheritdoc IPool
+  /// @inheritdoc IProtectionPool
   function buyProtection(
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
     uint256 _maxPremiumAmount
@@ -159,13 +159,13 @@ contract Pool is
     );
   }
 
-  /// @inheritdoc IPool
+  /// @inheritdoc IProtectionPool
   function extendProtection(
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
     uint256 _maxPremiumAmount
   ) external override whenNotPaused nonReentrant {
     /// Verify that user can extend protection
-    PoolHelper.verifyBuyerCanExtendProtection(
+    ProtectionPoolHelper.verifyBuyerCanExtendProtection(
       protectionBuyerAccounts,
       protectionInfos,
       _protectionPurchaseParams,
@@ -180,7 +180,7 @@ contract Pool is
     );
   }
 
-  /// @inheritdoc IPool
+  /// @inheritdoc IProtectionPool
   function deposit(uint256 _underlyingAmount, address _receiver)
     external
     override
@@ -188,8 +188,8 @@ contract Pool is
     nonReentrant
   {
     /// Verify that the pool is not in OpenToBuyers phase
-    if (poolInfo.currentPhase == PoolPhase.OpenToBuyers) {
-      revert PoolInOpenToBuyersPhase();
+    if (poolInfo.currentPhase == ProtectionPoolPhase.OpenToBuyers) {
+      revert ProtectionPoolInOpenToBuyersPhase();
     }
 
     uint256 _sTokenShares = convertToSToken(_underlyingAmount);
@@ -207,14 +207,14 @@ contract Pool is
       uint256 _leverageRatio = calculateLeverageRatio();
 
       if (_leverageRatio > poolInfo.params.leverageRatioCeiling) {
-        revert PoolLeverageRatioTooHigh(_leverageRatio);
+        revert ProtectionPoolLeverageRatioTooHigh(_leverageRatio);
       }
     }
 
     emit ProtectionSold(_receiver, _underlyingAmount);
   }
 
-  /// @inheritdoc IPool
+  /// @inheritdoc IProtectionPool
   function requestWithdrawal(uint256 _sTokenAmount)
     external
     override
@@ -253,7 +253,7 @@ contract Pool is
     emit WithdrawalRequested(msg.sender, _sTokenAmount, _withdrawalCycleIndex);
   }
 
-  /// @inheritdoc IPool
+  /// @inheritdoc IProtectionPool
   function withdraw(uint256 _sTokenWithdrawalAmount, address _receiver)
     external
     override
@@ -305,7 +305,7 @@ contract Pool is
     emit WithdrawalMade(msg.sender, _sTokenWithdrawalAmount, _receiver);
   }
 
-  /// @inheritdoc IPool
+  /// @inheritdoc IProtectionPool
   function accruePremiumAndExpireProtections(address[] memory _lendingPools)
     external
     override
@@ -352,8 +352,10 @@ contract Pool is
 
         /// Verify & accrue premium for the protection and
         /// if the protection is expired, then mark it as expired
-        (uint256 _accruedPremiumInUnderlying, bool _expired) = PoolHelper
-          .verifyAndAccruePremium(
+        (
+          uint256 _accruedPremiumInUnderlying,
+          bool _expired
+        ) = ProtectionPoolHelper.verifyAndAccruePremium(
             poolInfo,
             protectionInfo,
             _lastPremiumAccrualTimestamp,
@@ -367,7 +369,7 @@ contract Pool is
           /// Reduce the total protection amount of this protection pool
           totalProtection -= protectionInfo.purchaseParams.protectionAmount;
 
-          PoolHelper.expireProtection(
+          ProtectionPoolHelper.expireProtection(
             protectionBuyerAccounts,
             protectionInfo,
             lendingPoolDetail,
@@ -398,7 +400,7 @@ contract Pool is
     }
   }
 
-  /// @inheritdoc IPool
+  /// @inheritdoc IProtectionPool
   function lockCapital(address _lendingPoolAddress)
     external
     override
@@ -447,7 +449,7 @@ contract Pool is
       }
     }
 
-    /// step 3: Update total locked & available capital in Pool
+    /// step 3: Update total locked & available capital in ProtectionPool
     if (totalSTokenUnderlying < _lockedAmount) {
       /// If totalSTokenUnderlying < _lockedAmount, then lock all available capital
       _lockedAmount = totalSTokenUnderlying;
@@ -457,7 +459,7 @@ contract Pool is
     }
   }
 
-  /// @inheritdoc IPool
+  /// @inheritdoc IProtectionPool
   function claimUnlockedCapital(address _receiver)
     external
     override
@@ -502,19 +504,19 @@ contract Pool is
    * @notice Allows the owner to move pool phase after verification
    * @return _newPhase the new phase of the pool, if the phase is updated
    */
-  function movePoolPhase() external onlyOwner returns (PoolPhase _newPhase) {
-    PoolPhase _currentPhase = poolInfo.currentPhase;
+  function movePoolPhase() external onlyOwner returns (ProtectionPoolPhase _newPhase) {
+    ProtectionPoolPhase _currentPhase = poolInfo.currentPhase;
 
     /// when the pool is in OpenToSellers phase, it can be moved to OpenToBuyers phase
-    if (_currentPhase == PoolPhase.OpenToSellers && _hasMinRequiredCapital()) {
-      poolInfo.currentPhase = _newPhase = PoolPhase.OpenToBuyers;
-      emit PoolPhaseUpdated(_newPhase);
-    } else if (_currentPhase == PoolPhase.OpenToBuyers) {
+    if (_currentPhase == ProtectionPoolPhase.OpenToSellers && _hasMinRequiredCapital()) {
+      poolInfo.currentPhase = _newPhase = ProtectionPoolPhase.OpenToBuyers;
+      emit ProtectionPoolPhaseUpdated(_newPhase);
+    } else if (_currentPhase == ProtectionPoolPhase.OpenToBuyers) {
       /// when the pool is in OpenToBuyers phase, it can be moved to Open phase
       /// if the leverage ratio is below the ceiling
       if (calculateLeverageRatio() <= poolInfo.params.leverageRatioCeiling) {
-        poolInfo.currentPhase = _newPhase = PoolPhase.Open;
-        emit PoolPhaseUpdated(_newPhase);
+        poolInfo.currentPhase = _newPhase = ProtectionPoolPhase.Open;
+        emit ProtectionPoolPhaseUpdated(_newPhase);
       }
     }
 
@@ -523,17 +525,16 @@ contract Pool is
 
   /** view functions */
 
-  /// @inheritdoc IPool
-  function getPoolInfo() external view override returns (PoolInfo memory) {
+  /// @inheritdoc IProtectionPool
+  function getPoolInfo() external view override returns (ProtectionPoolInfo memory) {
     return poolInfo;
   }
 
-  /**
-   * @notice Returns all the protections bought from the pool, active & expired.
-   */
+  /// @inheritdoc IProtectionPool
   function getAllProtections()
     external
     view
+    override
     returns (ProtectionInfo[] memory _protections)
   {
     uint256 _length = protectionInfos.length;
@@ -551,7 +552,7 @@ contract Pool is
     }
   }
 
-  /// @inheritdoc IPool
+  /// @inheritdoc IProtectionPool
   function calculateLeverageRatio() public view override returns (uint256) {
     return _calculateLeverageRatio(totalSTokenUnderlying);
   }
@@ -566,10 +567,11 @@ contract Pool is
     view
     returns (uint256)
   {
-    uint256 _scaledUnderlyingAmt = PoolHelper.scaleUnderlyingAmtTo18Decimals(
-      _underlyingAmount,
-      poolInfo.underlyingToken.decimals()
-    );
+    uint256 _scaledUnderlyingAmt = ProtectionPoolHelper
+      .scaleUnderlyingAmtTo18Decimals(
+        _underlyingAmount,
+        poolInfo.underlyingToken.decimals()
+      );
     if (totalSupply() == 0) return _scaledUnderlyingAmt;
 
     uint256 _sTokenShares = (_scaledUnderlyingAmt *
@@ -591,7 +593,7 @@ contract Pool is
     uint256 _underlyingAmount = (_sTokenShares * _getExchangeRate()) /
       Constants.SCALE_18_DECIMALS;
     return
-      PoolHelper.scale18DecimalsAmtToUnderlyingDecimals(
+      ProtectionPoolHelper.scale18DecimalsAmtToUnderlyingDecimals(
         _underlyingAmount,
         poolInfo.underlyingToken.decimals()
       );
@@ -685,7 +687,7 @@ contract Pool is
       protectionBuyerAccounts[_buyer].lendingPoolToPremium[_lendingPoolAddress];
   }
 
-  /// @inheritdoc IPool
+  /// @inheritdoc IProtectionPool
   function calculateProtectionPremium(
     ProtectionPurchaseParams calldata _protectionPurchaseParams
   )
@@ -696,16 +698,17 @@ contract Pool is
   {
     uint256 _leverageRatio = calculateLeverageRatio();
 
-    (, _premiumAmount, _isMinPremium) = PoolHelper.calculateProtectionPremium(
-      premiumCalculator,
-      poolInfo,
-      _protectionPurchaseParams,
-      totalSTokenUnderlying,
-      _leverageRatio
-    );
+    (, _premiumAmount, _isMinPremium) = ProtectionPoolHelper
+      .calculateProtectionPremium(
+        premiumCalculator,
+        poolInfo,
+        _protectionPurchaseParams,
+        totalSTokenUnderlying,
+        _leverageRatio
+      );
   }
 
-  /// @inheritdoc IPool
+  /// @inheritdoc IProtectionPool
   function calculateMaxAllowedProtectionAmount(
     address _lendingPool,
     uint256 _nftLpTokenId
@@ -718,7 +721,7 @@ contract Pool is
       );
   }
 
-  /// @inheritdoc IPool
+  /// @inheritdoc IProtectionPool
   function calculateMaxAllowedProtectionDuration()
     external
     view
@@ -739,7 +742,7 @@ contract Pool is
     bool _isExtension
   ) internal {
     /// Verify that user can buy protection
-    PoolHelper.verifyProtection(
+    ProtectionPoolHelper.verifyProtection(
       poolCycleManager,
       defaultStateManager,
       address(this),
@@ -754,7 +757,7 @@ contract Pool is
     totalProtection += _protectionPurchaseParams.protectionAmount;
     uint256 _leverageRatio = calculateLeverageRatio();
     if (_leverageRatio < poolInfo.params.leverageRatioFloor) {
-      revert PoolLeverageRatioTooLow(_leverageRatio);
+      revert ProtectionPoolLeverageRatioTooLow(_leverageRatio);
     }
 
     LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
@@ -768,7 +771,7 @@ contract Pool is
       uint256 _premiumAmountIn18Decimals,
       uint256 _premiumAmount,
       bool _isMinPremium
-    ) = PoolHelper.calculateAndTrackPremium(
+    ) = ProtectionPoolHelper.calculateAndTrackPremium(
         premiumCalculator,
         protectionBuyerAccounts,
         poolInfo,
@@ -848,10 +851,11 @@ contract Pool is
    * @return the exchange rate scaled to 18 decimals
    */
   function _getExchangeRate() internal view returns (uint256) {
-    uint256 _totalScaledCapital = PoolHelper.scaleUnderlyingAmtTo18Decimals(
-      totalSTokenUnderlying,
-      poolInfo.underlyingToken.decimals()
-    );
+    uint256 _totalScaledCapital = ProtectionPoolHelper
+      .scaleUnderlyingAmtTo18Decimals(
+        totalSTokenUnderlying,
+        poolInfo.underlyingToken.decimals()
+      );
     uint256 _totalSTokenSupply = totalSupply();
     uint256 _exchangeRate = (_totalScaledCapital *
       Constants.SCALE_18_DECIMALS) / _totalSTokenSupply;
