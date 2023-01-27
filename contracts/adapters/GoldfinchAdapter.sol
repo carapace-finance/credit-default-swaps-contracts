@@ -246,13 +246,6 @@ contract GoldfinchAdapter is UUPSUpgradeableBase, ILendingProtocolAdapter {
       );
   }
 
-  function _getSeniorPool() internal view returns (ISeniorPool) {
-    return
-      ISeniorPool(
-        goldfinchConfig.getAddress(uint256(ConfigOptions.Addresses.SeniorPool))
-      );
-  }
-
   function _getCreditLine(address _lendingPoolAddress)
     internal
     view

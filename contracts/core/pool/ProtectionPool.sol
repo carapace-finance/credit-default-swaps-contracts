@@ -820,14 +820,7 @@ contract ProtectionPool is
       );
     totalPremium += _premiumAmount;
 
-    /// Step 3: transfer premium amount from buyer to pool & track the premium amount
-    poolInfo.underlyingToken.safeTransferFrom(
-      msg.sender,
-      address(this),
-      _premiumAmount
-    );
-
-    /// Step 4: Calculate protection in days and scale it to 18 decimals.
+    /// Step 3: Calculate protection in days and scale it to 18 decimals.
     uint256 _protectionDurationInDaysScaled = ((
       _protectionPurchaseParams.protectionDurationInSeconds
     ) * Constants.SCALE_18_DECIMALS) / uint256(Constants.SECONDS_IN_DAY);
@@ -839,7 +832,7 @@ contract ProtectionPool is
       _leverageRatio
     );
 
-    /// Step 5: Capture loan protection data for premium accrual calculation
+    /// Step 4: Capture loan protection data for premium accrual calculation
     // solhint-disable-next-line
     (int256 _k, int256 _lambda) = AccruedPremiumCalculator.calculateKAndLambda(
       _premiumAmountIn18Decimals,
@@ -852,7 +845,7 @@ contract ProtectionPool is
       _isMinPremium ? poolInfo.params.minCarapaceRiskPremiumPercent : 0
     );
 
-    /// Step 6: Add protection to the pool & emit an event
+    /// Step 5: Add protection to the pool
     protectionInfos.push(
       ProtectionInfo({
         buyer: msg.sender,
@@ -865,7 +858,7 @@ contract ProtectionPool is
       })
     );
 
-    /// Step 7: Track all loan protections for a lending pool to calculate
+    /// Step 6: Track all loan protections for a lending pool to calculate
     // the total locked amount for the lending pool, when/if pool is late for payment
     uint256 _protectionIndex = protectionInfos.length - 1;
     lendingPoolDetail.activeProtectionIndexes.add(_protectionIndex);
@@ -879,6 +872,14 @@ contract ProtectionPool is
       _protectionPurchaseParams.protectionAmount,
       _premiumAmount
     );
+
+    /// Step 7: transfer premium amount from buyer to pool
+    poolInfo.underlyingToken.safeTransferFrom(
+      msg.sender,
+      address(this),
+      _premiumAmount
+    );
+
   }
 
   /**
