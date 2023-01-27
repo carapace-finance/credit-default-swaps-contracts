@@ -187,9 +187,13 @@ const testDefaultStateManager: Function = (
         expect(await defaultStateManager.contractFactoryAddress()).to.equal(
           cpContractFactoryInstance.address
         );
-        await defaultStateManager
-          .connect(deployer)
-          .setContractFactory(await account1.getAddress());
+
+        await expect(
+          defaultStateManager
+            .connect(deployer)
+            .setContractFactory(await account1.getAddress())
+        ).to.emit(defaultStateManager, "ContractFactoryUpdated");
+
         expect(await defaultStateManager.contractFactoryAddress()).to.equal(
           await account1.getAddress()
         );
@@ -332,7 +336,7 @@ const testDefaultStateManager: Function = (
           } else {
             // after second payment, 2nd lending pool should move from Late to Active state
             await expect(defaultStateManager.assessStateBatch([pool1]))
-              .to.emit(defaultStateManager, "PoolStatesAssessed")
+              .to.emit(defaultStateManager, "ProtectionPoolStatesAssessed")
               .to.emit(defaultStateManager, "LendingPoolUnlocked");
           }
         }
@@ -415,7 +419,7 @@ const testDefaultStateManager: Function = (
         );
 
         await expect(defaultStateManager.assessStateBatch([pool1]))
-          .to.emit(defaultStateManager, "PoolStatesAssessed")
+          .to.emit(defaultStateManager, "ProtectionPoolStatesAssessed")
           .to.not.emit(defaultStateManager, "LendingPoolUnlocked");
       });
 
@@ -455,7 +459,7 @@ const testDefaultStateManager: Function = (
 
         // after 2 missed payments, 2nd lending pool should move from Late to Default state
         await expect(defaultStateManager.assessStateBatch([pool1]))
-          .to.emit(defaultStateManager, "PoolStatesAssessed")
+          .to.emit(defaultStateManager, "ProtectionPoolStatesAssessed")
           .to.not.emit(defaultStateManager, "LendingPoolUnlocked");
 
         // after 2 missed payments, 2nd lending pool should move from Late to Defaulted state
@@ -495,7 +499,7 @@ const testDefaultStateManager: Function = (
 
         await expect(defaultStateManager.assessStates()).to.emit(
           defaultStateManager,
-          "PoolStatesAssessed"
+          "ProtectionPoolStatesAssessed"
         );
 
         expect(
@@ -583,7 +587,7 @@ const testDefaultStateManager: Function = (
       it("... should be able to call existing function in v1", async () => {
         await expect(upgradedDefaultStateManager.assessStates()).to.emit(
           upgradedDefaultStateManager,
-          "PoolStatesAssessed"
+          "ProtectionPoolStatesAssessed"
         );
       });
     });

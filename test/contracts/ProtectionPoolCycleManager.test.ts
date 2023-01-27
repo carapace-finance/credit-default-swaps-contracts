@@ -92,9 +92,11 @@ const testProtectionPoolCycleManager: Function = (
         ).to.equal(contractFactoryAddress);
 
         // Set deployer as contract factory for tests
-        await protectionPoolCycleManager
-          .connect(deployer)
-          .setContractFactory(await deployer.getAddress());
+        await expect(
+          protectionPoolCycleManager
+            .connect(deployer)
+            .setContractFactory(await deployer.getAddress())
+        ).to.emit(protectionPoolCycleManager, "ContractFactoryUpdated");
 
         expect(
           await protectionPoolCycleManager.contractFactoryAddress()
