@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {ERC20Snapshot} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Snapshot.sol";
+import {ERC20SnapshotUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20SnapshotUpgradeable.sol";
 
+import {UUPSUpgradeableBase} from "../UUPSUpgradeableBase.sol";
 import {IReferenceLendingPools, LendingPoolStatus} from "../interfaces/IReferenceLendingPools.sol";
 import {ILendingProtocolAdapter} from "../interfaces/ILendingProtocolAdapter.sol";
 import {IPool} from "../interfaces/IPool.sol";
@@ -11,10 +12,22 @@ import "../libraries/Constants.sol";
 
 import "hardhat/console.sol";
 
-contract DefaultStateManager is IDefaultStateManager {
-  /*** state variables ***/
+/**
+ * @title DefaultStateManager
+ * @author Carapace Finance
+ * @notice Contract to assess and manage the state transitions of of all pools.
+ * This contract is upgradeable using the UUPS pattern.
+ */
+contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
+  /////////////////////////////////////////////////////
+  ///             STORAGE - START                   ///
+  /////////////////////////////////////////////////////
+  /**
+   * @dev DO NOT CHANGE THE ORDER OF THESE VARIABLES ONCE DEPLOYED
+   */
 
-  address private immutable poolFactoryAddress;
+  /// @notice address of the contract factory which is the only contract allowed to register pools.
+  address public contractFactoryAddress;
 
   /// @notice stores the current state of all pools in the system.
   /// @dev Array is used for enumerating all pools during state assessment.
@@ -23,13 +36,26 @@ contract DefaultStateManager is IDefaultStateManager {
   /// @notice tracks an index of PoolState for each pool in poolStates array.
   mapping(address => uint256) private poolStateIndex;
 
-  /*** constructor ***/
+  //////////////////////////////////////////////////////
+  ///             STORAGE - END                     ///
+  /////////////////////////////////////////////////////
+
+  /*** modifiers ***/
+
+  modifier onlyContractFactory() {
+    if (msg.sender != contractFactoryAddress) {
+      revert NotContractFactory(msg.sender);
+    }
+    _;
+  }
+
+  /*** initializer ***/
 
   /**
-   * @dev Pool factory contract must create this contract in order to register new pools.
+   * @notice Initializes the contract.
    */
-  constructor() {
-    poolFactoryAddress = msg.sender;
+  function initialize() public initializer {
+    __UUPSUpgradeableBase_init();
 
     /// create a dummy pool state to reserve index 0.
     /// this is to ensure that poolStateIndex[pool] is always greater than 0,
@@ -37,37 +63,44 @@ contract DefaultStateManager is IDefaultStateManager {
     poolStates.push();
   }
 
-  /*** modifiers ***/
+  /*** state-changing functions ***/
 
-  modifier onlyPoolFactory() {
-    if (msg.sender != poolFactoryAddress) {
-      revert NotPoolFactory(msg.sender);
+  /// @inheritdoc IDefaultStateManager
+  function setContractFactory(address _contractFactoryAddress)
+    external
+    override
+    onlyOwner
+  {
+    if (_contractFactoryAddress == Constants.ZERO_ADDRESS) {
+      revert ZeroContractFactoryAddress();
     }
-    _;
+
+    contractFactoryAddress = _contractFactoryAddress;
   }
 
   /// @inheritdoc IDefaultStateManager
-  function registerPool(IPool _protectionPool)
+  function registerPool(address _protectionPoolAddress)
     external
     override
-    onlyPoolFactory
+    onlyContractFactory
   {
-    address poolAddress = address(_protectionPool);
     uint256 newIndex = poolStates.length;
 
     /// Check whether the pool is already registered or not
-    PoolState storage poolState = poolStates[poolStateIndex[poolAddress]];
+    PoolState storage poolState = poolStates[
+      poolStateIndex[_protectionPoolAddress]
+    ];
     if (poolState.updatedTimestamp > 0) {
-      revert PoolAlreadyRegistered(poolAddress);
+      revert PoolAlreadyRegistered(_protectionPoolAddress);
     }
 
     poolStates.push();
-    poolStates[newIndex].protectionPool = _protectionPool;
-    poolStateIndex[poolAddress] = newIndex;
+    poolStates[newIndex].protectionPool = IPool(_protectionPoolAddress);
+    poolStateIndex[_protectionPoolAddress] = newIndex;
 
     _assessState(poolStates[newIndex]);
 
-    emit PoolRegistered(poolAddress);
+    emit PoolRegistered(_protectionPoolAddress);
   }
 
   /// @inheritdoc IDefaultStateManager
@@ -388,7 +421,7 @@ contract DefaultStateManager is IDefaultStateManager {
       );
 
       if (!lockedCapital.locked && _snapshotId > _lastClaimedSnapshotId) {
-        ERC20Snapshot _poolToken = ERC20Snapshot(
+        ERC20SnapshotUpgradeable _poolToken = ERC20SnapshotUpgradeable(
           address(poolState.protectionPool)
         );
 

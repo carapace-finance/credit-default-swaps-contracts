@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {IERC20MetadataUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
+import {EnumerableSetUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
+
 import {IReferenceLendingPools, ProtectionPurchaseParams} from "./IReferenceLendingPools.sol";
-import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import {IPremiumCalculator} from "./IPremiumCalculator.sol";
+import {IPoolCycleManager} from "./IPoolCycleManager.sol";
+import {IDefaultStateManager} from "./IDefaultStateManager.sol";
 
 enum PoolPhase {
   OpenToSellers,
@@ -45,9 +49,9 @@ struct PoolParams {
 
 /// @notice Contains pool information
 struct PoolInfo {
-  uint256 poolId;
+  address poolAddress;
   PoolParams params;
-  IERC20Metadata underlyingToken;
+  IERC20MetadataUpgradeable underlyingToken;
   IReferenceLendingPools referenceLendingPools;
   /// @notice A enum indicating current phase of the pool.
   PoolPhase currentPhase;
@@ -78,7 +82,7 @@ struct LendingPoolDetail {
   /// @notice Track the total amount of premium for each lending pool
   uint256 totalPremium;
   /// @notice Set to track all protections bought for specific lending pool, which are active/not expired
-  EnumerableSet.UintSet activeProtectionIndexes;
+  EnumerableSetUpgradeable.UintSet activeProtectionIndexes;
   /// @notice Track the total amount of protection bought for each lending pool
   uint256 totalProtection;
 }
@@ -97,14 +101,14 @@ struct ProtectionBuyerAccount {
   /// @dev a lending pool address to the premium amount paid
   mapping(address => uint256) lendingPoolToPremium;
   /// @notice Set to track all protections bought by a buyer, which are active/not-expired.
-  EnumerableSet.UintSet activeProtectionIndexes;
+  EnumerableSetUpgradeable.UintSet activeProtectionIndexes;
   /// @notice Mapping to track last expired protection index of given lending pool by nft token id.
   /// @dev a lending pool address to NFT id to the last expired protection index
   mapping(address => mapping(uint256 => uint256)) expiredProtectionIndexByLendingPool;
 }
 
 abstract contract IPool {
-  using EnumerableSet for EnumerableSet.UintSet;
+  using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
 
   /*** errors ***/
   error LendingPoolNotSupported(address lendingPoolAddress);
@@ -114,13 +118,10 @@ abstract contract IPool {
   error ProtectionPurchaseNotAllowed(ProtectionPurchaseParams params);
   error ProtectionDurationTooShort(uint256 protectionDurationInSeconds);
   error ProtectionDurationTooLong(uint256 protectionDurationInSeconds);
-  error PoolIsNotOpen(uint256 poolId);
-  error PoolLeverageRatioTooHigh(uint256 poolId, uint256 leverageRatio);
-  error PoolLeverageRatioTooLow(uint256 poolId, uint256 leverageRatio);
-  error PoolHasNoMinCapitalRequired(
-    uint256 poolId,
-    uint256 totalSTokenUnderlying
-  );
+  error PoolIsNotOpen();
+  error PoolLeverageRatioTooHigh(uint256 leverageRatio);
+  error PoolLeverageRatioTooLow(uint256 leverageRatio);
+  error PoolHasNoMinCapitalRequired(uint256 totalSTokenUnderlying);
   error NoWithdrawalRequested(address msgSender, uint256 poolCycleIndex);
   error WithdrawalHigherThanRequested(
     address msgSender,
@@ -128,8 +129,8 @@ abstract contract IPool {
   );
   error InsufficientSTokenBalance(address msgSender, uint256 sTokenBalance);
   error OnlyDefaultStateManager(address msgSender);
-  error PoolInOpenToSellersPhase(uint256 poolId);
-  error PoolInOpenToBuyersPhase(uint256 poolId);
+  error PoolInOpenToSellersPhase();
+  error PoolInOpenToBuyersPhase();
   error NoExpiredProtectionToExtend();
   error CanNotExtendProtectionAfterGracePeriod();
   error PremiumExceedsMaxPremiumAmount(
@@ -142,7 +143,7 @@ abstract contract IPool {
   event PoolInitialized(
     string name,
     string symbol,
-    IERC20Metadata underlyingToken,
+    IERC20MetadataUpgradeable underlyingToken,
     IReferenceLendingPools referenceLendingPools
   );
 
@@ -187,7 +188,27 @@ abstract contract IPool {
   );
 
   /// @notice Emitted when a pool phase is updated.
-  event PoolPhaseUpdated(uint256 poolId, PoolPhase newState);
+  event PoolPhaseUpdated(PoolPhase newPhase);
+
+  /**
+   * @notice Initializes the pool contract
+   * @param _owner The owner of the pool
+   * @param _poolInfo The information about this pool.
+   * @param _premiumCalculator an address of a premium calculator contract
+   * @param _poolCycleManager an address of a pool cycle manager contract
+   * @param _defaultStateManager an address of a default state manager contract
+   * @param _name a name of the sToken
+   * @param _symbol a symbol of the sToken
+   */
+  function initialize(
+    address _owner,
+    PoolInfo calldata _poolInfo,
+    IPremiumCalculator _premiumCalculator,
+    IPoolCycleManager _poolCycleManager,
+    IDefaultStateManager _defaultStateManager,
+    string calldata _name,
+    string calldata _symbol
+  ) public virtual;
 
   /**
    * @notice A buyer can buy protection for a position in lending pool when lending pool is supported & active (not defaulted or expired).

@@ -1,10 +1,10 @@
 import { DefaultStateManager } from "../../typechain-types/contracts/core/DefaultStateManager";
 import { expect } from "chai";
-import { Contract, Signer } from "ethers";
+import { Contract, Signer, ContractFactory } from "ethers";
 import { ZERO_ADDRESS } from "../utils/constants";
 import { Pool } from "../../typechain-types/contracts/core/pool/Pool";
-import { PoolFactory } from "../../typechain-types/contracts/core/PoolFactory";
-import { ethers } from "hardhat";
+import { ContractFactory as CPContractFactory } from "../../typechain-types/contracts/core/ContractFactory";
+import { ethers, upgrades } from "hardhat";
 import {
   parseUSDC,
   getUsdcContract,
@@ -20,13 +20,15 @@ import { ITranchedPool } from "../../typechain-types/contracts/external/goldfinc
 import { payToLendingPool, payToLendingPoolAddress } from "../utils/goldfinch";
 import { BigNumber } from "@ethersproject/bignumber";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/Pool";
+import { DefaultStateManagerV2 } from "../../typechain-types/contracts/test/DefaultStateManagerV2";
+import { cpContractFactoryInstance } from "../../utils/deploy";
 
 const testDefaultStateManager: Function = (
   deployer: Signer,
   account1: Signer,
   seller: Signer,
   defaultStateManager: DefaultStateManager,
-  poolFactory: PoolFactory,
+  contractFactory: CPContractFactory,
   poolInstance: Pool,
   lendingPools: string[]
 ) => {
@@ -78,7 +80,7 @@ const testDefaultStateManager: Function = (
 
       usdcContract = getUsdcContract(deployer);
       pool1 = poolInstance.address;
-      pool2 = await poolFactory.getPoolAddress(2);
+      pool2 = (await contractFactory.getPools())[1];
       sellerAddress = await seller.getAddress();
 
       referenceLendingPoolsInstance = (await ethers.getContractAt(
@@ -89,7 +91,48 @@ const testDefaultStateManager: Function = (
       )) as ReferenceLendingPools;
     });
 
+    describe("implementation", async () => {
+      let defaultStateManagerImplementation: DefaultStateManager;
+
+      before(async () => {
+        defaultStateManagerImplementation = (await ethers.getContractAt(
+          "DefaultStateManager",
+          await upgrades.erc1967.getImplementationAddress(
+            defaultStateManager.address
+          )
+        )) as DefaultStateManager;
+      });
+
+      it("...should NOT have an owner on construction", async () => {
+        expect(await defaultStateManagerImplementation.owner()).to.equal(
+          ZERO_ADDRESS
+        );
+      });
+
+      it("...should disable initialize after construction", async () => {
+        await expect(
+          defaultStateManagerImplementation.initialize()
+        ).to.be.revertedWith("Initializable: contract is already initialized");
+      });
+    });
+
     describe("constructor", async () => {
+      it("...should be valid instance", async () => {
+        expect(defaultStateManager).to.not.equal(undefined);
+      });
+
+      it("...should set deployer as on owner", async () => {
+        expect(await defaultStateManager.owner()).to.equal(
+          await deployer.getAddress()
+        );
+      });
+
+      it("... should revert when initialize is called 2nd time", async () => {
+        await expect(defaultStateManager.initialize()).to.be.revertedWith(
+          "Initializable: contract is already initialized"
+        );
+      });
+
       it("...should have dummy pool state at index 0", async () => {
         expect(
           await defaultStateManager.getPoolStateUpdateTimestamp(ZERO_ADDRESS)
@@ -102,14 +145,14 @@ const testDefaultStateManager: Function = (
         await expect(
           defaultStateManager.connect(account1).registerPool(ZERO_ADDRESS)
         ).to.be.revertedWith(
-          `NotPoolFactory("${await account1.getAddress()}")`
+          `NotContractFactory("${await account1.getAddress()}")`
         );
       });
 
       it("...should fail to register already registered pool", async () => {
         await expect(
           defaultStateManager
-            .connect(await ethers.getSigner(poolFactory.address))
+            .connect(await ethers.getSigner(contractFactory.address))
             .registerPool(poolInstance.address)
         ).to.be.revertedWith(
           `PoolAlreadyRegistered("${await poolInstance.address}")`
@@ -124,6 +167,32 @@ const testDefaultStateManager: Function = (
         expect(
           await defaultStateManager.getPoolStateUpdateTimestamp(pool2)
         ).to.be.gt(0);
+      });
+    });
+
+    describe("setContractFactory", async () => {
+      it("...should fail when called by non-owner", async () => {
+        await expect(
+          defaultStateManager.connect(account1).setContractFactory(ZERO_ADDRESS)
+        ).to.be.revertedWith("Ownable: caller is not the owner");
+      });
+
+      it("...should fail when address is zeo", async () => {
+        await expect(
+          defaultStateManager.connect(deployer).setContractFactory(ZERO_ADDRESS)
+        ).to.be.revertedWith("ZeroContractFactoryAddress");
+      });
+
+      it("...should work correctly by owner", async () => {
+        expect(await defaultStateManager.contractFactoryAddress()).to.equal(
+          cpContractFactoryInstance.address
+        );
+        await defaultStateManager
+          .connect(deployer)
+          .setContractFactory(await account1.getAddress());
+        expect(await defaultStateManager.contractFactoryAddress()).to.equal(
+          await account1.getAddress()
+        );
       });
     });
 
@@ -457,6 +526,72 @@ const testDefaultStateManager: Function = (
           await defaultStateManager.getPoolStateUpdateTimestamp(pool2)
         ).to.be.gt(pool2UpdateTimestamp);
       });
+    });
+
+    describe("upgrade", () => {
+      let upgradedDefaultStateManager: DefaultStateManagerV2;
+
+      it("... should revert when upgradeTo is called by non-owner", async () => {
+        await expect(
+          defaultStateManager
+            .connect(account1)
+            .upgradeTo("0xA18173d6cf19e4Cc5a7F63780Fe4738b12E8b781")
+        ).to.be.revertedWith("Ownable: caller is not the owner");
+      });
+
+      it("... should fail upon invalid upgrade", async () => {
+        try {
+          await upgrades.validateUpgrade(
+            defaultStateManager.address,
+            await ethers.getContractFactory(
+              "DefaultStateManagerV2NotUpgradable"
+            ),
+            {
+              kind: "uups"
+            }
+          );
+        } catch (e: any) {
+          expect(e.message).includes(
+            "Contract `contracts/test/DefaultStateManagerV2.sol:DefaultStateManagerV2NotUpgradable` is not upgrade safe"
+          );
+        }
+      });
+
+      it("... should upgrade successfully", async () => {
+        const defaultStateManagerV2Factory = await ethers.getContractFactory(
+          "DefaultStateManagerV2"
+        );
+
+        // upgrade to v2
+        upgradedDefaultStateManager = (await upgrades.upgradeProxy(
+          defaultStateManager.address,
+          defaultStateManagerV2Factory
+        )) as DefaultStateManagerV2;
+      });
+
+      it("... should have same address after upgrade", async () => {
+        expect(upgradedDefaultStateManager.address).to.be.equal(
+          defaultStateManager.address
+        );
+      });
+
+      it("... should be able to call new function in v2", async () => {
+        const value = await upgradedDefaultStateManager.getVersion();
+        expect(value).to.equal("v2");
+      });
+
+      it("... should be able to call existing function in v1", async () => {
+        await expect(upgradedDefaultStateManager.assessStates()).to.emit(
+          upgradedDefaultStateManager,
+          "PoolStatesAssessed"
+        );
+      });
+    });
+
+    after(async () => {
+      defaultStateManager
+        .connect(deployer)
+        .setContractFactory(cpContractFactoryInstance.address);
     });
   });
 };

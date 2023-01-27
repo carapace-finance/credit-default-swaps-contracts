@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import {EnumerableSetUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
+import {IERC20MetadataUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
+import {SafeERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+
+import {UUPSUpgradeableBase} from "../../UUPSUpgradeableBase.sol";
 import {SToken} from "./SToken.sol";
 import {IPremiumCalculator} from "../../interfaces/IPremiumCalculator.sol";
 import {IReferenceLendingPools, LendingPoolStatus, ProtectionPurchaseParams} from "../../interfaces/IReferenceLendingPools.sol";
 import {IPoolCycleManager, CycleState} from "../../interfaces/IPoolCycleManager.sol";
-import {IPool, EnumerableSet, PoolParams, PoolCycleParams, PoolInfo, ProtectionInfo, LendingPoolDetail, WithdrawalCycleDetail, ProtectionBuyerAccount, PoolPhase} from "../../interfaces/IPool.sol";
+import {IPool, PoolParams, PoolCycleParams, PoolInfo, ProtectionInfo, LendingPoolDetail, WithdrawalCycleDetail, ProtectionBuyerAccount, PoolPhase} from "../../interfaces/IPool.sol";
 import {IDefaultStateManager} from "../../interfaces/IDefaultStateManager.sol";
 
 import "../../libraries/AccruedPremiumCalculator.sol";
@@ -18,24 +21,37 @@ import "../../libraries/PoolHelper.sol";
 import "hardhat/console.sol";
 
 /**
+ * @title Pool
+ * @author Carapace Finance
  * @notice Each pool is a market where protection sellers
- *         and buyers can swap credit default risks of designated underlying loans.
+ * and buyers can swap credit default risks of designated/referenced underlying loans.
+ * This contract is upgradeable using the UUPS pattern.
  */
-contract Pool is IPool, SToken, ReentrancyGuard {
+contract Pool is
+  UUPSUpgradeableBase,
+  ReentrancyGuardUpgradeable,
+  IPool,
+  SToken
+{
   /*** libraries ***/
-  /// @notice OpenZeppelin library for managing counters
-  using SafeERC20 for IERC20Metadata;
-  using EnumerableSet for EnumerableSet.UintSet;
+  using SafeERC20Upgradeable for IERC20MetadataUpgradeable;
+  using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
 
-  /*** state variables ***/
+  //////////////////////////////////////////////////////
+  ///             STORAGE- START                   ///
+  /////////////////////////////////////////////////////
+  /**
+   * @dev DO NOT CHANGE THE ORDER OF THESE VARIABLES ONCE DEPLOYED
+   */
+
   /// @notice Reference to the PremiumPricing contract
-  IPremiumCalculator private immutable premiumCalculator;
+  IPremiumCalculator private premiumCalculator;
 
   /// @notice Reference to the PoolCycleManager contract
-  IPoolCycleManager private immutable poolCycleManager;
+  IPoolCycleManager private poolCycleManager;
 
   /// @notice Reference to default state manager contract
-  IDefaultStateManager private immutable defaultStateManager;
+  IDefaultStateManager private defaultStateManager;
 
   /// @notice information about this pool
   PoolInfo private poolInfo;
@@ -66,18 +82,21 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   /// @notice The mapping to track all protection buyer accounts by address
   mapping(address => ProtectionBuyerAccount) private protectionBuyerAccounts;
 
+  //////////////////////////////////////////////////////
+  ///             STORAGE - END                     ///
+  /////////////////////////////////////////////////////
+
   /*** modifiers ***/
 
   /// @notice Checks whether pool cycle is in open state. If not, reverts.
   modifier whenPoolIsOpen() {
     /// Update the pool cycle state
-    uint256 poolId = poolInfo.poolId;
     CycleState cycleState = poolCycleManager.calculateAndSetPoolCycleState(
-      poolId
+      address(this)
     );
 
     if (cycleState != CycleState.Open) {
-      revert PoolIsNotOpen(poolId);
+      revert PoolIsNotOpen();
     }
     _;
   }
@@ -89,24 +108,25 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     _;
   }
 
-  /*** constructor ***/
-  /**
-   * @param _poolInfo The information about this pool.
-   * @param _premiumCalculator an address of a premium calculator contract
-   * @param _poolCycleManager an address of a pool cycle manager contract
-   * @param _defaultStateManager an address of a default state manager contract
-   * @param _name a name of the sToken
-   * @param _symbol a symbol of the sToken
-   */
-  constructor(
-    PoolInfo memory _poolInfo,
+  /*** initializer ***/
+
+  /// @inheritdoc IPool
+  function initialize(
+    address _owner,
+    PoolInfo calldata _poolInfo,
     IPremiumCalculator _premiumCalculator,
     IPoolCycleManager _poolCycleManager,
     IDefaultStateManager _defaultStateManager,
-    string memory _name,
-    string memory _symbol
-  ) SToken(_name, _symbol) {
+    string calldata _name,
+    string calldata _symbol
+  ) public override initializer {
+    /// initialize parent contracts in same order as they are inherited to mimic the behavior of a constructor
+    __UUPSUpgradeableBase_init();
+    __ReentrancyGuard_init();
+    __sToken_init(_name, _symbol);
+
     poolInfo = _poolInfo;
+    poolInfo.poolAddress = address(this);
     premiumCalculator = _premiumCalculator;
     poolCycleManager = _poolCycleManager;
     defaultStateManager = _defaultStateManager;
@@ -117,6 +137,8 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       poolInfo.underlyingToken,
       poolInfo.referenceLendingPools
     );
+
+    _transferOwnership(_owner);
 
     /// dummy protection info to make index 0 invalid
     protectionInfos.push();
@@ -167,7 +189,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   {
     /// Verify that the pool is not in OpenToBuyers phase
     if (poolInfo.currentPhase == PoolPhase.OpenToBuyers) {
-      revert PoolInOpenToBuyersPhase(poolInfo.poolId);
+      revert PoolInOpenToBuyersPhase();
     }
 
     uint256 _sTokenShares = convertToSToken(_underlyingAmount);
@@ -185,7 +207,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       uint256 _leverageRatio = calculateLeverageRatio();
 
       if (_leverageRatio > poolInfo.params.leverageRatioCeiling) {
-        revert PoolLeverageRatioTooHigh(poolInfo.poolId, _leverageRatio);
+        revert PoolLeverageRatioTooHigh(_leverageRatio);
       }
     }
 
@@ -204,7 +226,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     }
 
     uint256 _currentCycleIndex = poolCycleManager.getCurrentCycleIndex(
-      poolInfo.poolId
+      address(this)
     );
 
     /// Actual withdrawal is allowed in open period of cycle after next cycle
@@ -241,7 +263,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
   {
     /// Step 1: Retrieve withdrawal details for current pool cycle index
     uint256 _currentCycleIndex = poolCycleManager.getCurrentCycleIndex(
-      poolInfo.poolId
+      address(this)
     );
     WithdrawalCycleDetail storage withdrawalCycle = withdrawalCycleDetails[
       _currentCycleIndex
@@ -395,8 +417,9 @@ contract Pool is IPool, SToken, ReentrancyGuard {
       _lendingPoolAddress
     ];
 
-    EnumerableSet.UintSet storage activeProtectionIndexes = lendingPoolDetail
-      .activeProtectionIndexes;
+    EnumerableSetUpgradeable.UintSet
+      storage activeProtectionIndexes = lendingPoolDetail
+        .activeProtectionIndexes;
     uint256 _length = activeProtectionIndexes.length();
     for (uint256 i; i < _length; ) {
       uint256 _protectionIndex = activeProtectionIndexes.at(i);
@@ -485,13 +508,13 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     /// when the pool is in OpenToSellers phase, it can be moved to OpenToBuyers phase
     if (_currentPhase == PoolPhase.OpenToSellers && _hasMinRequiredCapital()) {
       poolInfo.currentPhase = _newPhase = PoolPhase.OpenToBuyers;
-      emit PoolPhaseUpdated(poolInfo.poolId, _newPhase);
+      emit PoolPhaseUpdated(_newPhase);
     } else if (_currentPhase == PoolPhase.OpenToBuyers) {
       /// when the pool is in OpenToBuyers phase, it can be moved to Open phase
       /// if the leverage ratio is below the ceiling
       if (calculateLeverageRatio() <= poolInfo.params.leverageRatioCeiling) {
         poolInfo.currentPhase = _newPhase = PoolPhase.Open;
-        emit PoolPhaseUpdated(poolInfo.poolId, _newPhase);
+        emit PoolPhaseUpdated(_newPhase);
       }
     }
 
@@ -635,7 +658,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     view
     returns (ProtectionInfo[] memory _protectionInfos)
   {
-    EnumerableSet.UintSet
+    EnumerableSetUpgradeable.UintSet
       storage activeProtectionIndexes = protectionBuyerAccounts[_buyer]
         .activeProtectionIndexes;
     uint256 _length = activeProtectionIndexes.length();
@@ -703,7 +726,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     returns (uint256 _maxAllowedProtectionDurationInSeconds)
   {
     _maxAllowedProtectionDurationInSeconds =
-      poolCycleManager.getNextCycleEndTimestamp(poolInfo.poolId) -
+      poolCycleManager.getNextCycleEndTimestamp(address(this)) -
       block.timestamp;
   }
 
@@ -731,7 +754,7 @@ contract Pool is IPool, SToken, ReentrancyGuard {
     totalProtection += _protectionPurchaseParams.protectionAmount;
     uint256 _leverageRatio = calculateLeverageRatio();
     if (_leverageRatio < poolInfo.params.leverageRatioFloor) {
-      revert PoolLeverageRatioTooLow(poolInfo.poolId, _leverageRatio);
+      revert PoolLeverageRatioTooLow(_leverageRatio);
     }
 
     LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[

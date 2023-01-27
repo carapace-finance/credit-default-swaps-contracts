@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./AccruedPremiumCalculator.sol";
-import "./Constants.sol";
+import {EnumerableSetUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
 
 import {ProtectionPurchaseParams, LendingPoolStatus, IReferenceLendingPools} from "../interfaces/IReferenceLendingPools.sol";
-import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {PoolInfo, ProtectionInfo, ProtectionBuyerAccount, IPool, LendingPoolDetail, PoolPhase} from "../interfaces/IPool.sol";
 import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
 import {IDefaultStateManager} from "../interfaces/IDefaultStateManager.sol";
 import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
+
+import "./AccruedPremiumCalculator.sol";
+import "./Constants.sol";
 
 import "hardhat/console.sol";
 
@@ -17,7 +18,7 @@ import "hardhat/console.sol";
  * @notice Helper library for Pool contract, mainly for size reduction.
  */
 library PoolHelper {
-  using EnumerableSet for EnumerableSet.UintSet;
+  using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
 
   /**
    * @notice Verifies that the status of the lending pool is ACTIVE and protection can be bought,
@@ -34,14 +35,14 @@ library PoolHelper {
   ) external {
     /// Verify that the pool is not in OpenToSellers phase
     if (poolInfo.currentPhase == PoolPhase.OpenToSellers) {
-      revert IPool.PoolInOpenToSellersPhase(poolInfo.poolId);
+      revert IPool.PoolInOpenToSellersPhase();
     }
 
     /// a buyer needs to buy protection longer than min protection duration specified in the pool params
     /// or to extend protection longer than a day
     _verifyProtectionDuration(
       poolCycleManager,
-      poolInfo.poolId,
+      poolInfo.poolAddress,
       _protectionStartTimestamp,
       _protectionPurchaseParams.protectionDurationInSeconds,
       _isExtension
@@ -388,7 +389,7 @@ library PoolHelper {
    */
   function _verifyProtectionDuration(
     IPoolCycleManager poolCycleManager,
-    uint256 _poolId,
+    address _poolAddress,
     uint256 _protectionStartTimestamp,
     uint256 _protectionDurationInSeconds,
     uint256 _minProtectionDurationInSeconds
@@ -401,9 +402,9 @@ library PoolHelper {
     }
 
     /// protection expiry can not be be after the next cycle end
-    poolCycleManager.calculateAndSetPoolCycleState(_poolId);
+    poolCycleManager.calculateAndSetPoolCycleState(_poolAddress);
     uint256 _nextCycleEndTimestamp = poolCycleManager.getNextCycleEndTimestamp(
-      _poolId
+      _poolAddress
     );
 
     if (_protectionExpirationTimestamp > _nextCycleEndTimestamp) {

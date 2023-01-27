@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Pausable} from "@openzeppelin/contracts/security/Pausable.sol";
-import {ERC20Snapshot, ERC20} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Snapshot.sol";
+import {ERC20SnapshotUpgradeable, ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20SnapshotUpgradeable.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 
 /**
  * @notice Implementation of the interest bearing token for the Carapace protocol.
@@ -11,21 +10,46 @@ import {ERC20Snapshot, ERC20} from "@openzeppelin/contracts/token/ERC20/extensio
  * Yields distribution such as premium and interest from rehypothecation are calculated based on this token.
  * Each protection pool will have a corresponding SToken.
  */
-contract SToken is ERC20Snapshot, Pausable, Ownable {
+abstract contract SToken is PausableUpgradeable, ERC20SnapshotUpgradeable {
+  /////////////////////////////////////////////////////
+  ///             STORAGE - START                   ///
+  /////////////////////////////////////////////////////
+  /**
+   * @dev DO NOT CHANGE THE ORDER OF THESE VARIABLES ONCE DEPLOYED
+   */
+
+  /**
+   * @dev This empty reserved space is put in place to allow future versions to add new
+   * variables without shifting down storage in the inheritance chain.
+   * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
+   * https://docs.openzeppelin.com/upgrades-plugins/1.x/writing-upgradeable#storage-gaps
+   */
+  uint256[50] private __gap;
+
+  //////////////////////////////////////////////////////
+  ///             STORAGE - END                     ///
+  /////////////////////////////////////////////////////
+
   /*** events ***/
   event STokenCreated(string name, string symbol);
   event Minted(address indexed owner, uint256 amount);
 
-  /*** constructor ***/
-  constructor(string memory _name, string memory _symbol)
-    ERC20(_name, _symbol)
+  /** Initializer */
+
+  // solhint-disable-next-line func-name-mixedcase
+  function __sToken_init(string calldata _name, string calldata _symbol)
+    internal
+    onlyInitializing
   {
+    __Pausable_init();
+    __ERC20_init(_name, _symbol);
+
     emit STokenCreated(_name, _symbol);
   }
 
   /*** state-changing functions ***/
   /**
-   * @notice Called by a corresponding tranche contract to mint sToken shares in a particular tranche
+   * @notice Called by a pool contract to mint sToken shares to a user.
    * @param _to The address that should own the position
    * @param _amount the amount of tokens to mint
    */

@@ -1,13 +1,12 @@
 import { testPool } from "./contracts/Pool.test";
-import { testPoolFactory } from "./contracts/PoolFactory.test";
+import { testContractFactory } from "./contracts/ContractFactory.test";
 import { testPoolCycleManager } from "./contracts/PoolCycleManager.test";
 import { testAccruedPremiumCalculator } from "./contracts/AccruedPremiumCalculator.test";
 import { testPremiumCalculator } from "./contracts/PremiumCalculator.test";
 import { testRiskFactorCalculator } from "./contracts/RiskFactorCalculator.test";
 
-import { testGoldfinchV2Adapter } from "./contracts/GoldfinchV2Adapter.test";
+import { testGoldfinchAdapter } from "./contracts/GoldfinchAdapter.test";
 import { testReferenceLendingPools } from "./contracts/ReferenceLendingPools.test";
-import { testReferenceLendingPoolsFactory } from "./contracts/ReferenceLendingPoolsFactory.test";
 import { testDefaultStateManager } from "./contracts/DefaultStateManager.test";
 
 import {
@@ -17,23 +16,22 @@ import {
   account3,
   account4,
   deployContracts,
+  poolImplementation,
   poolInstance,
-  poolFactoryInstance,
+  cpContractFactoryInstance,
   premiumCalculatorInstance,
   referenceLendingPoolsInstance,
   poolCycleManagerInstance,
   accruedPremiumCalculatorInstance,
   riskFactorCalculatorInstance,
-  goldfinchV2AdapterInstance,
-  referenceLendingPoolsFactoryInstance,
+  goldfinchAdapterImplementation,
+  goldfinchAdapterInstance,
   referenceLendingPoolsImplementation,
   defaultStateManagerInstance,
   GOLDFINCH_LENDING_POOLS,
-  getReferenceLendingPoolsInstanceFromTx,
-  getPoolInstanceFromTx
+  getLatestReferenceLendingPoolsInstance,
+  getPoolContractFactory
 } from "../utils/deploy";
-import { ethers } from "hardhat";
-import { PoolCycleManager } from "../typechain-types/contracts/core/PoolCycleManager";
 
 describe("start testing", () => {
   before("deploy contracts", async () => {
@@ -52,30 +50,35 @@ describe("start testing", () => {
     });
 
     it("run the PremiumCalculator test", async () => {
-      testPremiumCalculator(premiumCalculatorInstance);
-    });
-
-    it("run the GoldfinchV2Adapter test", async () => {
-      testGoldfinchV2Adapter(goldfinchV2AdapterInstance);
-    });
-
-    it("run referenceLendingPoolsFactory test", async () => {
-      testReferenceLendingPoolsFactory(
+      testPremiumCalculator(
         deployer,
         account1,
-        referenceLendingPoolsImplementation,
-        referenceLendingPoolsFactoryInstance,
-        getReferenceLendingPoolsInstanceFromTx
+        premiumCalculatorInstance,
+        riskFactorCalculatorInstance
       );
     });
 
-    it("run the PoolFactory test", async () => {
-      testPoolFactory(
+    it("run the GoldfinchAdapter test", async () => {
+      testGoldfinchAdapter(
         deployer,
         account1,
-        poolFactoryInstance,
+        goldfinchAdapterImplementation,
+        goldfinchAdapterInstance
+      );
+    });
+
+    it("run the ContractFactory test", async () => {
+      testContractFactory(
+        deployer,
+        account1,
+        cpContractFactoryInstance,
         premiumCalculatorInstance,
-        referenceLendingPoolsInstance
+        referenceLendingPoolsInstance,
+        poolCycleManagerInstance,
+        defaultStateManagerInstance,
+        poolImplementation,
+        referenceLendingPoolsImplementation,
+        getLatestReferenceLendingPoolsInstance
       );
     });
 
@@ -85,17 +88,12 @@ describe("start testing", () => {
         account1,
         referenceLendingPoolsImplementation,
         referenceLendingPoolsInstance,
-        referenceLendingPoolsFactoryInstance,
+        cpContractFactoryInstance,
         GOLDFINCH_LENDING_POOLS
       );
     });
 
     it("run the Pool test", async () => {
-      const poolCycleManager = (await ethers.getContractAt(
-        "PoolCycleManager",
-        await poolFactoryInstance.getPoolCycleManager()
-      )) as PoolCycleManager;
-
       testPool(
         deployer,
         account1,
@@ -103,9 +101,11 @@ describe("start testing", () => {
         account3,
         account4,
         poolInstance,
+        poolImplementation,
         referenceLendingPoolsInstance,
-        poolCycleManager,
-        defaultStateManagerInstance
+        poolCycleManagerInstance,
+        defaultStateManagerInstance,
+        getPoolContractFactory
       );
     });
 
@@ -115,7 +115,7 @@ describe("start testing", () => {
         account1,
         account3,
         defaultStateManagerInstance,
-        poolFactoryInstance,
+        cpContractFactoryInstance,
         poolInstance,
         GOLDFINCH_LENDING_POOLS
       );
@@ -123,7 +123,12 @@ describe("start testing", () => {
 
     // Run this spec last because it moves time forward a lot and that impacts the pool tests
     it("run the PoolCycleManager test", async () => {
-      testPoolCycleManager(deployer, account1, poolCycleManagerInstance);
+      testPoolCycleManager(
+        deployer,
+        account1,
+        poolCycleManagerInstance,
+        cpContractFactoryInstance.address
+      );
     });
   });
 });

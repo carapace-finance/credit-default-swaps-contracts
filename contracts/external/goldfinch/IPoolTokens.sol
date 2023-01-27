@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.13;
 
-import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import {IERC721Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/IERC721Upgradeable.sol";
 
 /**
  * @dev Goldfinch ERC721 compliant token interface to represent junior tranche or senior tranche shares of any of the borrower pools.
@@ -10,12 +10,12 @@ import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
  * Changes:
  *  1. Updated compiler version to match the rest of the project
  *  2. Removed "pragma experimental ABIEncoderV2"
- *  3. Updated ERC721 interface import
+ *  3. Updated ERC721 interface import to use upgradeable version
  *  4. Removed all unused structs/events/functions
 
  * Mainnet: https://etherscan.io/address/0x57686612C601Cb5213b01AA8e80AfEb24BBd01df
  */
-interface IPoolTokens is IERC721 {
+interface IPoolTokens is IERC721Upgradeable {
   struct TokenInfo {
     address pool;
     uint256 tranche;

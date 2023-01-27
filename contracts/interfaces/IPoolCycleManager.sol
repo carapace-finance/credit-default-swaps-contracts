@@ -28,7 +28,7 @@ abstract contract IPoolCycleManager {
 
   /// @notice Emitted when a new pool cycle is created.
   event PoolCycleCreated(
-    uint256 poolId,
+    address poolAddress,
     uint256 cycleIndex,
     uint256 cycleStartTime,
     uint256 openCycleDuration,
@@ -36,68 +36,77 @@ abstract contract IPoolCycleManager {
   );
 
   /*** errors ***/
-  error NotPoolFactory(address msgSender);
-  error PoolAlreadyRegistered(uint256 poolId);
+  error NotContractFactory(address msgSender);
+  error PoolAlreadyRegistered(address poolAddress);
   error InvalidCycleDuration(uint256 cycleDuration);
+  error ZeroContractFactoryAddress();
+
+  /**
+   * @notice Sets the contract factory address. Only callable by the owner.
+   * @param _contractFactoryAddress address of the contract factory which is the only contract allowed to register pools.
+   */
+  function setContractFactory(address _contractFactoryAddress) external virtual;
 
   /**
    * @notice Registers the given pool and starts a new cycle for it in `Open` state.
-   * @param _poolId The id of the pool.
-   * @param openCycleDuration Time duration for which cycle is OPEN, meaning deposit & withdraw is allowed.
-   * @param cycleDuration The total duration of each pool cycle.
+   * @param _poolAddress The address of the pool.
+   * @param _openCycleDuration Time duration for which cycle is OPEN, meaning deposit & withdraw is allowed.
+   * @param _cycleDuration The total duration of each pool cycle.
    */
   function registerPool(
-    uint256 _poolId,
-    uint256 openCycleDuration,
-    uint256 cycleDuration
+    address _poolAddress,
+    uint256 _openCycleDuration,
+    uint256 _cycleDuration
   ) external virtual;
 
   /**
    * @notice Determines & returns the current cycle state of the given pool.
    * @notice This function also starts a new cycle if required.
-   * @param _poolId The id of the pool.
+   * @param _poolAddress The address of the pool.
    * @return state The newly determined cycle state of the pool.
    */
-  function calculateAndSetPoolCycleState(uint256 _poolId)
+  function calculateAndSetPoolCycleState(address _poolAddress)
     external
     virtual
     returns (CycleState);
 
   /**
-   * @notice Provides the current cycle state of the pool with specified id.
-   * @param _poolId The id of the pool.
+   * @notice Provides the current cycle state of the pool with specified address.
+   * @param _poolAddress The address of the pool.
    * @return state The current cycle state of the given pool.
    */
-  function getCurrentCycleState(uint256 _poolId)
+  function getCurrentCycleState(address _poolAddress)
     external
     view
     virtual
     returns (CycleState);
 
   /**
-   * @notice Provides the current cycle index of the pool with specified id.
-   * @param _poolId The id of the pool.
+   * @notice Provides the current cycle index of the pool with specified address.
+   * @param _poolAddress The address of the pool.
    * @return index The current cycle index of the given pool.
    */
-  function getCurrentCycleIndex(uint256 _poolId)
+  function getCurrentCycleIndex(address _poolAddress)
     external
     view
     virtual
     returns (uint256);
 
   /**
-   * @notice Provides the current cycle info for the pool with specified id.
+   * @notice Provides the current cycle info for the pool with specified address.
+   * @param _poolAddress The address of the pool.
    */
-  function getCurrentPoolCycle(uint256 _poolId)
+  function getCurrentPoolCycle(address _poolAddress)
     external
     view
     virtual
     returns (PoolCycle memory);
 
   /**
-   * @notice Provides the timestamp of the end of the next cycle for the pool with specified id.
+   * @notice Provides the timestamp of the end of the next cycle for the pool with specified address.
+   * @param _poolAddress The address of the pool.
    */
-  function getNextCycleEndTimestamp(uint256 _poolId)
+  function getNextCycleEndTimestamp(address _poolAddress)
     external
     view
     virtual

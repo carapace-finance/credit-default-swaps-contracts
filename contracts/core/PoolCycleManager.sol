@@ -1,48 +1,76 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {UUPSUpgradeableBase} from "../UUPSUpgradeableBase.sol";
 import {IPoolCycleManager, PoolCycle, CycleState} from "../interfaces/IPoolCycleManager.sol";
+import "../libraries/Constants.sol";
 
 /**
  * @title PoolCycleManager
  * @author Carapace Finance
  * @notice Contract to manage the current cycle of various pools.
+ * This contract is upgradeable using the UUPS pattern.
  */
-contract PoolCycleManager is IPoolCycleManager {
-  /*** state variables ***/
-  address public immutable poolFactoryAddress;
-
-  /// @notice tracks the current cycle of all pools in the system.
-  mapping(uint256 => PoolCycle) public poolCycles;
-
-  /*** constructor ***/
+contract PoolCycleManager is UUPSUpgradeableBase, IPoolCycleManager {
+  /////////////////////////////////////////////////////
+  ///             STORAGE - START                   ///
+  /////////////////////////////////////////////////////
   /**
-   * @dev Pool factory contract must create this contract in order to register new pools.
+   * @dev DO NOT CHANGE THE ORDER OF THESE VARIABLES ONCE DEPLOYED
    */
-  constructor() {
-    poolFactoryAddress = msg.sender;
-  }
+
+  /// @notice address of the contract factory which is the only one allowed to register pools.
+  address public contractFactoryAddress;
+
+  /// @notice tracks the current cycle of all pools in the system by its address.
+  mapping(address => PoolCycle) public poolCycles;
+
+  //////////////////////////////////////////////////////
+  ///             STORAGE - END                     ///
+  /////////////////////////////////////////////////////
 
   /*** modifiers ***/
-  modifier onlyPoolFactory() {
-    if (msg.sender != poolFactoryAddress) {
-      revert NotPoolFactory(msg.sender);
+  modifier onlyContractFactory() {
+    if (msg.sender != contractFactoryAddress) {
+      revert NotContractFactory(msg.sender);
     }
     _;
+  }
+
+  /*** initializer ***/
+
+  /**
+   * @notice Initializes the contract.
+   */
+  function initialize() public initializer {
+    __UUPSUpgradeableBase_init();
   }
 
   /*** state-changing functions ***/
 
   /// @inheritdoc IPoolCycleManager
+  function setContractFactory(address _contractFactoryAddress)
+    external
+    override
+    onlyOwner
+  {
+    if (_contractFactoryAddress == Constants.ZERO_ADDRESS) {
+      revert ZeroContractFactoryAddress();
+    }
+
+    contractFactoryAddress = _contractFactoryAddress;
+  }
+
+  /// @inheritdoc IPoolCycleManager
   function registerPool(
-    uint256 _poolId,
+    address _poolAddress,
     uint256 _openCycleDuration,
     uint256 _cycleDuration
-  ) external override onlyPoolFactory {
-    PoolCycle storage poolCycle = poolCycles[_poolId];
+  ) external override onlyContractFactory {
+    PoolCycle storage poolCycle = poolCycles[_poolAddress];
 
     if (poolCycle.currentCycleStartTime > 0) {
-      revert PoolAlreadyRegistered(_poolId);
+      revert PoolAlreadyRegistered(_poolAddress);
     }
 
     if (_openCycleDuration > _cycleDuration) {
@@ -51,16 +79,16 @@ contract PoolCycleManager is IPoolCycleManager {
 
     poolCycle.openCycleDuration = _openCycleDuration;
     poolCycle.cycleDuration = _cycleDuration;
-    _startNewCycle(_poolId, poolCycle, 0);
+    _startNewCycle(_poolAddress, poolCycle, 0);
   }
 
   /// @inheritdoc IPoolCycleManager
-  function calculateAndSetPoolCycleState(uint256 _poolId)
+  function calculateAndSetPoolCycleState(address _poolAddress)
     external
     override
     returns (CycleState)
   {
-    PoolCycle storage poolCycle = poolCycles[_poolId];
+    PoolCycle storage poolCycle = poolCycles[_poolAddress];
 
     /// Gas optimization:
     /// Store the current cycle state in memory instead of reading it from the storage each time.
@@ -87,7 +115,11 @@ contract PoolCycleManager is IPoolCycleManager {
         poolCycle.cycleDuration
       ) {
         /// move current cycle to a new cycle
-        _startNewCycle(_poolId, poolCycle, poolCycle.currentCycleIndex + 1);
+        _startNewCycle(
+          _poolAddress,
+          poolCycle,
+          poolCycle.currentCycleIndex + 1
+        );
       }
     }
 
@@ -97,42 +129,42 @@ contract PoolCycleManager is IPoolCycleManager {
   /*** view functions ***/
 
   /// @inheritdoc IPoolCycleManager
-  function getCurrentCycleState(uint256 _poolId)
+  function getCurrentCycleState(address _poolAddress)
     external
     view
     override
     returns (CycleState)
   {
-    return poolCycles[_poolId].currentCycleState;
+    return poolCycles[_poolAddress].currentCycleState;
   }
 
   /// @inheritdoc IPoolCycleManager
-  function getCurrentCycleIndex(uint256 _poolId)
+  function getCurrentCycleIndex(address _poolAddress)
     external
     view
     override
     returns (uint256)
   {
-    return poolCycles[_poolId].currentCycleIndex;
+    return poolCycles[_poolAddress].currentCycleIndex;
   }
 
   /// @inheritdoc IPoolCycleManager
-  function getCurrentPoolCycle(uint256 _poolId)
+  function getCurrentPoolCycle(address _poolAddress)
     external
     view
     override
     returns (PoolCycle memory)
   {
-    return poolCycles[_poolId];
+    return poolCycles[_poolAddress];
   }
 
-  function getNextCycleEndTimestamp(uint256 _poolId)
+  function getNextCycleEndTimestamp(address _poolAddress)
     external
     view
     override
     returns (uint256 _nextCycleEndTimestamp)
   {
-    PoolCycle storage poolCycle = poolCycles[_poolId];
+    PoolCycle storage poolCycle = poolCycles[_poolAddress];
     _nextCycleEndTimestamp =
       poolCycle.currentCycleStartTime +
       (2 * poolCycle.cycleDuration);
@@ -142,7 +174,7 @@ contract PoolCycleManager is IPoolCycleManager {
 
   /// @dev Starts a new pool cycle using specified cycle index
   function _startNewCycle(
-    uint256 _poolId,
+    address _poolAddress,
     PoolCycle storage _poolCycle,
     uint256 _cycleIndex
   ) internal {
@@ -151,7 +183,7 @@ contract PoolCycleManager is IPoolCycleManager {
     _poolCycle.currentCycleState = CycleState.Open;
 
     emit PoolCycleCreated(
-      _poolId,
+      _poolAddress,
       _cycleIndex,
       block.timestamp,
       _poolCycle.openCycleDuration,

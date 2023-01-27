@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {IReferenceLendingPools, ProtectionPurchaseParams} from "./IReferenceLendingPools.sol";
+enum LendingProtocol {
+  Goldfinch
+}
 
 abstract contract ILendingProtocolAdapter {
   /**
