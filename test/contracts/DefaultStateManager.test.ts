@@ -150,13 +150,23 @@ const testDefaultStateManager: Function = (
       });
 
       it("...should fail to register already registered pool", async () => {
+        await defaultStateManager
+          .connect(deployer)
+          .setContractFactory(await account1.getAddress());
+
         await expect(
           defaultStateManager
-            .connect(await ethers.getSigner(contractFactory.address))
+            .connect(account1)
             .registerPool(poolInstance.address)
         ).to.be.revertedWith(
           `PoolAlreadyRegistered("${await poolInstance.address}")`
         );
+      });
+
+      it("...sets contractFactory address back to contract factory address", async () => {
+        await defaultStateManager
+          .connect(deployer)
+          .setContractFactory(cpContractFactoryInstance.address);
       });
 
       it("...should have update timestamp for registered pool", async () => {
@@ -177,7 +187,7 @@ const testDefaultStateManager: Function = (
         ).to.be.revertedWith("Ownable: caller is not the owner");
       });
 
-      it("...should fail when address is zeo", async () => {
+      it("...should fail when address is zero", async () => {
         await expect(
           defaultStateManager.connect(deployer).setContractFactory(ZERO_ADDRESS)
         ).to.be.revertedWith("ZeroContractFactoryAddress");
