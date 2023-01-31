@@ -186,31 +186,7 @@ contract ProtectionPool is
     whenNotPaused
     nonReentrant
   {
-    /// Verify that the pool is not in OpenToBuyers phase
-    if (poolInfo.currentPhase == ProtectionPoolPhase.OpenToBuyers) {
-      revert ProtectionPoolInOpenToBuyersPhase();
-    }
-
-    uint256 _sTokenShares = convertToSToken(_underlyingAmount);
-    totalSTokenUnderlying += _underlyingAmount;
-    _safeMint(_receiver, _sTokenShares);
-    poolInfo.underlyingToken.safeTransferFrom(
-      msg.sender,
-      address(this),
-      _underlyingAmount
-    );
-
-    /// Verify leverage ratio only when total capital/sTokenUnderlying is higher than minimum capital requirement
-    if (_hasMinRequiredCapital()) {
-      /// calculate pool's current leverage ratio considering the new deposit
-      uint256 _leverageRatio = calculateLeverageRatio();
-
-      if (_leverageRatio > poolInfo.params.leverageRatioCeiling) {
-        revert ProtectionPoolLeverageRatioTooHigh(_leverageRatio);
-      }
-    }
-
-    emit ProtectionSold(_receiver, _underlyingAmount);
+    _deposit(_underlyingAmount, _receiver);
   }
 
   /// @inheritdoc IProtectionPool
@@ -219,37 +195,16 @@ contract ProtectionPool is
     override
     whenNotPaused
   {
-    uint256 _sTokenBalance = balanceOf(msg.sender);
-    if (_sTokenAmount > _sTokenBalance) {
-      revert InsufficientSTokenBalance(msg.sender, _sTokenBalance);
-    }
+    _requestWithdrawal(_sTokenAmount);
+  }
 
-    uint256 _currentCycleIndex = poolCycleManager.getCurrentCycleIndex(
-      address(this)
-    );
-
-    /// Actual withdrawal is allowed in open period of cycle after next cycle
-    /// For example: if request is made in at some time in cycle 1,
-    /// then withdrawal is allowed in open period of cycle 3
-    uint256 _withdrawalCycleIndex = _currentCycleIndex + 2;
-
-    WithdrawalCycleDetail storage withdrawalCycle = withdrawalCycleDetails[
-      _withdrawalCycleIndex
-    ];
-
-    uint256 _oldRequestAmount = withdrawalCycle.withdrawalRequests[msg.sender];
-    withdrawalCycle.withdrawalRequests[msg.sender] = _sTokenAmount;
-
-    /// Update total requested withdrawal amount for the cycle considering existing requested amount
-    if (_oldRequestAmount > _sTokenAmount) {
-      withdrawalCycle.totalSTokenRequested -= (_oldRequestAmount -
-        _sTokenAmount);
-    } else {
-      withdrawalCycle.totalSTokenRequested += (_sTokenAmount -
-        _oldRequestAmount);
-    }
-
-    emit WithdrawalRequested(msg.sender, _sTokenAmount, _withdrawalCycleIndex);
+  /// @inheritdoc IProtectionPool
+  function depositAndRequestWithdrawal(
+    uint256 _underlyingAmountToDeposit,
+    uint256 _sTokenAmountToWithdraw
+  ) external virtual override whenNotPaused nonReentrant {
+    _deposit(_underlyingAmountToDeposit, msg.sender);
+    _requestWithdrawal(_sTokenAmountToWithdraw);
   }
 
   /// @inheritdoc IProtectionPool
@@ -986,5 +941,67 @@ contract ProtectionPool is
         ++j;
       }
     }
+  }
+
+  function _deposit(uint256 _underlyingAmount, address _receiver) internal {
+    /// Verify that the pool is not in OpenToBuyers phase
+    if (poolInfo.currentPhase == ProtectionPoolPhase.OpenToBuyers) {
+      revert ProtectionPoolInOpenToBuyersPhase();
+    }
+
+    uint256 _sTokenShares = convertToSToken(_underlyingAmount);
+    totalSTokenUnderlying += _underlyingAmount;
+    _safeMint(_receiver, _sTokenShares);
+    poolInfo.underlyingToken.safeTransferFrom(
+      msg.sender,
+      address(this),
+      _underlyingAmount
+    );
+
+    /// Verify leverage ratio only when total capital/sTokenUnderlying is higher than minimum capital requirement
+    if (_hasMinRequiredCapital()) {
+      /// calculate pool's current leverage ratio considering the new deposit
+      uint256 _leverageRatio = calculateLeverageRatio();
+
+      if (_leverageRatio > poolInfo.params.leverageRatioCeiling) {
+        revert ProtectionPoolLeverageRatioTooHigh(_leverageRatio);
+      }
+    }
+
+    emit ProtectionSold(_receiver, _underlyingAmount);
+  }
+
+  function _requestWithdrawal(uint256 _sTokenAmount) internal {
+    uint256 _sTokenBalance = balanceOf(msg.sender);
+    if (_sTokenAmount > _sTokenBalance) {
+      revert InsufficientSTokenBalance(msg.sender, _sTokenBalance);
+    }
+
+    uint256 _currentCycleIndex = poolCycleManager.getCurrentCycleIndex(
+      address(this)
+    );
+
+    /// Actual withdrawal is allowed in open period of cycle after next cycle
+    /// For example: if request is made in at some time in cycle 1,
+    /// then withdrawal is allowed in open period of cycle 3
+    uint256 _withdrawalCycleIndex = _currentCycleIndex + 2;
+
+    WithdrawalCycleDetail storage withdrawalCycle = withdrawalCycleDetails[
+      _withdrawalCycleIndex
+    ];
+
+    uint256 _oldRequestAmount = withdrawalCycle.withdrawalRequests[msg.sender];
+    withdrawalCycle.withdrawalRequests[msg.sender] = _sTokenAmount;
+
+    /// Update total requested withdrawal amount for the cycle considering existing requested amount
+    if (_oldRequestAmount > _sTokenAmount) {
+      withdrawalCycle.totalSTokenRequested -= (_oldRequestAmount -
+        _sTokenAmount);
+    } else {
+      withdrawalCycle.totalSTokenRequested += (_sTokenAmount -
+        _oldRequestAmount);
+    }
+
+    emit WithdrawalRequested(msg.sender, _sTokenAmount, _withdrawalCycleIndex);
   }
 }
