@@ -34,7 +34,7 @@ interface ICreditLine {
   /**
    * Comments copied from GoldfinchFactory.createPool: https://github.com/goldfinch-eng/mono/blob/88f0e3f94f6dd23ebae429fe09e2511650df893a/packages/protocol/contracts/protocol/core/GoldfinchFactory.sol#L75
    * Number of days in the credit term. It is used to set the `termEndTime` upon first drawdown.
-   *  ie. The credit line should be fully paid off {_termIndays} days after the first drawdown.
+   *  ie. The credit line should be fully paid off {_termInDays} days after the first drawdown.
    */
   function termInDays() external view returns (uint256);
 
@@ -46,6 +46,12 @@ interface ICreditLine {
   function lateFeeApr() external view returns (uint256);
 
   function isLate() external view returns (bool);
+
+  /**
+   * Specifies the start time of the loan term. This is set upon the first drawdown.
+   * See: https://github.com/goldfinch-eng/mono/blob/14872db0fce441ef226e646bdb05843a6f48a9b5/packages/protocol/contracts/interfaces/IV2CreditLine.sol#L13
+   */
+  function termStartTime() external view returns (uint256);
 
   // Accounting variables
   function balance() external view returns (uint256);

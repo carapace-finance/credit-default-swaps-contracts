@@ -57,19 +57,19 @@ contract ProtectionPool is
   ProtectionPoolInfo private poolInfo;
 
   /// @notice The total underlying amount of premium from protection buyers accumulated in the pool
-  uint256 public totalPremium;
+  uint256 private totalPremium;
 
   /// @notice The total underlying amount of protection bought from this pool
-  uint256 public totalProtection;
+  uint256 private totalProtection;
 
   /// @notice The total premium accrued in underlying token up to the last premium accrual timestamp
-  uint256 public totalPremiumAccrued;
+  uint256 private totalPremiumAccrued;
 
   /**
    * @notice The total underlying amount in the pool backing the value of STokens.
    * @notice This is the total capital deposited by sellers + accrued premiums from buyers - locked capital - default payouts.
    */
-  uint256 public totalSTokenUnderlying;
+  uint256 private totalSTokenUnderlying;
 
   /// @notice The array to track the info for all protection bought.
   ProtectionInfo[] private protectionInfos;
@@ -548,14 +548,11 @@ contract ProtectionPool is
     return _calculateLeverageRatio(totalSTokenUnderlying);
   }
 
-  /**
-   * @notice Converts the given underlying amount to SToken shares/amount.
-   * @param _underlyingAmount The amount of underlying assets to be converted.
-   * @return The SToken shares/amount scaled to 18 decimals.
-   */
+  /// @inheritdoc IProtectionPool
   function convertToSToken(uint256 _underlyingAmount)
     public
     view
+    override
     returns (uint256)
   {
     uint256 _scaledUnderlyingAmt = ProtectionPoolHelper
@@ -570,15 +567,11 @@ contract ProtectionPool is
     return _sTokenShares;
   }
 
-  /**
-   * @dev A protection seller can calculate their balance of an underlying asset with their SToken balance and
-   *      the exchange rate: SToken balance * the exchange rate
-   * @param _sTokenShares The amount of SToken shares to be converted.
-   * @return underlying amount scaled to underlying decimals.
-   */
+  /// @inheritdoc IProtectionPool
   function convertToUnderlying(uint256 _sTokenShares)
     public
     view
+    override
     returns (uint256)
   {
     uint256 _underlyingAmount = (_sTokenShares * _getExchangeRate()) /
@@ -590,42 +583,44 @@ contract ProtectionPool is
       );
   }
 
-  /**
-   * @notice Returns the msg.sender's requested Withdrawal amount for the specified withdrawal cycle index.
-   * @param _withdrawalCycleIndex The index of the withdrawal cycle.
-   */
+  /// @inheritdoc IProtectionPool
   function getRequestedWithdrawalAmount(uint256 _withdrawalCycleIndex)
     external
     view
+    override
+    returns (uint256)
+  {
+    return _getRequestedWithdrawalAmount(_withdrawalCycleIndex);
+  }
+
+  /// @inheritdoc IProtectionPool
+  function getCurrentRequestedWithdrawalAmount()
+    external
+    view
+    override
     returns (uint256)
   {
     return
-      withdrawalCycleDetails[_withdrawalCycleIndex].withdrawalRequests[
-        msg.sender
-      ];
+      _getRequestedWithdrawalAmount(
+        poolCycleManager.getCurrentCycleIndex(address(this))
+      );
   }
 
-  /**
-   * @notice Returns the total requested Withdrawal amount for the specified withdrawal cycle index.
-   */
+  /// @inheritdoc IProtectionPool
   function getTotalRequestedWithdrawalAmount(uint256 _withdrawalCycleIndex)
     external
     view
+    override
     returns (uint256)
   {
     return withdrawalCycleDetails[_withdrawalCycleIndex].totalSTokenRequested;
   }
 
-  /**
-   * @notice Returns the lending pool's detail.
-   * @param _lendingPoolAddress The address of the lending pool.
-   * @return _lastPremiumAccrualTimestamp The timestamp of the last premium accrual.
-   * @return _totalPremium The total premium paid for the lending pool.
-   * @return _totalProtection The total protection bought for the lending pool.
-   */
+  /// @inheritdoc IProtectionPool
   function getLendingPoolDetail(address _lendingPoolAddress)
     external
     view
+    override
     returns (
       uint256 _lastPremiumAccrualTimestamp,
       uint256 _totalPremium,
@@ -641,14 +636,11 @@ contract ProtectionPool is
     _totalProtection = lendingPoolDetail.totalProtection;
   }
 
-  /**
-   * @notice Returns all active protections bought by the specified buyer.
-   * @param _buyer The address of the buyer.
-   * @return _protectionInfos The array of active protections.
-   */
+  /// @inheritdoc IProtectionPool
   function getActiveProtections(address _buyer)
     external
     view
+    override
     returns (ProtectionInfo[] memory _protectionInfos)
   {
     EnumerableSetUpgradeable.UintSet
@@ -667,13 +659,11 @@ contract ProtectionPool is
     }
   }
 
-  /**
-   * @notice Returns total premium paid by buyer for the specified lending pool.
-   */
+  /// @inheritdoc IProtectionPool
   function getTotalPremiumPaidForLendingPool(
     address _buyer,
     address _lendingPoolAddress
-  ) external view returns (uint256) {
+  ) external view override returns (uint256) {
     return
       protectionBuyerAccounts[_buyer].lendingPoolToPremium[_lendingPoolAddress];
   }
@@ -722,6 +712,34 @@ contract ProtectionPool is
     _maxAllowedProtectionDurationInSeconds =
       poolCycleManager.getNextCycleEndTimestamp(address(this)) -
       block.timestamp;
+  }
+
+  /// @inheritdoc IProtectionPool
+  function getPoolDetails()
+    external
+    view
+    override
+    returns (
+      uint256 _totalSTokenUnderlying,
+      uint256 _totalProtection,
+      uint256 _totalPremium,
+      uint256 _totalPremiumAccrued
+    )
+  {
+    _totalSTokenUnderlying = totalSTokenUnderlying;
+    _totalProtection = totalProtection;
+    _totalPremium = totalPremium;
+    _totalPremiumAccrued = totalPremiumAccrued;
+  }
+
+  /// @inheritdoc IProtectionPool
+  function getUnderlyingBalance(address _user)
+    external
+    view
+    override
+    returns (uint256)
+  {
+    return convertToUnderlying(balanceOf(_user));
   }
 
   /*** internal functions */
@@ -1003,5 +1021,16 @@ contract ProtectionPool is
     }
 
     emit WithdrawalRequested(msg.sender, _sTokenAmount, _withdrawalCycleIndex);
+  }
+
+  function _getRequestedWithdrawalAmount(uint256 _withdrawalCycleIndex)
+    internal
+    view
+    returns (uint256)
+  {
+    return
+      withdrawalCycleDetails[_withdrawalCycleIndex].withdrawalRequests[
+        msg.sender
+      ];
   }
 }
