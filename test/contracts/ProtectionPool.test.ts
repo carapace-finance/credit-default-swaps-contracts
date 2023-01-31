@@ -84,12 +84,10 @@ const testProtectionPool: Function = (
         protectionPool.address,
         _depositAmount
       );
+
       await protectionPool
         .connect(_account)
-        .deposit(_depositAmount, _accountAddress);
-      await protectionPool
-        .connect(_account)
-        .requestWithdrawal(_withdrawalAmount);
+        .depositAndRequestWithdrawal(_depositAmount, _withdrawalAmount);
     };
 
     const verifyWithdrawal = async (
@@ -1086,29 +1084,33 @@ const testProtectionPool: Function = (
         });
       });
 
+      const verifyTotalRequestedWithdrawal = async (
+        _expectedTotalWithdrawal: BigNumber,
+        _withdrawalCycleIndex: number
+      ) => {
+        expect(
+          await protectionPool.getTotalRequestedWithdrawalAmount(
+            _withdrawalCycleIndex
+          )
+        ).to.eq(_expectedTotalWithdrawal);
+      };
+
+      const verifyRequestedWithdrawal = async (
+        _account: Signer,
+        _expectedWithdrawal: BigNumber,
+        _withdrawalCycleIndex: number
+      ) => {
+        expect(
+          await protectionPool
+            .connect(_account)
+            .getRequestedWithdrawalAmount(_withdrawalCycleIndex)
+        ).to.eq(_expectedWithdrawal);
+      };
+
       describe("...requestWithdrawal", async () => {
-        const _withdrawalCycleIndex = 2; // current pool cycle index + 2
+        const WITHDRAWAL_CYCLE_INDEX = 2; // current pool cycle index + 2
         const _requestedTokenAmt1 = parseEther("11");
         const _requestedTokenAmt2 = parseEther("5");
-        const verifyTotalRequestedWithdrawal = async (
-          _expectedTotalWithdrawal: BigNumber
-        ) => {
-          expect(
-            await protectionPool.getTotalRequestedWithdrawalAmount(
-              _withdrawalCycleIndex
-            )
-          ).to.eq(_expectedTotalWithdrawal);
-        };
-        const verifyRequestedWithdrawal = async (
-          _account: Signer,
-          _expectedWithdrawal: BigNumber
-        ) => {
-          expect(
-            await protectionPool
-              .connect(_account)
-              .getRequestedWithdrawalAmount(_withdrawalCycleIndex)
-          ).to.eq(_expectedWithdrawal);
-        };
 
         it("...fail when pool is paused", async () => {
           await protectionPool.connect(deployer).pause();
@@ -1153,13 +1155,20 @@ const testProtectionPool: Function = (
             .withArgs(
               sellerAddress,
               _requestedTokenAmt1,
-              _withdrawalCycleIndex
+              WITHDRAWAL_CYCLE_INDEX
             );
 
-          await verifyRequestedWithdrawal(seller, _requestedTokenAmt1);
+          await verifyRequestedWithdrawal(
+            seller,
+            _requestedTokenAmt1,
+            WITHDRAWAL_CYCLE_INDEX
+          );
 
           // withdrawal cycle's total sToken requested amount should be same as the requested amount
-          await verifyTotalRequestedWithdrawal(_requestedTokenAmt1);
+          await verifyTotalRequestedWithdrawal(
+            _requestedTokenAmt1,
+            WITHDRAWAL_CYCLE_INDEX
+          );
         });
 
         it("...2nd request by same user should update existing request", async () => {
@@ -1172,13 +1181,20 @@ const testProtectionPool: Function = (
             .withArgs(
               sellerAddress,
               _requestedTokenAmt2,
-              _withdrawalCycleIndex
+              WITHDRAWAL_CYCLE_INDEX
             );
 
-          await verifyRequestedWithdrawal(seller, _requestedTokenAmt2);
+          await verifyRequestedWithdrawal(
+            seller,
+            _requestedTokenAmt2,
+            WITHDRAWAL_CYCLE_INDEX
+          );
 
           // withdrawal cycle's total sToken requested amount should be same as the new requested amount
-          await verifyTotalRequestedWithdrawal(_requestedTokenAmt2);
+          await verifyTotalRequestedWithdrawal(
+            _requestedTokenAmt2,
+            WITHDRAWAL_CYCLE_INDEX
+          );
         });
 
         it("...fail when amount in updating request is higher than token balance", async () => {
@@ -1197,11 +1213,164 @@ const testProtectionPool: Function = (
             protectionPool.connect(account4).requestWithdrawal(_tokenBalance)
           )
             .to.emit(protectionPool, "WithdrawalRequested")
-            .withArgs(account4Address, _tokenBalance, _withdrawalCycleIndex);
+            .withArgs(account4Address, _tokenBalance, WITHDRAWAL_CYCLE_INDEX);
 
-          await verifyRequestedWithdrawal(account4, _tokenBalance);
+          await verifyRequestedWithdrawal(
+            account4,
+            _tokenBalance,
+            WITHDRAWAL_CYCLE_INDEX
+          );
           await verifyTotalRequestedWithdrawal(
-            _requestedTokenAmt2.add(_tokenBalance)
+            _requestedTokenAmt2.add(_tokenBalance),
+            WITHDRAWAL_CYCLE_INDEX
+          );
+        });
+      });
+
+      describe("...depositAndRequestWithdrawal", async () => {
+        const WITHDRAWAL_CYCLE_INDEX = 2; // current pool cycle index + 2
+        const _depositAmt = parseUSDC("11");
+        const _withdrawalSTokenAmt1 = parseEther("11"); // same as deposit amount
+        const _withdrawalSTokenAmt2 = parseEther("21");
+
+        let newUser: Signer;
+        let newUserAddress: string;
+
+        before(async () => {
+          newUser = (await ethers.getSigners())[5];
+          newUserAddress = await newUser.getAddress();
+        });
+
+        it("...fail when pool is paused", async () => {
+          await protectionPool.connect(deployer).pause();
+          expect(await protectionPool.paused()).to.be.true;
+
+          await expect(
+            protectionPool.depositAndRequestWithdrawal(
+              parseUSDC("1"),
+              parseEther("1")
+            )
+          ).to.be.revertedWith("Pausable: paused");
+        });
+
+        it("...unpause the pool", async () => {
+          await protectionPool.connect(deployer).unpause();
+          expect(await protectionPool.paused()).to.be.false;
+        });
+
+        it("...fails when an user requests more than deposit", async () => {
+          const _tokenBalance = await protectionPool.balanceOf(newUserAddress);
+          expect(_tokenBalance).to.be.equal(0);
+
+          const _depositAmt = parseUSDC("11");
+          const _withdrawalSTokenAmt = parseEther("21");
+          await transferAndApproveUsdcToPool(newUser, _depositAmt);
+
+          await expect(
+            protectionPool
+              .connect(newUser)
+              .depositAndRequestWithdrawal(_depositAmt, _withdrawalSTokenAmt)
+          ).to.be.revertedWith(
+            `InsufficientSTokenBalance("${await newUser.getAddress()}", ${parseEther(
+              "11"
+            )})`
+          );
+        });
+
+        it("...fails when withdrawal amount is higher than token balance + deposit", async () => {
+          const _sTokenBalance = await protectionPool.balanceOf(sellerAddress);
+          const _depositAmt = parseUSDC("10");
+          await transferAndApproveUsdcToPool(seller, _depositAmt);
+
+          // withdrawal amount is balance + 10 + 1 (additional 1 to fail)
+          const _withdrawalSTokenAmt = _sTokenBalance.add(parseEther("11"));
+
+          await expect(
+            protectionPool
+              .connect(seller)
+              .depositAndRequestWithdrawal(_depositAmt, _withdrawalSTokenAmt)
+          ).to.be.revertedWith(
+            `InsufficientSTokenBalance("${sellerAddress}", ${_sTokenBalance.add(
+              parseEther("10")
+            )})`
+          );
+        });
+
+        it("... is successful when deposit and withdrawal is same", async () => {
+          await transferAndApproveUsdcToPool(newUser, _depositAmt);
+
+          const _totalRequestedWithdrawalBefore =
+            await protectionPool.getTotalRequestedWithdrawalAmount(
+              WITHDRAWAL_CYCLE_INDEX
+            );
+
+          await expect(
+            protectionPool
+              .connect(newUser)
+              .depositAndRequestWithdrawal(_depositAmt, _withdrawalSTokenAmt1)
+          )
+            .to.emit(protectionPool, "ProtectionSold")
+            .withArgs(newUserAddress, _depositAmt)
+            .to.emit(protectionPool, "WithdrawalRequested")
+            .withArgs(
+              newUserAddress,
+              _withdrawalSTokenAmt1,
+              WITHDRAWAL_CYCLE_INDEX
+            );
+
+          await verifyRequestedWithdrawal(
+            newUser,
+            _withdrawalSTokenAmt1,
+            WITHDRAWAL_CYCLE_INDEX
+          );
+
+          // withdrawal cycle's total sToken requested amount should be increased by the requested amount
+          await verifyTotalRequestedWithdrawal(
+            _totalRequestedWithdrawalBefore.add(_withdrawalSTokenAmt1),
+            WITHDRAWAL_CYCLE_INDEX
+          );
+        });
+
+        it("...2nd request by same user should update existing request", async () => {
+          await transferAndApproveUsdcToPool(newUser, _depositAmt);
+
+          const _totalRequestedWithdrawalBefore =
+            await protectionPool.getTotalRequestedWithdrawalAmount(
+              WITHDRAWAL_CYCLE_INDEX
+            );
+
+          await protectionPool
+            .connect(newUser)
+            .depositAndRequestWithdrawal(_depositAmt, _withdrawalSTokenAmt2);
+
+          await verifyRequestedWithdrawal(
+            newUser,
+            _withdrawalSTokenAmt2,
+            WITHDRAWAL_CYCLE_INDEX
+          );
+
+          // withdrawal cycle's total sToken requested amount should be increased by the requested amount
+          await verifyTotalRequestedWithdrawal(
+            _totalRequestedWithdrawalBefore.add(
+              _withdrawalSTokenAmt2.sub(_withdrawalSTokenAmt1)
+            ),
+            WITHDRAWAL_CYCLE_INDEX
+          );
+        });
+
+        it("...fail when amount in updating request is higher than token balance + deposit", async () => {
+          const _tokenBalance = await protectionPool.balanceOf(newUserAddress);
+          const _withdrawalSTokenAmt3 = _tokenBalance.add(parseEther("25"));
+          await transferAndApproveUsdcToPool(newUser, _depositAmt);
+
+          await expect(
+            protectionPool
+              .connect(newUser)
+              .depositAndRequestWithdrawal(_depositAmt, _withdrawalSTokenAmt3)
+          ).to.be.revertedWith(
+            `InsufficientSTokenBalance("${newUserAddress}", ${_tokenBalance.add(
+              parseEther("11")
+            )})`
           );
         });
       });
@@ -1371,9 +1540,9 @@ const testProtectionPool: Function = (
             .connect(deployer)
             .deposit(_underlyingDepositAmount, deployerAddress);
 
-          // previous deposits: 140K, new deposit: 5K
+          // previous deposits: 140K, 22 and new deposit: 5K
           expect(await calculateTotalSellerDeposit()).to.eq(
-            parseUSDC("145000")
+            parseUSDC("145022")
           );
         });
       });

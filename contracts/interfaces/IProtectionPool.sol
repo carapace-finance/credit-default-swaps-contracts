@@ -247,6 +247,18 @@ abstract contract IProtectionPool {
   function requestWithdrawal(uint256 _sTokenAmount) external virtual;
 
   /**
+   * @notice This function allows deposit and requestWithdrawal to be called in same transaction.
+   * Receiver of the sTokens will be the msg.sender.
+   * Underlying amount needs to be approved for transfer to this contract.
+   * @param _underlyingAmountToDeposit The amount of underlying token to deposit.
+   * @param _sTokenAmountToWithdraw The amount of sToken to withdraw.
+   */
+  function depositAndRequestWithdrawal(
+    uint256 _underlyingAmountToDeposit,
+    uint256 _sTokenAmountToWithdraw
+  ) external virtual;
+
+  /**
    * @notice Attempts to withdraw the sToken amount specified by the user with upper bound based on withdrawal phase.
    * @notice A withdrawal request must be created during previous pool cycle.
    * @notice A withdrawal can only be made when the pool is in `Open` state.
@@ -282,7 +294,11 @@ abstract contract IProtectionPool {
   /**
    * @notice Returns various parameters and other pool related info.
    */
-  function getPoolInfo() external view virtual returns (ProtectionPoolInfo memory);
+  function getPoolInfo()
+    external
+    view
+    virtual
+    returns (ProtectionPoolInfo memory);
 
   /**
    * @notice Calculates and returns leverage ratio scaled to 18 decimals.
