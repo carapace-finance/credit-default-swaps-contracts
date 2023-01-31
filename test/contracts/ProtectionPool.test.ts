@@ -630,13 +630,10 @@ const testProtectionPool: Function = (
         let _purchaseParams: ProtectionPurchaseParamsStruct;
 
         it("...fails if the lending pool is not supported/added", async () => {
-          const buyer = await ethers.getImpersonatedSigner(
-            "0x8481a6ebaf5c7dabc3f7e09e44a89531fd31f822"
-          );
           const _notSupportedLendingPool =
             "0xC13465CE9Ae3Aa184eB536F04FDc3f54D2dEf277";
           await expect(
-            protectionPool.connect(buyer).buyProtection(
+            protectionPool.connect(deployer).buyProtection(
               {
                 lendingPoolAddress: _notSupportedLendingPool,
                 nftLpTokenId: 91,
@@ -1289,9 +1286,10 @@ const testProtectionPool: Function = (
             .to.emit(protectionPool, "PremiumAccrued")
             .to.emit(protectionPool, "ProtectionExpired");
 
-          // 1599.26 + 707.59 + 410.23 + 641.89 = ~3359
+          // 1599.26 + 707.59 + 410.23 + 641.89 = ~3358.97
+          const _expectedPremiumLowerBound = parseUSDC("3358.90");
           expect(await protectionPool.totalPremiumAccrued())
-            .to.be.gt(parseUSDC("3358.98"))
+            .to.be.gt(_expectedPremiumLowerBound)
             .and.to.be.lt(parseUSDC("3359"));
 
           expect(
@@ -1299,7 +1297,7 @@ const testProtectionPool: Function = (
               _totalSTokenUnderlyingBefore
             )
           )
-            .to.be.gt(parseUSDC("3358.98"))
+            .to.be.gt(_expectedPremiumLowerBound)
             .and.to.be.lt(parseUSDC("3359"));
 
           expect(

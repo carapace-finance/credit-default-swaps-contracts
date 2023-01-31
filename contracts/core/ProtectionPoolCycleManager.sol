@@ -11,7 +11,10 @@ import "../libraries/Constants.sol";
  * @notice Contract to manage the current cycle of all protection pools.
  * This contract is upgradeable using the UUPS pattern.
  */
-contract ProtectionPoolCycleManager is UUPSUpgradeableBase, IProtectionPoolCycleManager {
+contract ProtectionPoolCycleManager is
+  UUPSUpgradeableBase,
+  IProtectionPoolCycleManager
+{
   /////////////////////////////////////////////////////
   ///             STORAGE - START                   ///
   /////////////////////////////////////////////////////
@@ -59,6 +62,7 @@ contract ProtectionPoolCycleManager is UUPSUpgradeableBase, IProtectionPoolCycle
     }
 
     contractFactoryAddress = _contractFactoryAddress;
+    emit ContractFactoryUpdated(_contractFactoryAddress);
   }
 
   /// @inheritdoc IProtectionPoolCycleManager
@@ -86,7 +90,9 @@ contract ProtectionPoolCycleManager is UUPSUpgradeableBase, IProtectionPoolCycle
     override
     returns (ProtectionPoolCycleState)
   {
-    ProtectionPoolCycle storage poolCycle = protectionPoolCycles[_protectionPoolAddress];
+    ProtectionPoolCycle storage poolCycle = protectionPoolCycles[
+      _protectionPoolAddress
+    ];
 
     /// Gas optimization:
     /// Store the current cycle state in memory instead of reading it from the storage each time.

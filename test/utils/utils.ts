@@ -8,9 +8,17 @@ export const impersonateSignerWithEth = async (
 ): Promise<Signer> => {
   const signer = await ethers.getImpersonatedSigner(address);
   // send ethValue to address
-  await deployer.sendTransaction({
-    to: address,
+  await transferEth(deployer, address, ethValue);
+  return signer;
+};
+
+export const transferEth = async (
+  sender: Signer,
+  receiverAddress: string,
+  ethValue: string
+) => {
+  await sender.sendTransaction({
+    to: receiverAddress,
     value: ethers.utils.parseEther(ethValue)
   });
-  return signer;
 };

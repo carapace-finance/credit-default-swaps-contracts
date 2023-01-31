@@ -186,7 +186,7 @@ const testContractFactory: Function = (
             _poolCycleParams.openCycleDuration,
             _poolCycleParams.cycleDuration
           )
-          .emit(defaultStateManager, "PoolRegistered");
+          .emit(defaultStateManager, "ProtectionPoolRegistered");
 
         _secondPoolAddress = (await cpContractFactory.getProtectionPools())[1];
       });

@@ -44,9 +44,17 @@ struct PoolState {
  */
 abstract contract IDefaultStateManager {
   /** events */
-  event PoolRegistered(address indexed protectionPool);
-  event PoolStatesAssessed(uint256 timestamp);
 
+  /// @notice emitted when the contract factory address is set
+  event ContractFactoryUpdated(address indexed contractFactory);
+
+  /// @notice emitted when a a new protection pool is registered
+  event ProtectionPoolRegistered(address indexed protectionPool);
+
+  /// @notice emitted when lending status of all registered protection pools are assessed
+  event ProtectionPoolStatesAssessed(uint256 timestamp);
+
+  /// @notice emitted when a lending pool is locked because of late payment
   event LendingPoolLocked(
     address indexed lendingPool,
     address indexed protectionPool,
@@ -54,6 +62,7 @@ abstract contract IDefaultStateManager {
     uint256 amount
   );
 
+  /// @notice emitted when a lending pool is unlocked because of 2 consecutive re-payments after a late payment
   event LendingPoolUnlocked(
     address indexed lendingPool,
     address indexed protectionPool,
@@ -62,8 +71,8 @@ abstract contract IDefaultStateManager {
 
   /** errors */
   error NotContractFactory(address msgSender);
-  error PoolNotRegistered(address pool);
-  error PoolAlreadyRegistered(address pool);
+  error ProtectionPoolNotRegistered(address protectionPool);
+  error ProtectionPoolAlreadyRegistered(address protectionPool);
   error ZeroContractFactoryAddress();
 
   /**

@@ -32,6 +32,9 @@ struct ProtectionPoolCycle {
 abstract contract IProtectionPoolCycleManager {
   /*** events ***/
 
+  /// @notice emitted when the contract factory address is set
+  event ContractFactoryUpdated(address indexed contractFactory);
+
   /// @notice Emitted when a new pool cycle is created.
   event ProtectionPoolCycleCreated(
     address poolAddress,

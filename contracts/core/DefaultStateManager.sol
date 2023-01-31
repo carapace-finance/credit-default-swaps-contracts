@@ -76,6 +76,7 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
     }
 
     contractFactoryAddress = _contractFactoryAddress;
+    emit ContractFactoryUpdated(_contractFactoryAddress);
   }
 
   /// @inheritdoc IDefaultStateManager
@@ -91,7 +92,7 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
       poolStateIndex[_protectionPoolAddress]
     ];
     if (poolState.updatedTimestamp > 0) {
-      revert PoolAlreadyRegistered(_protectionPoolAddress);
+      revert ProtectionPoolAlreadyRegistered(_protectionPoolAddress);
     }
 
     poolStates.push();
@@ -102,7 +103,7 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
 
     _assessState(poolStates[newIndex]);
 
-    emit PoolRegistered(_protectionPoolAddress);
+    emit ProtectionPoolRegistered(_protectionPoolAddress);
   }
 
   /// @inheritdoc IDefaultStateManager
@@ -119,7 +120,7 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
       }
     }
 
-    emit PoolStatesAssessed(block.timestamp);
+    emit ProtectionPoolStatesAssessed(block.timestamp);
   }
 
   /// @inheritdoc IDefaultStateManager
@@ -147,7 +148,7 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
   {
     PoolState storage poolState = poolStates[poolStateIndex[msg.sender]];
     if (poolState.updatedTimestamp == 0) {
-      revert PoolNotRegistered(msg.sender);
+      revert ProtectionPoolNotRegistered(msg.sender);
     }
 
     address[] memory _lendingPools = poolState
