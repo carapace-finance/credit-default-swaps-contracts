@@ -357,6 +357,78 @@ abstract contract IProtectionPool {
     returns (uint256 _maxAllowedProtectionDurationInSeconds);
 
   /**
+   * @notice Converts the given underlying amount to SToken shares/amount.
+   * @param _underlyingAmount The amount of underlying assets to be converted in underlying decimals.
+   * @return The SToken shares/amount scaled to 18 decimals.
+   */
+  function convertToSToken(uint256 _underlyingAmount)
+    public
+    view
+    virtual
+    returns (uint256);
+
+  /**
+   * @notice Converts specified SToken balance to underlying amount.
+   * the exchange rate: SToken balance * the exchange rate
+   * @param _sTokenShares The amount of SToken shares to be converted, scaled to 18 decimals.
+   * @return The underlying amount scaled to underlying decimals.
+   */
+  function convertToUnderlying(uint256 _sTokenShares)
+    public
+    view
+    virtual
+    returns (uint256);
+
+  /**
+   * @notice Returns the msg.sender's requested Withdrawal amount for the specified withdrawal cycle index.
+   * @param _withdrawalCycleIndex The index of the withdrawal cycle.
+   * @return The requested withdrawal amount in this pool's token, sToken, scaled to 18 decimals.
+   */
+  function getRequestedWithdrawalAmount(uint256 _withdrawalCycleIndex)
+    external
+    view
+    virtual
+    returns (uint256);
+
+  /**
+   * @notice Returns the msg.sender's requested Withdrawal amount for the current withdrawal cycle index.
+   * @return The requested withdrawal amount in this pool's token, sToken, scaled to 18 decimals.
+   */
+  function getCurrentRequestedWithdrawalAmount()
+    external
+    view
+    virtual
+    returns (uint256);
+
+  /**
+   * @notice Returns the total requested Withdrawal amount for the specified withdrawal cycle index.
+   * @param _withdrawalCycleIndex The index of the withdrawal cycle.
+   * @return The total requested withdrawal amount in this pool's token, sToken, scaled to 18 decimals.
+   */
+  function getTotalRequestedWithdrawalAmount(uint256 _withdrawalCycleIndex)
+    external
+    view
+    virtual
+    returns (uint256);
+
+  /**
+   * @notice Returns the lending pool's detail.
+   * @param _lendingPoolAddress The address of the lending pool.
+   * @return _lastPremiumAccrualTimestamp The timestamp of the last premium accrual.
+   * @return _totalPremium The total premium paid for the lending pool.
+   * @return _totalProtection The total protection bought for the lending pool.
+   */
+  function getLendingPoolDetail(address _lendingPoolAddress)
+    external
+    view
+    virtual
+    returns (
+      uint256 _lastPremiumAccrualTimestamp,
+      uint256 _totalPremium,
+      uint256 _totalProtection
+    );
+
+  /**
    * @notice Returns all the protections bought from the pool, active & expired.
    */
   function getAllProtections()
@@ -364,4 +436,52 @@ abstract contract IProtectionPool {
     view
     virtual
     returns (ProtectionInfo[] memory _protections);
+
+  /**
+   * @notice Returns all active protections bought by the specified buyer.
+   * @param _buyer The address of the buyer.
+   * @return _protectionInfos The array of active protections.
+   */
+  function getActiveProtections(address _buyer)
+    external
+    view
+    virtual
+    returns (ProtectionInfo[] memory _protectionInfos);
+
+  /**
+   * @notice Returns total premium paid by buyer for the specified lending pool.
+   */
+  function getTotalPremiumPaidForLendingPool(
+    address _buyer,
+    address _lendingPoolAddress
+  ) external view virtual returns (uint256);
+
+  /**
+   * Returns pool details such as total sToken underlying(capital), protection etc.
+   * @return _totalSTokenUnderlying The total sToken underlying (capital) in the pool, in underlying token.
+   * @return _totalProtection The total protection bought in the pool, in underlying token.
+   * @return _totalPremium The total premium paid in the pool, in underlying token.
+   * @return _totalPremiumAccrued The total premium accrued from the protections, in underlying token.
+   */
+  function getPoolDetails()
+    external
+    view
+    virtual
+    returns (
+      uint256 _totalSTokenUnderlying,
+      uint256 _totalProtection,
+      uint256 _totalPremium,
+      uint256 _totalPremiumAccrued
+    );
+
+  /**
+   * Returns the current balance of the specified user in underlying token.
+   * @param _user The address of the user.
+   * @return The balance of the user in underlying token.
+   */
+  function getUnderlyingBalance(address _user)
+    external
+    view
+    virtual
+    returns (uint256);
 }

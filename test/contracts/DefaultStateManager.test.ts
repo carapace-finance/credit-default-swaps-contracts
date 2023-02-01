@@ -232,13 +232,12 @@ const testDefaultStateManager: Function = (
         // 50K protection in lending pool 3: 0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf
         // total sToken underlying = 100,200
         // total protection: 120,000
-        expect(await poolInstance.totalSTokenUnderlying()).to.equal(
-          parseUSDC("100200")
-        );
+        const [_totalSTokenUnderlying, _totalProtection] =
+          await poolInstance.getPoolDetails();
 
-        expect(await poolInstance.totalProtection()).to.equal(
-          parseUSDC("120000")
-        );
+        expect(_totalSTokenUnderlying).to.equal(parseUSDC("100200"));
+
+        expect(_totalProtection).to.equal(parseUSDC("120000"));
 
         // deposit capital into pool
         await depositToPool(seller, parseUSDC("19800"));

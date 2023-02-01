@@ -69,9 +69,13 @@ const testProtectionPool: Function = (
 
     const calculateTotalSellerDeposit = async () => {
       // seller deposit should total sToken underlying - premium accrued
-      return (await protectionPool.totalSTokenUnderlying()).sub(
-        await protectionPool.totalPremiumAccrued()
-      );
+      const [
+        _totalSTokenUnderlying,
+        _totalProtection,
+        _totalPremium,
+        _totalPremiumAccrued
+      ] = await protectionPool.getPoolDetails();
+      return _totalSTokenUnderlying.sub(_totalPremiumAccrued);
     };
 
     const depositAndRequestWithdrawal = async (
@@ -102,8 +106,9 @@ const testProtectionPool: Function = (
       const poolUsdcBalanceBefore = await USDC.balanceOf(
         protectionPool.address
       );
-      const poolTotalSTokenUnderlyingBefore =
-        await protectionPool.totalSTokenUnderlying();
+      const poolTotalSTokenUnderlyingBefore = (
+        await protectionPool.getPoolDetails()
+      )[0];
 
       const expectedUsdcWithdrawalAmt =
         await protectionPool.convertToUnderlying(_sTokenWithdrawalAmt);
@@ -132,8 +137,9 @@ const testProtectionPool: Function = (
         expectedUsdcWithdrawalAmt
       );
 
-      const poolTotalSTokenUnderlyingAfter =
-        await protectionPool.totalSTokenUnderlying();
+      const poolTotalSTokenUnderlyingAfter = (
+        await protectionPool.getPoolDetails()
+      )[0];
       expect(
         poolTotalSTokenUnderlyingBefore.sub(poolTotalSTokenUnderlyingAfter)
       ).to.eq(expectedUsdcWithdrawalAmt);
@@ -172,8 +178,9 @@ const testProtectionPool: Function = (
     ) => {
       const _underlyingAmount: BigNumber = parseUSDC(_depositAmount);
       const _accountAddress = await _account.getAddress();
-      let _totalSTokenUnderlyingBefore =
-        await protectionPool.totalSTokenUnderlying();
+      let _totalSTokenUnderlyingBefore = (
+        await protectionPool.getPoolDetails()
+      )[0];
       let _poolUsdcBalanceBefore = await USDC.balanceOf(protectionPool.address);
       let _sTokenBalanceBefore = await protectionPool.balanceOf(
         _accountAddress
@@ -194,8 +201,9 @@ const testProtectionPool: Function = (
       expect(_sTokenReceived).to.eq(parseEther(_depositAmount));
 
       // Verify the pool's total sToken underlying is updated correctly
-      let _totalSTokenUnderlyingAfter =
-        await protectionPool.totalSTokenUnderlying();
+      let _totalSTokenUnderlyingAfter = (
+        await protectionPool.getPoolDetails()
+      )[0];
       expect(
         _totalSTokenUnderlyingAfter.sub(_totalSTokenUnderlyingBefore)
       ).to.eq(_underlyingAmount);
@@ -526,7 +534,7 @@ const testProtectionPool: Function = (
         });
 
         it("...premium should not have accrued", async () => {
-          expect(await protectionPool.totalPremiumAccrued()).to.be.eq(0);
+          expect((await protectionPool.getPoolDetails())[3]).to.be.eq(0);
         });
 
         it("...should have correct total seller deposit after 1st deposit", async () => {
@@ -795,8 +803,9 @@ const testProtectionPool: Function = (
           const _premiumTotalOfLendingPoolIdBefore: BigNumber = (
             await protectionPool.getLendingPoolDetail(_lendingPool2)
           )[0];
-          const _premiumTotalBefore: BigNumber =
-            await protectionPool.totalPremium();
+          const _premiumTotalBefore: BigNumber = (
+            await protectionPool.getPoolDetails()
+          )[2];
           const _expectedPremiumAmount = parseUSDC("2186.178950");
 
           const _protectionAmount = parseUSDC("100000"); // 100,000 USDC
@@ -834,8 +843,9 @@ const testProtectionPool: Function = (
           const _premiumTotalOfLendingPoolIdAfter: BigNumber = (
             await protectionPool.getLendingPoolDetail(_lendingPool2)
           )[1];
-          const _premiumTotalAfter: BigNumber =
-            await protectionPool.totalPremium();
+          const _premiumTotalAfter: BigNumber = (
+            await protectionPool.getPoolDetails()
+          )[2];
           expect(
             _premiumAmountOfAccountAfter.sub(_initialPremiumAmountOfAccount)
           ).to.eq(_expectedPremiumAmount);
@@ -846,7 +856,7 @@ const testProtectionPool: Function = (
           expect(
             _premiumTotalOfLendingPoolIdBefore.add(_expectedPremiumAmount)
           ).to.eq(_premiumTotalOfLendingPoolIdAfter);
-          expect(await protectionPool.totalProtection()).to.eq(
+          expect((await protectionPool.getPoolDetails())[1]).to.eq(
             _protectionAmount
           );
 
@@ -984,7 +994,7 @@ const testProtectionPool: Function = (
           expect((await getActiveProtections()).length).to.eq(3);
 
           // 200K USDC = 100K + 20K + 30K
-          expect(await protectionPool.totalProtection()).to.eq(
+          expect((await protectionPool.getPoolDetails())[1]).to.eq(
             parseUSDC("150000")
           );
         });
@@ -1043,7 +1053,7 @@ const testProtectionPool: Function = (
           expect((await getActiveProtections()).length).to.eq(4);
 
           // 200K USDC = 100K + 20K + 30K + 50K
-          expect(await protectionPool.totalProtection()).to.eq(
+          expect((await protectionPool.getPoolDetails())[1]).to.eq(
             parseUSDC("200000")
           );
         });
@@ -1439,9 +1449,10 @@ const testProtectionPool: Function = (
         });
 
         it("...should accrue premium, expire protections & update last accrual timestamp", async () => {
-          expect(await protectionPool.totalPremiumAccrued()).to.eq(0);
-          const _totalSTokenUnderlyingBefore =
-            await protectionPool.totalSTokenUnderlying();
+          expect((await protectionPool.getPoolDetails())[3]).to.eq(0);
+          const _totalSTokenUnderlyingBefore = (
+            await protectionPool.getPoolDetails()
+          )[0];
 
           /// Time needs to be moved ahead by 31 days to apply payment to lending pool
           await moveForwardTimeByDays(31);
@@ -1457,12 +1468,12 @@ const testProtectionPool: Function = (
 
           // 1599.26 + 707.59 + 410.23 + 641.89 = ~3358.97
           const _expectedPremiumLowerBound = parseUSDC("3358.90");
-          expect(await protectionPool.totalPremiumAccrued())
+          expect((await protectionPool.getPoolDetails())[3])
             .to.be.gt(_expectedPremiumLowerBound)
             .and.to.be.lt(parseUSDC("3359"));
 
           expect(
-            (await protectionPool.totalSTokenUnderlying()).sub(
+            (await protectionPool.getPoolDetails())[0].sub(
               _totalSTokenUnderlyingBefore
             )
           )
@@ -1507,7 +1518,7 @@ const testProtectionPool: Function = (
           expect(await getActiveProtections()).to.have.lengthOf(2);
           expect(allProtections[0].expired).to.eq(false);
           expect(allProtections[3].expired).to.eq(false);
-          expect(await protectionPool.totalProtection()).to.eq(
+          expect((await protectionPool.getPoolDetails())[1]).to.eq(
             parseUSDC("150000")
           );
         });
@@ -1516,7 +1527,7 @@ const testProtectionPool: Function = (
       describe("deposit after buyProtection", async () => {
         // this unit test is successful but hardhat is failing to generate stacktrace to verify the revert reason
         xit("...fails if it breaches leverage ratio ceiling", async () => {
-          expect(await protectionPool.totalProtection()).to.eq(
+          expect((await protectionPool.getPoolDetails())[1]).to.eq(
             parseUSDC("150000")
           );
 
@@ -1566,7 +1577,7 @@ const testProtectionPool: Function = (
           );
 
           expect(await getActiveProtections()).to.have.lengthOf(3);
-          expect(await protectionPool.totalProtection()).to.eq(
+          expect((await protectionPool.getPoolDetails())[1]).to.eq(
             parseUSDC("160000")
           ); // 100K + 50K + 10K
         });
@@ -1680,7 +1691,7 @@ const testProtectionPool: Function = (
           );
 
           expect(await getActiveProtections()).to.have.lengthOf(4);
-          expect(await protectionPool.totalProtection()).to.eq(
+          expect((await protectionPool.getPoolDetails())[1]).to.eq(
             parseUSDC("200000")
           ); // 100K + 50K + 10K + 40K extension
 
@@ -1818,7 +1829,7 @@ const testProtectionPool: Function = (
           expect((await getActiveProtections()).length).to.eq(2);
 
           // 100K USDC = 70K + 50K
-          expect(await protectionPool.totalProtection()).to.eq(
+          expect((await protectionPool.getPoolDetails())[1]).to.eq(
             parseUSDC("120000")
           );
         });
@@ -1832,7 +1843,7 @@ const testProtectionPool: Function = (
             )
           ).to.eq(parseEther("30000"));
 
-          expect(await protectionPool.totalSTokenUnderlying()).to.be.eq(
+          expect((await protectionPool.getPoolDetails())[0]).to.be.eq(
             parseUSDC("100000")
           ); // 3 deposits = 20K + 40K + 40K = 100K USDC
         });
@@ -2014,8 +2025,9 @@ const testProtectionPool: Function = (
             "ITranchedPool",
             _lendingPool2
           )) as ITranchedPool;
-          _totalSTokenUnderlyingBefore =
-            await protectionPool.totalSTokenUnderlying();
+          _totalSTokenUnderlyingBefore = (
+            await protectionPool.getPoolDetails()
+          )[0];
           _expectedLockedCapital = parseUSDC("50000");
 
           // pay lending pool 1
@@ -2062,7 +2074,7 @@ const testProtectionPool: Function = (
         it("...should reduce total sToken underlying by locked capital", async () => {
           expect(
             _totalSTokenUnderlyingBefore.sub(
-              await protectionPool.totalSTokenUnderlying()
+              (await protectionPool.getPoolDetails())[0]
             )
           ).to.eq(_expectedLockedCapital);
         });
@@ -2160,10 +2172,6 @@ const testProtectionPool: Function = (
           expect(await claimAndVerifyUnlockedCapital(account4, true)).to.be.gt(
             0
           );
-          console.log(
-            "totalSTokenUnderlying: ",
-            await protectionPool.totalSTokenUnderlying()
-          );
         });
 
         it("...account 4 should  NOT be able to claim again", async () => {
@@ -2174,7 +2182,7 @@ const testProtectionPool: Function = (
 
         it("...has correct total underlying amount", async () => {
           // 5 deposits = 20K + 40K + 40K + 100 + 100 - 50K of locked capital
-          expect(await protectionPool.totalSTokenUnderlying()).to.eq(
+          expect((await protectionPool.getPoolDetails())[0]).to.eq(
             parseUSDC("50200")
           );
         });
@@ -2195,7 +2203,7 @@ const testProtectionPool: Function = (
 
         it("...has correct total underlying amount", async () => {
           // 5 deposits = 20K + 40K + 40K + 100 + 100
-          expect(await protectionPool.totalSTokenUnderlying()).to.eq(
+          expect((await protectionPool.getPoolDetails())[0]).to.eq(
             parseUSDC("100200")
           );
         });
@@ -2226,7 +2234,7 @@ const testProtectionPool: Function = (
 
           expect((await protectionPool.getAllProtections()).length).to.be.eq(3);
           expect((await getActiveProtections()).length).to.eq(1);
-          expect(await protectionPool.totalProtection()).to.eq(
+          expect((await protectionPool.getPoolDetails())[1]).to.eq(
             parseUSDC("70000")
           );
         });
@@ -2310,7 +2318,7 @@ const testProtectionPool: Function = (
         });
 
         it("...has correct total underlying amount", async () => {
-          expect(await protectionPool.totalSTokenUnderlying()).to.be.gt(
+          expect((await protectionPool.getPoolDetails())[0]).to.be.gt(
             parseUSDC("50200")
           ); // 5 deposits = 20K + 40K + 40K + 100 + 100 - 50K of locked capital + accrued premium
         });
@@ -2455,8 +2463,9 @@ const testProtectionPool: Function = (
         });
 
         it("...deposit should succeed in open phase after lock/unlock", async () => {
-          const _totalSTokenUnderlyingBefore =
-            await protectionPool.totalSTokenUnderlying();
+          const _totalSTokenUnderlyingBefore = (
+            await protectionPool.getPoolDetails()
+          )[0];
 
           const _depositAmount = parseUSDC("10000");
           await transferAndApproveUsdcToPool(deployer, _depositAmount);
@@ -2464,8 +2473,9 @@ const testProtectionPool: Function = (
             .connect(deployer)
             .deposit(_depositAmount, deployerAddress);
 
-          const _totalSTokenUnderlyingAfter =
-            await protectionPool.totalSTokenUnderlying();
+          const _totalSTokenUnderlyingAfter = (
+            await protectionPool.getPoolDetails()
+          )[0];
           expect(
             _totalSTokenUnderlyingAfter.sub(_totalSTokenUnderlyingBefore)
           ).to.be.eq(_depositAmount);
@@ -2707,7 +2717,7 @@ const testProtectionPool: Function = (
       });
 
       it("...should be able to call existing function in v1", async () => {
-        expect(await protectionPool.totalProtection()).to.equal(
+        expect((await protectionPool.getPoolDetails())[1]).to.equal(
           parseUSDC("120000")
         );
       });
