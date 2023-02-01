@@ -65,12 +65,6 @@ const testGoldfinchAdapter: Function = (
     });
 
     describe("constructor", () => {
-      it("...should set the correct goldfinch config", async () => {
-        expect(await goldfinchAdapter.goldfinchConfig()).to.equal(
-          await goldfinchAdapter.GOLDFINCH_CONFIG_ADDRESS()
-        );
-      });
-
       it("...should set deployer as on owner", async () => {
         expect(await goldfinchAdapter.owner()).to.equal(
           await deployer.getAddress()

@@ -40,7 +40,7 @@ const testPremiumCalculator: Function = (
       minCarapaceRiskPremiumPercent: parseEther("0.02"), // 2%
       underlyingRiskPremiumPercent: parseEther("0.1"), // 10%
       minProtectionDurationInSeconds: getDaysInSeconds(10),
-      protectionExtensionGracePeriodInSeconds: getDaysInSeconds(10)
+      protectionRenewalGracePeriodInSeconds: getDaysInSeconds(10)
     };
 
     describe("constructor", () => {

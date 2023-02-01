@@ -159,16 +159,16 @@ contract ProtectionPool is
   }
 
   /// @inheritdoc IProtectionPool
-  function extendProtection(
+  function renewProtection(
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
     uint256 _maxPremiumAmount
   ) external override whenNotPaused nonReentrant {
     /// Verify that user can extend protection
-    ProtectionPoolHelper.verifyBuyerCanExtendProtection(
+    ProtectionPoolHelper.verifyBuyerCanRenewProtection(
       protectionBuyerAccounts,
       protectionInfos,
       _protectionPurchaseParams,
-      poolInfo.params.protectionExtensionGracePeriodInSeconds
+      poolInfo.params.protectionRenewalGracePeriodInSeconds
     );
 
     _verifyAndCreateProtection(
@@ -825,8 +825,8 @@ contract ProtectionPool is
         startTimestamp: _protectionStartTimestamp,
         K: _k,
         lambda: _lambda,
-        purchaseParams: _protectionPurchaseParams,
-        expired: false
+        expired: false,
+        purchaseParams: _protectionPurchaseParams
       })
     );
 

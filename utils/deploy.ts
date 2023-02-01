@@ -257,7 +257,7 @@ const deployContracts: Function = async () => {
       minCarapaceRiskPremiumPercent: parseEther("0.02"),
       underlyingRiskPremiumPercent: parseEther("0.1"),
       minProtectionDurationInSeconds: getDaysInSeconds(10),
-      protectionExtensionGracePeriodInSeconds: getDaysInSeconds(14) // 2 weeks
+      protectionRenewalGracePeriodInSeconds: getDaysInSeconds(14) // 2 weeks
     };
 
     await cpContractFactoryInstance.createProtectionPool(
