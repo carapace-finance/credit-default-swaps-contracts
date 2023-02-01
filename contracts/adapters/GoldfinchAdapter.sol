@@ -30,6 +30,9 @@ contract GoldfinchAdapter is UUPSUpgradeableBase, ILendingProtocolAdapter {
   /// https://github.com/goldfinch-eng/mono/blob/main/packages/protocol/contracts/protocol/core/TranchingLogic.sol#L42
   uint256 private constant NUM_TRANCHES_PER_SLICE = 2;
 
+  /// This is the address of the goldfinch config contract
+  /// which is used to access other goldfinch contracts and config vars.
+  /// See: https://dev.goldfinch.finance/docs/reference/contracts/core/GoldfinchConfig
   address private constant GOLDFINCH_CONFIG_ADDRESS =
     0xaA425F8BfE82CD18f634e2Fe91E5DdEeFD98fDA1;
 
@@ -163,6 +166,7 @@ contract GoldfinchAdapter is UUPSUpgradeableBase, ILendingProtocolAdapter {
 
       /// If the token is for the specified lending pool and is a junior tranche, then calculate the remaining principal
       /// otherwise, the remaining principal is zero
+      /// Only junior tranche is allowed to have protection coverage
       if (
         _tokenInfo.pool == _lendingPoolAddress &&
         _isJuniorTrancheId(_tokenInfo.tranche)
@@ -239,6 +243,9 @@ contract GoldfinchAdapter is UUPSUpgradeableBase, ILendingProtocolAdapter {
     return _seniorPoolStrategy.getLeverageRatio(_tranchedPool);
   }
 
+  /**
+   * @dev Provides the PoolTokens contract
+   */
   function _getPoolTokens() internal view returns (IPoolTokens) {
     return
       IPoolTokens(
@@ -246,6 +253,10 @@ contract GoldfinchAdapter is UUPSUpgradeableBase, ILendingProtocolAdapter {
       );
   }
 
+  /**
+   * @dev Provides the credit line contract for specified tranched pool(lending pool) address
+   * @param _lendingPoolAddress address of tranched pool
+   */
   function _getCreditLine(address _lendingPoolAddress)
     internal
     view
@@ -254,6 +265,10 @@ contract GoldfinchAdapter is UUPSUpgradeableBase, ILendingProtocolAdapter {
     return ITranchedPool(_lendingPoolAddress).creditLine();
   }
 
+  /**
+   * @dev Provides the latest payment timestamp for specified tranched pool(lending pool) address
+   * @param _lendingPool address of tranched pool
+   */
   function _getLatestPaymentTimestamp(address _lendingPool)
     internal
     view
@@ -262,6 +277,10 @@ contract GoldfinchAdapter is UUPSUpgradeableBase, ILendingProtocolAdapter {
     return _getCreditLine(_lendingPool).lastFullPaymentTime();
   }
 
+  /**
+   * @dev Checks if the tranched pool(lending pool) is late
+   * @param _lendingPoolAddress address of tranched pool
+   */
   function _isLendingPoolLate(address _lendingPoolAddress)
     internal
     view

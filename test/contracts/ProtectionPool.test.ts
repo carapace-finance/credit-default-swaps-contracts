@@ -157,11 +157,11 @@ const testProtectionPool: Function = (
       expectedState: number
     ) => {
       await protectionPoolCycleManager.calculateAndSetPoolCycleState(
-        poolInfo.poolAddress
+        protectionPool.address
       );
       const currentPoolCycle =
         await protectionPoolCycleManager.getCurrentPoolCycle(
-          poolInfo.poolAddress
+          protectionPool.address
         );
       expect(currentPoolCycle.currentCycleIndex).to.equal(expectedCycleIndex);
       expect(currentPoolCycle.currentCycleState).to.eq(expectedState);
@@ -224,7 +224,7 @@ const testProtectionPool: Function = (
       const currentTimestamp = await getLatestBlockTimestamp();
       const currentPoolCycle =
         await protectionPoolCycleManager.getCurrentPoolCycle(
-          poolInfo.poolAddress
+          protectionPool.address
         );
 
       // max duration = next cycle's end timestamp - currentTimestamp
@@ -345,10 +345,6 @@ const testProtectionPool: Function = (
       it("...set the SToken symbol", async () => {
         const _symbol: string = await protectionPool.symbol();
         expect(_symbol).to.eq("sT11");
-      });
-
-      it("...set the pool id", async () => {
-        expect(poolInfo.poolAddress).to.eq(protectionPool.address);
       });
 
       it("...set the leverage ratio floor", async () => {
@@ -489,7 +485,7 @@ const testProtectionPool: Function = (
           );
           expect(
             await protectionPoolCycleManager.getCurrentCycleState(
-              poolInfo.poolAddress
+              protectionPool.address
             )
           ).to.equal(1); // 1 = Open
 
@@ -1402,7 +1398,7 @@ const testProtectionPool: Function = (
         it("...fails because there was no previous cycle", async () => {
           const currentPoolCycle =
             await protectionPoolCycleManager.getCurrentPoolCycle(
-              poolInfo.poolAddress
+              protectionPool.address
             );
           await expect(
             protectionPool.withdraw(parseEther("1"), deployerAddress)

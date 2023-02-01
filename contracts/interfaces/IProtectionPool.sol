@@ -43,7 +43,6 @@ struct ProtectionPoolParams {
 
 /// @notice Contains protection pool information
 struct ProtectionPoolInfo {
-  address poolAddress;
   ProtectionPoolParams params;
   IERC20MetadataUpgradeable underlyingToken;
   IReferenceLendingPools referenceLendingPools;

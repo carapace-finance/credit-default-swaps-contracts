@@ -121,7 +121,6 @@ contract ContractFactory is
         IProtectionPool(address(0)).initialize.selector,
         _msgSender(),
         ProtectionPoolInfo({
-          poolAddress: address(0),
           params: _poolParameters,
           underlyingToken: _underlyingToken,
           referenceLendingPools: _referenceLendingPools,

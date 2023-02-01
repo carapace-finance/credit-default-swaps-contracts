@@ -42,7 +42,7 @@ library ProtectionPoolHelper {
     /// or to extend protection longer than a day
     _verifyProtectionDuration(
       poolCycleManager,
-      poolInfo.poolAddress,
+      _protectionPool,
       _protectionStartTimestamp,
       _protectionPurchaseParams.protectionDurationInSeconds,
       _isExtension
