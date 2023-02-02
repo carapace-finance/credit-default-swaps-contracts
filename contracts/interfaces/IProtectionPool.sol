@@ -202,7 +202,7 @@ abstract contract IProtectionPool {
     IDefaultStateManager _defaultStateManager,
     string calldata _name,
     string calldata _symbol
-  ) public virtual;
+  ) external virtual;
 
   /**
    * @notice A buyer can buy protection for a position in lending pool when lending pool is supported & active (not defaulted or expired).

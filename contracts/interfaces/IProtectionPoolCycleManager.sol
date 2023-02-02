@@ -54,7 +54,10 @@ abstract contract IProtectionPoolCycleManager {
    * @notice Sets the contract factory address. Only callable by the owner.
    * @param _contractFactoryAddress address of the contract factory which is the only contract allowed to register pools.
    */
-  function setContractFactory(address _contractFactoryAddress) external virtual;
+  function setContractFactory(address _contractFactoryAddress)
+    external
+    payable
+    virtual;
 
   /**
    * @notice Registers the given protection pool and starts a new cycle for it in `Open` state.

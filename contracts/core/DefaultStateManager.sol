@@ -54,7 +54,7 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
   /**
    * @notice Initializes the contract.
    */
-  function initialize() public initializer {
+  function initialize() external initializer {
     __UUPSUpgradeableBase_init();
 
     /// create a dummy pool state to reserve index 0.
@@ -66,8 +66,10 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
   /*** state-changing functions ***/
 
   /// @inheritdoc IDefaultStateManager
+  /// @dev This function is marked as payable for gas optimization.
   function setContractFactory(address _contractFactoryAddress)
     external
+    payable
     override
     onlyOwner
   {

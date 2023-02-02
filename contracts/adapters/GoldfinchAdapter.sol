@@ -52,7 +52,7 @@ contract GoldfinchAdapter is UUPSUpgradeableBase, ILendingProtocolAdapter {
   /////////////////////////////////////////////////////
 
   /*** initializer ***/
-  function initialize(address _owner) public initializer {
+  function initialize(address _owner) external initializer {
     __UUPSUpgradeableBase_init();
     _transferOwnership(_owner);
     goldfinchConfig = IGoldfinchConfig(GOLDFINCH_CONFIG_ADDRESS);

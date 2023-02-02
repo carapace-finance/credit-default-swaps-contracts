@@ -5,10 +5,15 @@ import {ERC20SnapshotUpgradeable, ERC20Upgradeable} from "@openzeppelin/contract
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 
 /**
- * @notice Implementation of the interest bearing token for the Carapace protocol.
- * SToken is an EIP-20 compliant representation of balance supplied in the protection pool.
- * Yields distribution such as premium and interest from rehypothecation are calculated based on this token.
+ * @title SToken
+ * @author Carapace Finance
+ * @dev Implementation of the interest bearing token for the Carapace protocol.
+ * SToken is an ERC-20 compliant representation of balance underlying available in the protection pool.
+ * Accrued protection premium is distributed to SToken holders.
  * Each protection pool will have a corresponding SToken.
+ *
+ * SToken uses OpenZeppelin's ERC20SnapshotUpgradeable to allow snapshotting of the token balance,
+ * when a pool capital needs to be locked because of late payment.
  */
 abstract contract SToken is PausableUpgradeable, ERC20SnapshotUpgradeable {
   /////////////////////////////////////////////////////
@@ -31,8 +36,12 @@ abstract contract SToken is PausableUpgradeable, ERC20SnapshotUpgradeable {
   /////////////////////////////////////////////////////
 
   /*** events ***/
+
+  /// @notice Emitted when a new sToken is deployed and initialized
   event STokenCreated(string name, string symbol);
-  event Minted(address indexed owner, uint256 amount);
+
+  /// @notice Emitted when new sToken shares are minted
+  event Minted(address indexed receiver, uint256 amount);
 
   /** Initializer */
 
@@ -48,9 +57,10 @@ abstract contract SToken is PausableUpgradeable, ERC20SnapshotUpgradeable {
   }
 
   /*** state-changing functions ***/
+
   /**
-   * @notice Called by a pool contract to mint sToken shares to a user.
-   * @param _to The address that should own the position
+   * @dev Should be called by a deriving protection pool contract to mint sToken shares to a investor/protection sellers.
+   * @param _to The address that should receive the minted tokens.
    * @param _amount the amount of tokens to mint
    */
   function _safeMint(address _to, uint256 _amount) internal whenNotPaused {

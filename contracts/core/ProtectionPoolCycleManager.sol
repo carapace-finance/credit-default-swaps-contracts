@@ -45,15 +45,17 @@ contract ProtectionPoolCycleManager is
   /**
    * @notice Initializes the contract.
    */
-  function initialize() public initializer {
+  function initialize() external initializer {
     __UUPSUpgradeableBase_init();
   }
 
   /*** state-changing functions ***/
 
   /// @inheritdoc IProtectionPoolCycleManager
+  /// @dev This function is marked as payable for gas optimization.
   function setContractFactory(address _contractFactoryAddress)
     external
+    payable
     override
     onlyOwner
   {

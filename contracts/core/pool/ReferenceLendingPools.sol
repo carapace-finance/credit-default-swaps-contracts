@@ -14,7 +14,8 @@ import "../../libraries/Constants.sol";
  * @author Carapace Finance
  * @notice ReferenceLendingPools manages the basket of reference lending pools,
  * against which the carapace protocol can provide the protection.
- * This contract is upgradeable using the UUPS pattern.
+ *
+ * @dev This contract is upgradeable using the UUPS pattern.
  */
 contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
   /////////////////////////////////////////////////////
@@ -23,12 +24,14 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
   /**
    * @dev DO NOT CHANGE THE ORDER OF THESE VARIABLES ONCE DEPLOYED
    */
+
+  /// @notice the lending protocol adapter factory
   ILendingProtocolAdapterFactory private lendingProtocolAdapterFactory;
 
   /// @notice the mapping of the lending pool address to the lending pool info
   mapping(address => ReferenceLendingPoolInfo) public referenceLendingPools;
 
-  /// @notice an array of all the added/supported lending pools in this basket
+  /// @notice an array of all the added lending pools in this basket
   address[] private lendingPools;
 
   //////////////////////////////////////////////////////
@@ -36,6 +39,9 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
   /////////////////////////////////////////////////////
 
   /** modifiers */
+
+  /// @dev modifier to check if the lending pool is supported,
+  /// i.e. added to this basket and is active
   modifier whenLendingPoolSupported(address _lendingPoolAddress) {
     if (!_isReferenceLendingPoolAdded(_lendingPoolAddress)) {
       revert ReferenceLendingPoolNotSupported(_lendingPoolAddress);
@@ -66,13 +72,17 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
       );
     }
 
+    /// Initialize the UUPSUpgradeableBase
     __UUPSUpgradeableBase_init();
 
     lendingProtocolAdapterFactory = ILendingProtocolAdapterFactory(
       _lendingProtocolAdapterFactory
     );
+
+    /// Transfer ownership of this contract to the specified owner address
     _transferOwnership(_owner);
 
+    /// Add the specified lending pools to the basket
     uint256 length = _lendingPools.length;
     for (uint256 i; i < length; ) {
       _addReferenceLendingPool(
@@ -80,16 +90,19 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
         _lendingPoolProtocols[i],
         _protectionPurchaseLimitsInDays[i]
       );
+
       unchecked {
         ++i;
       }
     }
   }
 
-  /** external functions */
+  /** state changing functions */
 
   /**
    * @notice Adds a new reference lending pool to the basket.
+   * @dev This function can only be called by the owner of this contract.
+   * @dev This function is marked as payable for gas optimization.
    * @param _lendingPoolAddress address of the lending pool
    * @param _lendingPoolProtocol the protocol of underlying lending pool
    * @param _protectionPurchaseLimitInDays the protection purchase limit in days.
@@ -100,7 +113,7 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
     address _lendingPoolAddress,
     LendingProtocol _lendingPoolProtocol,
     uint256 _protectionPurchaseLimitInDays
-  ) external onlyOwner {
+  ) external payable onlyOwner {
     _addReferenceLendingPool(
       _lendingPoolAddress,
       _lendingPoolProtocol,
@@ -119,7 +132,7 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
   function canBuyProtection(
     address _buyer,
     ProtectionPurchaseParams calldata _purchaseParams,
-    bool _isExtension
+    bool _isRenewal
   )
     external
     view
@@ -131,19 +144,20 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
       _purchaseParams.lendingPoolAddress
     ];
 
-    /// When buyer is not extending existing protection and
+    /// When buyer is not renewing the existing protection and
     /// the protection purchase is NOT within purchase limit duration after
     /// a lending pool added, the buyer cannot purchase protection.
     /// i.e. if the purchase limit is 90 days, the buyer cannot purchase protection
     /// after 90 days of lending pool added to the basket
     if (
-      !_isExtension &&
+      !_isRenewal &&
       block.timestamp > lendingPoolInfo.protectionPurchaseLimitTimestamp
     ) {
       return false;
     }
 
-    /// Verify that protection amount is less than or equal to the remaining principal that buyer has lent to the underlying lending pool
+    /// Verify that protection amount is less than or equal to the remaining principal
+    /// that buyer has lent to the underlying lending pool
     return
       _purchaseParams.protectionAmount <=
       calculateRemainingPrincipal(
@@ -173,15 +187,18 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
     override
     returns (
       address[] memory _lendingPools,
-      LendingPoolStatus[] memory _statues
+      LendingPoolStatus[] memory _statuses
     )
   {
-    uint256 length = lendingPools.length;
-    _lendingPools = new address[](length);
-    _statues = new LendingPoolStatus[](length);
-    for (uint256 i; i < length; ) {
+    uint256 _length = lendingPools.length;
+    _lendingPools = new address[](_length);
+    _statuses = new LendingPoolStatus[](_length);
+
+    /// Iterate through all the lending pools in this basket and get their statuses
+    for (uint256 i; i < _length; ) {
       _lendingPools[i] = lendingPools[i];
-      _statues[i] = _getLendingPoolStatus(lendingPools[i]);
+      _statuses[i] = _getLendingPoolStatus(lendingPools[i]);
+
       unchecked {
         ++i;
       }
@@ -252,14 +269,13 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
       revert ReferenceLendingPoolAlreadyAdded(_lendingPoolAddress);
     }
 
-    uint256 _addedTimestamp = block.timestamp;
-    uint256 _protectionPurchaseLimitTimestamp = _addedTimestamp +
+    uint256 _protectionPurchaseLimitTimestamp = block.timestamp +
       (_protectionPurchaseLimitInDays * Constants.SECONDS_IN_DAY_UINT);
 
     /// add the underlying lending pool to this basket
     referenceLendingPools[_lendingPoolAddress] = ReferenceLendingPoolInfo({
       protocol: _lendingPoolProtocol,
-      addedTimestamp: _addedTimestamp,
+      addedTimestamp: block.timestamp,
       protectionPurchaseLimitTimestamp: _protectionPurchaseLimitTimestamp
     });
     lendingPools.push(_lendingPoolAddress);
@@ -272,11 +288,12 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
     emit ReferenceLendingPoolAdded(
       _lendingPoolAddress,
       _lendingPoolProtocol,
-      _addedTimestamp,
+      block.timestamp,
       _protectionPurchaseLimitTimestamp
     );
   }
 
+  /// @dev Returns the lending protocol adapter for the given lending pool address
   function _getLendingProtocolAdapter(address _lendingPoolAddress)
     internal
     view
@@ -288,6 +305,7 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
       );
   }
 
+  /// @dev Specifies whether the given lending pool is added to the basket or not
   function _isReferenceLendingPoolAdded(address _lendingPoolAddress)
     internal
     view
@@ -296,6 +314,7 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
     return referenceLendingPools[_lendingPoolAddress].addedTimestamp != 0;
   }
 
+  /// @dev Returns the status of the given lending pool
   function _getLendingPoolStatus(address _lendingPoolAddress)
     internal
     view

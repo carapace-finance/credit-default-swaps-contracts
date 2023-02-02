@@ -79,7 +79,10 @@ abstract contract IDefaultStateManager {
    * @notice Sets the contract factory address. Only callable by the owner.
    * @param _contractFactoryAddress address of the contract factory which is the only contract allowed to register pools.
    */
-  function setContractFactory(address _contractFactoryAddress) external virtual;
+  function setContractFactory(address _contractFactoryAddress)
+    external
+    payable
+    virtual;
 
   /**
    * @notice register a protection pool. Only pool factory can call this function.

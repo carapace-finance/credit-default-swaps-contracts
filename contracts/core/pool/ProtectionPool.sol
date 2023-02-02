@@ -130,7 +130,7 @@ contract ProtectionPool is
     IDefaultStateManager _defaultStateManager,
     string calldata _name,
     string calldata _symbol
-  ) public override initializer {
+  ) external override initializer {
     /// initialize parent contracts in same order as they are inherited to mimic the behavior of a constructor
     __UUPSUpgradeableBase_init();
     __ReentrancyGuard_init();
@@ -368,10 +368,46 @@ contract ProtectionPool is
     LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
       _lendingPoolAddress
     ];
-    _lockedAmount = _calculateLockedAmount(
-      lendingPoolDetail,
-      _lendingPoolAddress
-    );
+
+    /// Get indexes of active protection for a lending pool from the storage
+    EnumerableSetUpgradeable.UintSet
+      storage activeProtectionIndexes = lendingPoolDetail
+        .activeProtectionIndexes;
+
+    /// Iterate all active protections and calculate total locked amount for this lending pool
+    /// 1. calculate remaining principal amount for each loan protection in the lending pool.
+    /// 2. for each loan protection, lockedAmt = min(protectionAmt, remainingPrincipal)
+    /// 3. total locked amount = sum of lockedAmt for all loan protections
+    uint256 _length = activeProtectionIndexes.length();
+    for (uint256 i; i < _length; ) {
+      /// Get protection info from the storage
+      uint256 _protectionIndex = activeProtectionIndexes.at(i);
+      ProtectionInfo storage protectionInfo = protectionInfos[_protectionIndex];
+
+      /// Calculate remaining principal amount for a loan protection in the lending pool
+      uint256 _remainingPrincipal = poolInfo
+        .referenceLendingPools
+        .calculateRemainingPrincipal(
+          _lendingPoolAddress,
+          protectionInfo.buyer,
+          protectionInfo.purchaseParams.nftLpTokenId
+        );
+
+      /// Locked amount is minimum of protection amount and remaining principal
+      uint256 _protectionAmount = protectionInfo
+        .purchaseParams
+        .protectionAmount;
+      uint256 _lockedAmountPerProtection = _protectionAmount <
+        _remainingPrincipal
+        ? _protectionAmount
+        : _remainingPrincipal;
+
+      _lockedAmount += _lockedAmountPerProtection;
+
+      unchecked {
+        ++i;
+      }
+    }
 
     unchecked {
       /// step 3: Update total locked & available capital in storage
@@ -410,18 +446,21 @@ contract ProtectionPool is
   /** admin functions */
 
   /// @notice allows the owner to pause the contract
-  function pause() external onlyOwner {
+  /// @dev This function is marked as payable for gas optimization.
+  function pause() external payable onlyOwner {
     _pause();
   }
 
   /// @notice allows the owner to unpause the contract
-  function unpause() external onlyOwner {
+  /// @dev This function is marked as payable for gas optimization.
+  function unpause() external payable onlyOwner {
     _unpause();
   }
 
   /**
    * @notice Updates the leverage ratio parameters: floor, ceiling, and buffer.
    * @notice Only callable by the owner.
+   * @dev This function is marked as payable for gas optimization.
    * @param _leverageRatioFloor the new floor for the leverage ratio scaled by 18 decimals. i.e. 0.5 is 5 * 10^17
    * @param _leverageRatioCeiling the new ceiling for the leverage ratio scaled by 18 decimals. i.e. 1.5 is 1.5 * 10^18
    * @param _leverageRatioBuffer the new buffer for the leverage ratio scaled by 18 decimals. i.e. 0.05 is 5 * 10^16
@@ -430,7 +469,7 @@ contract ProtectionPool is
     uint256 _leverageRatioFloor,
     uint256 _leverageRatioCeiling,
     uint256 _leverageRatioBuffer
-  ) external onlyOwner {
+  ) external payable onlyOwner {
     poolInfo.params.leverageRatioFloor = _leverageRatioFloor;
     poolInfo.params.leverageRatioCeiling = _leverageRatioCeiling;
     poolInfo.params.leverageRatioBuffer = _leverageRatioBuffer;
@@ -439,6 +478,7 @@ contract ProtectionPool is
   /**
    * @notice Updates risk premium calculation params: curvature, minCarapaceRiskPremiumPercent & underlyingRiskPremiumPercent
    * @notice Only callable by the owner.
+   * @dev This function is marked as payable for gas optimization.
    * @param _curvature the new curvature parameter scaled by 18 decimals. i.e. 0.05 curvature is 5 * 10^16
    * @param _minCarapaceRiskPremiumPercent the new minCarapaceRiskPremiumPercent parameter scaled by 18 decimals. i.e. 0.03 is 3 * 10^16
    * @param _underlyingRiskPremiumPercent the new underlyingRiskPremiumPercent parameter scaled by 18 decimals. i.e. 0.10 is 1 * 10^17
@@ -447,7 +487,7 @@ contract ProtectionPool is
     uint256 _curvature,
     uint256 _minCarapaceRiskPremiumPercent,
     uint256 _underlyingRiskPremiumPercent
-  ) external onlyOwner {
+  ) external payable onlyOwner {
     poolInfo.params.curvature = _curvature;
     poolInfo
       .params
@@ -460,10 +500,12 @@ contract ProtectionPool is
   /**
    * @notice Updates the minimum required capital for the protection pool
    * @notice Only callable by the owner.
+   * @dev This function is marked as payable for gas optimization.
    * @param _minRequiredCapital the new minimum required capital for the protection pool in underlying token
    */
   function updateMinRequiredCapital(uint256 _minRequiredCapital)
     external
+    payable
     onlyOwner
   {
     poolInfo.params.minRequiredCapital = _minRequiredCapital;
@@ -471,10 +513,13 @@ contract ProtectionPool is
 
   /**
    * @notice Allows the owner to move pool phase after verification
+   * @notice Only callable by the owner.
+   * @dev This function is marked as payable for gas optimization.
    * @return _newPhase the new phase of the pool, if the phase is updated
    */
   function movePoolPhase()
     external
+    payable
     onlyOwner
     returns (ProtectionPoolPhase _newPhase)
   {
@@ -1064,57 +1109,5 @@ contract ProtectionPool is
       withdrawalCycleDetails[_withdrawalCycleIndex].withdrawalRequests[
         msg.sender
       ];
-  }
-
-  /**
-   * @dev Calculate amount to be locked for a lending pool.
-   * 1. calculate remaining principal amount for each loan protection in the lending pool.
-   * 2. for each loan protection, lockedAmt = min(protectionAmt, remainingPrincipal)
-   * 3. total locked amount = sum of lockedAmt for all loan protections
-   *
-   * @param lendingPoolDetail storage of lending pool detail
-   * @param _lendingPoolAddress address of the lending pool
-   * @return _lockedAmount the total locked amount for the lending pool in underlying tokens
-   */
-  function _calculateLockedAmount(
-    LendingPoolDetail storage lendingPoolDetail,
-    address _lendingPoolAddress
-  ) internal view returns (uint256 _lockedAmount) {
-    /// Get indexes of active protection for a lending pool from the storage
-    EnumerableSetUpgradeable.UintSet
-      storage activeProtectionIndexes = lendingPoolDetail
-        .activeProtectionIndexes;
-
-    /// Iterate all active protections for this lending pool and calculate total locked amount
-    uint256 _length = activeProtectionIndexes.length();
-    for (uint256 i; i < _length; ) {
-      /// Get protection info from the storage
-      uint256 _protectionIndex = activeProtectionIndexes.at(i);
-      ProtectionInfo storage protectionInfo = protectionInfos[_protectionIndex];
-
-      /// Calculate remaining principal amount for a loan protection in the lending pool
-      uint256 _remainingPrincipal = poolInfo
-        .referenceLendingPools
-        .calculateRemainingPrincipal(
-          _lendingPoolAddress,
-          protectionInfo.buyer,
-          protectionInfo.purchaseParams.nftLpTokenId
-        );
-
-      /// Locked amount is minimum of protection amount and remaining principal
-      uint256 _protectionAmount = protectionInfo
-        .purchaseParams
-        .protectionAmount;
-      uint256 _lockedAmountPerProtection = _protectionAmount <
-        _remainingPrincipal
-        ? _protectionAmount
-        : _remainingPrincipal;
-
-      _lockedAmount += _lockedAmountPerProtection;
-
-      unchecked {
-        ++i;
-      }
-    }
   }
 }

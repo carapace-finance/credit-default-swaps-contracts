@@ -20,7 +20,7 @@ contract PremiumCalculator is UUPSUpgradeableBase, IPremiumCalculator {
   /**
    * @notice Initializes the contract.
    */
-  function initialize() public initializer {
+  function initialize() external initializer {
     __UUPSUpgradeableBase_init();
   }
 

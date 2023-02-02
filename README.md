@@ -12,7 +12,7 @@ $ npm install
 
 3. Declare environment variables
 
-I encourage you to declare environment variables in your `.bash_profile`(or .zprofile and others) to avoid sharing your credentials accidentally. You can also make `.env` file in the root of this repository although I do not recommend it.
+We encourage you to declare environment variables in your `.bash_profile`(or .zprofile and others) to avoid sharing your credentials accidentally. You can also make `.env` file in the root of this repository although we do not recommend it.
 
 ```bash
 export ALCHEMY_API_KEY = <alchemy_api_key>
@@ -26,11 +26,16 @@ export FIRST_POOL_SALT = <first_pool_salt>
 export SECOND_POOL_SALT = <second_pool_salt>
 ```
 
-I recommend obtaining your mnemonic words from MetaMask and storing in `MNEMONIC_WORDS` so that you can use the same account when you test a dapp. Each word should be divided by space. You can create a new private key for `DEPLOYMENT_ACCOUNT_PRIVATE_KEY`or export your private key in MetaMask.
+We recommend obtaining your mnemonic words from MetaMask and storing in `MNEMONIC_WORDS` so that you can use the same account when you test a dapp. Each word should be divided by space. You can create a new private key for `DEPLOYMENT_ACCOUNT_PRIVATE_KEY`or export your private key in MetaMask.
 
 You can keep `ETHERSCAN_API_KEY` empty until you deploy to the mainnet. Ask the team about salt values is when you create a new pool.
 
 You are ready to write code!
+
+## Smart Contract Code Style
+
+All smart contracts use mixedCase for state variable names and function names. All other variables are prefixed with an underscore.
+This is done to easily spot the state variables.
 
 ## npm Script
 
