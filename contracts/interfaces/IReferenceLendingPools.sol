@@ -31,8 +31,9 @@ struct ReferenceLendingPoolInfo {
   uint256 protectionPurchaseLimitTimestamp;
 }
 
+/// @notice This struct represents the protection purchase parameters such as the protection amount, duration, etc.
 struct ProtectionPurchaseParams {
-  /// @notice address of the lending pool where the buyer has lent
+  /// @notice address of the lending pool where the buyer has a lending position
   address lendingPoolAddress;
   /// @notice Id of ERC721 LP token received by the buyer to represent the deposit in the lending pool
   /// Buyer has to specify `nftTokenId` when underlying protocol provides ERC721 LP token, i.e. Goldfinch
@@ -67,13 +68,13 @@ abstract contract IReferenceLendingPools {
 
   /**
    * @notice the initialization function for the reference lending pools contract.
-   * This is intended to be called just once to create minimal proxies.
+   * This is intended to be called just once upon creation of a proxy contract.
    * @param _owner the owner of the contract
    * @param _lendingPools the addresses of the lending pools which will be added to the basket
    * @param _lendingPoolProtocols the corresponding protocols of the lending pools which will be added to the basket
    * @param _protectionPurchaseLimitsInDays the corresponding protection purchase limits(in days) of the lending pools,
    * which will be added to the basket
-   * @param _lendingProtocolAdapterFactory the address of the {LendingProtocolAdapterFactory} contract
+   * @param _lendingProtocolAdapterFactory the address of the contract which implements interface {LendingProtocolAdapterFactory}
    */
   function initialize(
     address _owner,
@@ -92,8 +93,8 @@ abstract contract IReferenceLendingPools {
    * @notice Determines whether a buyer can buy the protection for the specified lending pool or not.
    * 1. A buyer can buy protection only within certain time an underlying lending pool added
    * to the basket of the Carapace eligible loans.
-   * 2. A buyer can buy protection only when h/she has lent in the specified lending pool and
-   * protection amount is less than or equal to the lent amount.
+   * 2. A buyer can buy protection only when h/she has position in the specified lending pool and
+   * protection amount is less than or equal to the amount lent
    * @param _buyer the address of the buyer
    * @param _purchaseParams the protection purchase parameters
    * @param _isExtension flag to indicate whether the buyer is extending existing  protection or not
@@ -129,13 +130,13 @@ abstract contract IReferenceLendingPools {
     );
 
   /**
-   * @notice Returns the principal amount that is remaining in the specified lending pool
+   * @notice Calculate and returns the principal amount that is remaining in the specified lending pool
    * for the specified lender for the specified token id.
    * If lender does not have matching lending position, then it returns 0.
    * @param _lendingPool address of the lending pool
    * @param _lender address of the lender
    * @param _nftLpTokenId the id of NFT token representing the lending position of the specified lender
-   * @return the remaining principal amount in underlying
+   * @return the remaining principal amount in underlying tokens
    */
   function calculateRemainingPrincipal(
     address _lendingPool,
@@ -145,6 +146,8 @@ abstract contract IReferenceLendingPools {
 
   /**
    * @notice Returns the latest payment timestamp of the specified lending pool
+   * @param _lendingPool address of the lending pool
+   * @return latest payment timestamp in seconds
    */
   function getLatestPaymentTimestamp(address _lendingPool)
     public
@@ -154,6 +157,8 @@ abstract contract IReferenceLendingPools {
 
   /**
    * @notice Returns the payment period of the specified lending pool in days
+   * @param _lendingPool address of the lending pool
+   * @return payment period in days unscaled, i.e. 1 day = 1
    */
   function getPaymentPeriodInDays(address _lendingPool)
     public

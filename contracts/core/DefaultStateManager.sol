@@ -85,6 +85,7 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
   /// @inheritdoc IDefaultStateManager
   function registerProtectionPool(address _protectionPoolAddress)
     external
+    payable
     override
     onlyContractFactory
   {

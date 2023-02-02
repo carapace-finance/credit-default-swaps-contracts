@@ -5,12 +5,15 @@ pragma solidity ^0.8.13;
 import {IReferenceLendingPools, LendingPoolStatus} from "./IReferenceLendingPools.sol";
 import {IProtectionPool} from "./IProtectionPool.sol";
 
+/// @notice the structure to track the locked capital instance for a lending pool
 struct LockedCapital {
   uint256 snapshotId;
   uint256 amount;
   bool locked;
 }
 
+/// @notice the structure to track a lending pool status detail including the current status and
+/// the timestamp at which the lending pool was marked as late
 struct LendingPoolStatusDetail {
   /// @notice the current status of the lending pool
   LendingPoolStatus currentStatus;
@@ -18,6 +21,7 @@ struct LendingPoolStatusDetail {
   uint256 lateTimestamp;
 }
 
+/// @notice the structure to track the state of a protection pool
 struct ProtectionPoolState {
   /// @notice the protection pool for which state is being tracked
   IProtectionPool protectionPool;
@@ -39,8 +43,8 @@ struct ProtectionPoolState {
 }
 
 /**
- * @notice Contract to track/manage state transitions of all pools within the protocol.
- * @author Carapace Finance
+ * @notice the interface for the default state manager contract,
+ * to track/manage state transitions of all protection pools within the protocol.
  */
 abstract contract IDefaultStateManager {
   /** events */
@@ -87,25 +91,33 @@ abstract contract IDefaultStateManager {
   /**
    * @notice Registers a specified protection pool.
    * @dev Only contract factory can call this function.
+   * @dev Function is marked payable as gas optimization
    * @param _protectionPool an address of the protection pool to register
    */
-  function registerProtectionPool(address _protectionPool) external virtual;
+  function registerProtectionPool(address _protectionPool)
+    external
+    payable
+    virtual;
 
   /**
-   * @notice assess states of all registered pools and initiate state changes & related actions as needed.
+   * @notice assess states of all registered protection pools and
+   * initiate state changes & related actions as needed.
    */
   function assessStates() external virtual;
 
   /**
-   * @notice assess state of specified registered pools and initiate state changes & related actions as needed.
+   * @notice assess state of specified registered pools and
+   * initiate state changes & related actions as needed.
+   * @notice This function is same as "assessStates" except that it only assesses the specified pools.
    * @param _pools the protection pools to assess
    */
   function assessStateBatch(address[] calldata _pools) external virtual;
 
   /**
-   * @notice Return the total claimable amount from all locked capital instances in a given protection pool for a seller address.
-   * This function must be called by the pool contract.
-   * @param _seller seller address
+   * @notice Calculates and returns the total claimable amount from all locked capital instances
+   * in a given protection pool for a user address and marks the unlocked capital as claimed.
+   * This function must be called by the protection pool contract.
+   * @param _seller seller address who received sTokens for investing in the lending pool.
    * @return _claimedUnlockedCapital the unlocked capital that seller can claim from the protection pool.
    */
   function calculateAndClaimUnlockedCapital(address _seller)
@@ -114,9 +126,10 @@ abstract contract IDefaultStateManager {
     returns (uint256 _claimedUnlockedCapital);
 
   /**
-   * @notice Return the total claimable amount from all locked capital instances in a given protection pool for a seller address.
+   * @notice Calculates and returns the total claimable amount from all locked capital instances in a given protection pool for a seller address.
+   * This function is same as "calculateAndClaimUnlockedCapital" except that it does not mark the unlocked capital as claimed.
    * @param _protectionPool protection pool
-   * @param _seller seller address
+   * @param _seller seller address who received sTokens for investing in the lending pool.
    * @return _claimableUnlockedCapital the unlocked capital that seller can claim from the protection pool.
    */
   function calculateClaimableUnlockedAmount(
@@ -126,6 +139,8 @@ abstract contract IDefaultStateManager {
 
   /**
    * @notice Provides the current status of the specified lending pool of given protection pool.
+   * If the protection pool is not registered or lending pool is not supported by specified protection,
+   * then it returns "NotSupported" status.
    * @param _protectionPoolAddress address of the protection pool
    * @param _lendingPoolAddress address of the lending pool
    * @return the status of the lending pool

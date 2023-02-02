@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {ILendingProtocolAdapter} from "../interfaces/ILendingProtocolAdapter.sol";
-import {LendingProtocol} from "../interfaces/IReferenceLendingPools.sol";
+import {LendingProtocol, ILendingProtocolAdapter} from "../interfaces/ILendingProtocolAdapter.sol";
 
+/// @notice Interface for ContractFactory contract to expose the {ILendingProtocolAdapter} instances
 interface ILendingProtocolAdapterFactory {
   /**
    * @notice Returns the {ILendingProtocolAdapter} instance for the given lending protocol.
+   * This function will return zero address if the lending protocol is not supported.
    * @param _lendingProtocol the lending protocol
    * @return _lendingProtocolAdapter the {ILendingProtocolAdapter} instance
    */

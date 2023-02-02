@@ -88,7 +88,7 @@ library RiskFactorCalculator {
    * Risk factor can not be calculated in following scenarios.
    * 1) total capital is less than minimum required capital
    * 2) leverage ratio is not between floor and ceiling
-   * @param _totalCapital the total capital of the pool scaled to 18 decimals
+   * @param _totalCapital the total capital of the pool scaled to underlying decimals
    * @param _leverageRatio the current leverage ratio of the pool scaled to underlying decimals
    * @param _leverageRatioFloor the minimum leverage ratio allowed in the pool scaled to 18 decimals
    * @param _leverageRatioCeiling the maximum leverage ratio allowed in the pool scaled to 18 decimals

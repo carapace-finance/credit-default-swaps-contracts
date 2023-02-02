@@ -73,7 +73,7 @@ contract ProtectionPoolCycleManager is
   function registerProtectionPool(
     address _poolAddress,
     ProtectionPoolCycleParams calldata _cycleParams
-  ) external override onlyContractFactory {
+  ) external payable override onlyContractFactory {
     ProtectionPoolCycle storage poolCycle = protectionPoolCycles[_poolAddress];
 
     if (poolCycle.currentCycleStartTime > 0) {

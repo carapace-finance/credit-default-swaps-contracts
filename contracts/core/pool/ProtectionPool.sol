@@ -356,6 +356,7 @@ contract ProtectionPool is
   /// @inheritdoc IProtectionPool
   function lockCapital(address _lendingPoolAddress)
     external
+    payable
     override
     onlyDefaultStateManager
     whenNotPaused
