@@ -28,9 +28,9 @@ contract GoldfinchAdapter is UUPSUpgradeableBase, ILendingProtocolAdapter {
 
   /// Copied from Goldfinch's TranchingLogic.sol:
   /// https://github.com/goldfinch-eng/mono/blob/main/packages/protocol/contracts/protocol/core/TranchingLogic.sol#L42
-  uint256 public constant NUM_TRANCHES_PER_SLICE = 2;
+  uint256 private constant NUM_TRANCHES_PER_SLICE = 2;
 
-  address public constant GOLDFINCH_CONFIG_ADDRESS =
+  address private constant GOLDFINCH_CONFIG_ADDRESS =
     0xaA425F8BfE82CD18f634e2Fe91E5DdEeFD98fDA1;
 
   /////////////////////////////////////////////////////
@@ -42,7 +42,7 @@ contract GoldfinchAdapter is UUPSUpgradeableBase, ILendingProtocolAdapter {
 
   /// This contract stores mappings of useful goldfinch's "protocol config state".
   /// These config vars are enumerated in the `ConfigOptions` library.
-  IGoldfinchConfig public goldfinchConfig;
+  IGoldfinchConfig private goldfinchConfig;
 
   //////////////////////////////////////////////////////
   ///             STORAGE - END                     ///

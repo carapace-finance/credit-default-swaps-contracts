@@ -308,27 +308,27 @@ library ProtectionPoolHelper {
   }
 
   /**
-   * @dev Verifies whether a buyer can extend protection for same lending position
+   * @dev Verifies whether a buyer can renew protection for same lending position
    * in the same lending pool specified in the protection purchase params, otherwise reverts.
-   * Protection can be extended only within grace period after the protection is expired.
+   * Protection can be renewed only within grace period after the protection is expired.
    */
-  function verifyBuyerCanExtendProtection(
+  function verifyBuyerCanRenewProtection(
     mapping(address => ProtectionBuyerAccount) storage protectionBuyerAccounts,
     ProtectionInfo[] storage protectionInfos,
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
-    uint256 _extensionGracePeriodInSeconds
-  ) public view {
-    uint256 _expiredProtectionIndex = protectionBuyerAccounts[msg.sender]
+    uint256 _renewalGracePeriodInSeconds
+  ) external view {
+    uint256 _renewalProtectionIndex = protectionBuyerAccounts[msg.sender]
       .expiredProtectionIndexByLendingPool[
         _protectionPurchaseParams.lendingPoolAddress
       ][_protectionPurchaseParams.nftLpTokenId];
 
-    if (_expiredProtectionIndex == 0) {
-      revert IProtectionPool.NoExpiredProtectionToExtend();
+    if (_renewalProtectionIndex == 0) {
+      revert IProtectionPool.NoExpiredProtectionToRenew();
     }
 
     ProtectionInfo storage expiredProtectionInfo = protectionInfos[
-      _expiredProtectionIndex
+      _renewalProtectionIndex
     ];
     ProtectionPurchaseParams
       storage expiredProtectionPurchaseParams = expiredProtectionInfo
@@ -346,9 +346,9 @@ library ProtectionPoolHelper {
         block.timestamp >
         (expiredProtectionInfo.startTimestamp +
           expiredProtectionPurchaseParams.protectionDurationInSeconds +
-          _extensionGracePeriodInSeconds)
+          _renewalGracePeriodInSeconds)
       ) {
-        revert IProtectionPool.CanNotExtendProtectionAfterGracePeriod();
+        revert IProtectionPool.CanNotRenewProtectionAfterGracePeriod();
       }
     }
   }

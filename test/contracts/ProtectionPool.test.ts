@@ -393,8 +393,8 @@ const testProtectionPool: Function = (
         );
       });
 
-      it("...set the protectionExtensionGracePeriodInSeconds", async () => {
-        expect(poolInfo.params.protectionExtensionGracePeriodInSeconds).to.eq(
+      it("...set the protectionRenewalGracePeriodInSeconds", async () => {
+        expect(poolInfo.params.protectionRenewalGracePeriodInSeconds).to.eq(
           getDaysInSeconds(14)
         );
       });
@@ -616,10 +616,10 @@ const testProtectionPool: Function = (
         });
       });
 
-      describe("...extendProtection before any protection", () => {
+      describe("...renewProtection before any protection", () => {
         it("...should fail", async () => {
           await expect(
-            protectionPool.connect(_protectionBuyer1).extendProtection(
+            protectionPool.connect(_protectionBuyer1).renewProtection(
               {
                 lendingPoolAddress: _lendingPool2,
                 nftLpTokenId: 590,
@@ -628,7 +628,7 @@ const testProtectionPool: Function = (
               },
               parseUSDC("10000")
             )
-          ).to.be.revertedWith("NoExpiredProtectionToExtend");
+          ).to.be.revertedWith("NoExpiredProtectionToRenew");
         });
       });
 
@@ -1583,11 +1583,11 @@ const testProtectionPool: Function = (
         });
       });
 
-      describe("extendProtection", () => {
+      describe("renewProtection", () => {
         const _newProtectionAmt = parseUSDC("40000");
         let _newProtectionDurationInSeconds: BigNumber;
         let _expiredProtection3: ProtectionInfoStructOutput;
-        let _extensionProtection: ProtectionInfoStructOutput;
+        let _renewalProtection: ProtectionInfoStructOutput;
 
         before(async () => {
           _expiredProtection3 = (await protectionPool.getAllProtections())[2];
@@ -1596,7 +1596,7 @@ const testProtectionPool: Function = (
         it("...should fail when buyer doesn't have expired protection for the lending position - different NFT token id", async () => {
           // expired protection for _protectionBuyer3: lendingPool2, nftLpTokenId: 579
           await expect(
-            protectionPool.connect(_protectionBuyer3).extendProtection(
+            protectionPool.connect(_protectionBuyer3).renewProtection(
               {
                 lendingPoolAddress: _lendingPool2,
                 nftLpTokenId: 591,
@@ -1605,13 +1605,13 @@ const testProtectionPool: Function = (
               },
               parseUSDC("10000")
             )
-          ).to.be.revertedWith("NoExpiredProtectionToExtend");
+          ).to.be.revertedWith("NoExpiredProtectionToRenew");
         });
 
         it("...should fail when buyer doesn't have expired protection for the lending position - different buyer", async () => {
           // existing protection for _protectionBuyer1: lendingPool2, nftLpTokenId: 590
           await expect(
-            protectionPool.connect(owner).extendProtection(
+            protectionPool.connect(owner).renewProtection(
               {
                 lendingPoolAddress: _lendingPool2,
                 nftLpTokenId: 579,
@@ -1620,13 +1620,13 @@ const testProtectionPool: Function = (
               },
               parseUSDC("10000")
             )
-          ).to.be.revertedWith("NoExpiredProtectionToExtend");
+          ).to.be.revertedWith("NoExpiredProtectionToRenew");
         });
 
         it("...should fail when buyer doesn't have expired protection for the lending position - different lending pool", async () => {
           // expired protection for _protectionBuyer3: lendingPool2, nftLpTokenId: 579
           await expect(
-            protectionPool.connect(_protectionBuyer3).extendProtection(
+            protectionPool.connect(_protectionBuyer3).renewProtection(
               {
                 lendingPoolAddress: _lendingPool1,
                 nftLpTokenId: 590,
@@ -1635,7 +1635,7 @@ const testProtectionPool: Function = (
               },
               parseUSDC("10000")
             )
-          ).to.be.revertedWith("NoExpiredProtectionToExtend");
+          ).to.be.revertedWith("NoExpiredProtectionToRenew");
         });
 
         it("...should fail when protection extension's duration is longer than next pool cycle's end", async () => {
@@ -1644,7 +1644,7 @@ const testProtectionPool: Function = (
           // so protection extension's with > 60 days duration should fail
           _newProtectionDurationInSeconds = getDaysInSeconds(60) + 1;
           await expect(
-            protectionPool.connect(_protectionBuyer3).extendProtection(
+            protectionPool.connect(_protectionBuyer3).renewProtection(
               {
                 lendingPoolAddress: _lendingPool2,
                 nftLpTokenId: 579,
@@ -1658,7 +1658,7 @@ const testProtectionPool: Function = (
 
         it("...should fail when premium is higher than specified maxProtectionPremium", async () => {
           await expect(
-            protectionPool.connect(_protectionBuyer3).extendProtection(
+            protectionPool.connect(_protectionBuyer3).renewProtection(
               {
                 lendingPoolAddress: _lendingPool2,
                 nftLpTokenId: 579,
@@ -1678,9 +1678,9 @@ const testProtectionPool: Function = (
 
           // Day 31: we are in day 1 of pool cycle 2, so next pool cycle's(cycle 3) end is at 90 days
           // expired protection's duration is 30 days,
-          // so protection extension's with < 60 days duration should succeed
+          // so protection renewal with < 60 days duration should succeed
           _newProtectionDurationInSeconds = getDaysInSeconds(59);
-          await protectionPool.connect(_protectionBuyer3).extendProtection(
+          await protectionPool.connect(_protectionBuyer3).renewProtection(
             {
               lendingPoolAddress: _lendingPool2,
               nftLpTokenId: 579,
@@ -1695,29 +1695,29 @@ const testProtectionPool: Function = (
             parseUSDC("200000")
           ); // 100K + 50K + 10K + 40K extension
 
-          _extensionProtection = (await getActiveProtections())[3];
+          _renewalProtection = (await getActiveProtections())[3];
         });
 
         it("...protection extension should have new protection amount and duration", async () => {
-          expect(_extensionProtection.purchaseParams.protectionAmount).to.eq(
+          expect(_renewalProtection.purchaseParams.protectionAmount).to.eq(
             _newProtectionAmt
           );
           expect(
-            _extensionProtection.purchaseParams.protectionDurationInSeconds
+            _renewalProtection.purchaseParams.protectionDurationInSeconds
           ).to.eq(_newProtectionDurationInSeconds);
         });
 
-        it("...protection extension should start now", async () => {
-          expect(_extensionProtection.startTimestamp).to.eq(
+        it("...protection renewal should start now", async () => {
+          expect(_renewalProtection.startTimestamp).to.eq(
             await getLatestBlockTimestamp()
           );
         });
 
-        it("...protection extension's lending position must be same as existing protection", async () => {
-          expect(_extensionProtection.purchaseParams.lendingPoolAddress).to.eq(
+        it("...protection renewal's lending position must be same as existing protection", async () => {
+          expect(_renewalProtection.purchaseParams.lendingPoolAddress).to.eq(
             _expiredProtection3.purchaseParams.lendingPoolAddress
           );
-          expect(_extensionProtection.purchaseParams.nftLpTokenId).to.eq(
+          expect(_renewalProtection.purchaseParams.nftLpTokenId).to.eq(
             _expiredProtection3.purchaseParams.nftLpTokenId
           );
         });
@@ -1726,7 +1726,7 @@ const testProtectionPool: Function = (
           await moveForwardTimeByDays(15); // grace period is 14 days
 
           await expect(
-            protectionPool.connect(_protectionBuyer3).extendProtection(
+            protectionPool.connect(_protectionBuyer3).renewProtection(
               {
                 lendingPoolAddress: _lendingPool2,
                 nftLpTokenId: 579,
@@ -1735,7 +1735,7 @@ const testProtectionPool: Function = (
               },
               parseUSDC("10000")
             )
-          ).to.be.revertedWith("CanNotExtendProtectionAfterGracePeriod");
+          ).to.be.revertedWith("CanNotRenewProtectionAfterGracePeriod");
         });
       });
 
@@ -2240,14 +2240,14 @@ const testProtectionPool: Function = (
         });
       });
 
-      describe("extendProtection after purchase limit", async () => {
-        it("...extendProtection should fail when protection extension's duration is longer than 3rd pool cycle's end", async () => {
+      describe("renewProtection after purchase limit", async () => {
+        it("...renewProtection should fail when protection renewal's duration is longer than 3rd pool cycle's end", async () => {
           // we are in day 42: 12th day of pool cycle 2, so next(3rd) pool cycle's end is after 48 days at 90 days
           // expired protection's(protection after revert) duration is 35 days,
-          // so protection extension's with > 13 days duration should fail
+          // so protection renewal with > 13 days duration should fail
           const _newProtectionDurationInSeconds = getDaysInSeconds(13) + 1;
           await expect(
-            protectionPool.connect(_protectionBuyer4).extendProtection(
+            protectionPool.connect(_protectionBuyer4).renewProtection(
               {
                 lendingPoolAddress: _lendingPool1,
                 nftLpTokenId: 645,
@@ -2259,7 +2259,7 @@ const testProtectionPool: Function = (
           ).to.be.revertedWith("ProtectionDurationTooLong");
         });
 
-        it("...extendProtection should succeed when duration is less than 3rd pool cycle end", async () => {
+        it("...renewProtection should succeed when duration is less than 3rd pool cycle end", async () => {
           expect(
             (
               await protectionPool.getActiveProtections(
@@ -2268,7 +2268,7 @@ const testProtectionPool: Function = (
             ).length
           ).to.be.eq(1);
 
-          await protectionPool.connect(_protectionBuyer4).extendProtection(
+          await protectionPool.connect(_protectionBuyer4).renewProtection(
             {
               lendingPoolAddress: _lendingPool1,
               nftLpTokenId: 645,

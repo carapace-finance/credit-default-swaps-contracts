@@ -97,7 +97,7 @@ const testContractFactory: Function = (
         minCarapaceRiskPremiumPercent: parseEther("0.02"),
         underlyingRiskPremiumPercent: parseEther("0.1"),
         minProtectionDurationInSeconds: getDaysInSeconds(10),
-        protectionExtensionGracePeriodInSeconds: getDaysInSeconds(14) // 2 weeks
+        protectionRenewalGracePeriodInSeconds: getDaysInSeconds(14) // 2 weeks
       };
 
       it("...only the owner should be able to call the createPool function", async () => {

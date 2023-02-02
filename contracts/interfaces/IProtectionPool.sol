@@ -9,13 +9,17 @@ import {IPremiumCalculator} from "./IPremiumCalculator.sol";
 import {IProtectionPoolCycleManager} from "./IProtectionPoolCycleManager.sol";
 import {IDefaultStateManager} from "./IDefaultStateManager.sol";
 
+/// @notice Enum to represent the phase of the protection pool
 enum ProtectionPoolPhase {
+  /// @notice This means the pool is open for sellers/investors and NOT open for protection purchases
   OpenToSellers,
+  /// @notice This means the pool is open for protection purchases and NOT open for sellers/investors
   OpenToBuyers,
+  /// @notice This means the pool is open for both sellers/investors and protection purchases
   Open
 }
 
-/// @notice Contains pool related parameters.
+/// @notice Contains various parameters which are used to create a new protection pool
 struct ProtectionPoolParams {
   /// @notice the minimum leverage ratio allowed in the pool scaled to 18 decimals
   uint256 leverageRatioFloor;
@@ -33,11 +37,11 @@ struct ProtectionPoolParams {
   uint256 underlyingRiskPremiumPercent;
   /// @notice the minimum duration of the protection coverage in seconds that buyer has to buy
   uint256 minProtectionDurationInSeconds;
-  /// @notice the maximum duration in seconds during which a protection can be extended after it expires
-  uint256 protectionExtensionGracePeriodInSeconds;
+  /// @notice the maximum duration in seconds during which a protection can be renewed after it expires
+  uint256 protectionRenewalGracePeriodInSeconds;
 }
 
-/// @notice Contains pool information
+/// @notice Contains protection pool information
 struct ProtectionPoolInfo {
   address poolAddress;
   ProtectionPoolParams params;
@@ -47,24 +51,25 @@ struct ProtectionPoolInfo {
   ProtectionPoolPhase currentPhase;
 }
 
+/// @notice Contains information about a protection purchase from this protection pool
 struct ProtectionInfo {
   /// @notice the address of a protection buyer
   address buyer;
   /// @notice The amount of premium paid in underlying token
   uint256 protectionPremium;
-  /// @notice The timestamp at which the loan protection is bought
+  /// @notice The timestamp at which the protection is bought
   uint256 startTimestamp;
-  /// @notice Constant K is calculated & captured at the time of loan protection purchase
-  /// @notice It is used in accrued premium calculation
+  /// @notice Constant K is calculated & captured at the time of the protection purchase
+  /// This is used in accrued premium calculation.
   // solhint-disable-next-line var-name-mixedcase
   int256 K;
-  /// @notice Lambda is calculated & captured at the time of loan protection purchase
-  /// @notice It is used in accrued premium calculation
+  /// @notice Lambda is calculated & captured at the time of the protection purchase
+  /// This is used in accrued premium calculation
   int256 lambda;
-  /// @notice The protection purchase parameters such as protection amount, expiry, lending pool etc.
-  ProtectionPurchaseParams purchaseParams;
   /// @notice A flag indicating if the protection is expired or not
   bool expired;
+  /// @notice The protection purchase parameters such as protection amount, expiry, lending pool etc.
+  ProtectionPurchaseParams purchaseParams;
 }
 
 struct LendingPoolDetail {
@@ -121,8 +126,8 @@ abstract contract IProtectionPool {
   error OnlyDefaultStateManager(address msgSender);
   error ProtectionPoolInOpenToSellersPhase();
   error ProtectionPoolInOpenToBuyersPhase();
-  error NoExpiredProtectionToExtend();
-  error CanNotExtendProtectionAfterGracePeriod();
+  error NoExpiredProtectionToRenew();
+  error CanNotRenewProtectionAfterGracePeriod();
   error PremiumExceedsMaxPremiumAmount(
     uint256 premiumAmount,
     uint256 maxPremiumAmount
@@ -213,14 +218,15 @@ abstract contract IProtectionPool {
   ) external virtual;
 
   /**
-   * @notice A buyer can extend protection for a position in lending pool when lending pool is supported & active (not defaulted or expired).
+   * @notice A buyer can renew protection for a position in lending pool when lending pool is supported & active (not defaulted or expired).
    * Buyer must have a existing active protection for the same lending position, meaning same lending pool & nft token id.
    * Protection extension's duration must not exceed the end time of next pool cycle.
    * Buyer must approve underlying tokens to pay the expected premium.
+   * If protection premium calculated at the time of transaction is higher than the max premium amount, transaction will revert.
    * @param _protectionPurchaseParams The protection purchase parameters such as protection amount, duration, lending pool etc.
    * @param _maxPremiumAmount the max protection premium in underlying tokens that buyer is willing to pay
    */
-  function extendProtection(
+  function renewProtection(
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
     uint256 _maxPremiumAmount
   ) external virtual;
