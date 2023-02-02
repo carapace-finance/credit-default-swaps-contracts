@@ -7,7 +7,7 @@ import {UUPSUpgradeableBase} from "../UUPSUpgradeableBase.sol";
 import {IReferenceLendingPools, LendingPoolStatus} from "../interfaces/IReferenceLendingPools.sol";
 import {ILendingProtocolAdapter} from "../interfaces/ILendingProtocolAdapter.sol";
 import {IProtectionPool} from "../interfaces/IProtectionPool.sol";
-import {IDefaultStateManager, PoolState, LockedCapital, LendingPoolStatusDetail} from "../interfaces/IDefaultStateManager.sol";
+import {IDefaultStateManager, ProtectionPoolState, LockedCapital, LendingPoolStatusDetail} from "../interfaces/IDefaultStateManager.sol";
 import "../libraries/Constants.sol";
 
 import "hardhat/console.sol";
@@ -15,8 +15,8 @@ import "hardhat/console.sol";
 /**
  * @title DefaultStateManager
  * @author Carapace Finance
- * @notice Contract to assess and manage the state transitions of of all pools.
- * This contract is upgradeable using the UUPS pattern.
+ * @notice Contract to assess status updates and the resultant state transitions of all lending pools of all protection pools
+ * @dev This contract is upgradeable using the UUPS pattern.
  */
 contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
   /////////////////////////////////////////////////////
@@ -26,15 +26,15 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
    * @dev DO NOT CHANGE THE ORDER OF THESE VARIABLES ONCE DEPLOYED
    */
 
-  /// @notice address of the contract factory which is the only contract allowed to register pools.
+  /// @notice address of the contract factory which is the only contract allowed to register protection pools.
   address public contractFactoryAddress;
 
-  /// @notice stores the current state of all pools in the system.
+  /// @dev stores the current state of all protection pools in the system.
   /// @dev Array is used for enumerating all pools during state assessment.
-  PoolState[] private poolStates;
+  ProtectionPoolState[] private protectionPoolStates;
 
-  /// @notice tracks an index of PoolState for each pool in poolStates array.
-  mapping(address => uint256) private poolStateIndex;
+  /// @notice tracks an index of ProtectionPoolState for each pool in protectionPoolStates array.
+  mapping(address => uint256) private protectionPoolStateIndexes;
 
   //////////////////////////////////////////////////////
   ///             STORAGE - END                     ///
@@ -42,6 +42,7 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
 
   /*** modifiers ***/
 
+  /// @dev modifier to restrict access to the contract factory address.
   modifier onlyContractFactory() {
     if (msg.sender != contractFactoryAddress) {
       revert NotContractFactory(msg.sender);
@@ -58,9 +59,9 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
     __UUPSUpgradeableBase_init();
 
     /// create a dummy pool state to reserve index 0.
-    /// this is to ensure that poolStateIndex[pool] is always greater than 0,
+    /// this is to ensure that protectionPoolStateIndexes[pool] is always greater than 0,
     /// which is used to check if a pool is registered or not.
-    poolStates.push();
+    protectionPoolStates.push();
   }
 
   /*** state-changing functions ***/
@@ -82,28 +83,33 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
   }
 
   /// @inheritdoc IDefaultStateManager
-  function registerPool(address _protectionPoolAddress)
+  function registerProtectionPool(address _protectionPoolAddress)
     external
     override
     onlyContractFactory
   {
-    uint256 newIndex = poolStates.length;
-
-    /// Check whether the pool is already registered or not
-    PoolState storage poolState = poolStates[
-      poolStateIndex[_protectionPoolAddress]
-    ];
-    if (poolState.updatedTimestamp > 0) {
+    /// if the protection pool is already registered, revert
+    if (
+      protectionPoolStates[protectionPoolStateIndexes[_protectionPoolAddress]]
+        .updatedTimestamp > 0
+    ) {
       revert ProtectionPoolAlreadyRegistered(_protectionPoolAddress);
     }
 
-    poolStates.push();
-    poolStates[newIndex].protectionPool = IProtectionPool(
-      _protectionPoolAddress
-    );
-    poolStateIndex[_protectionPoolAddress] = newIndex;
+    /// Protection pool will be inserted at the end of the array
+    uint256 newIndex = protectionPoolStates.length;
 
-    _assessState(poolStates[newIndex]);
+    /// Insert new empty pool state at the end of the array
+    /// and update the state
+    protectionPoolStates.push();
+    ProtectionPoolState storage poolState = protectionPoolStates[newIndex];
+    poolState.protectionPool = IProtectionPool(_protectionPoolAddress);
+
+    /// Store the index of the pool state in the array
+    protectionPoolStateIndexes[_protectionPoolAddress] = newIndex;
+
+    /// Assess the state of the newly registered protection pool
+    _assessState(poolState);
 
     emit ProtectionPoolRegistered(_protectionPoolAddress);
   }
@@ -113,25 +119,29 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
     /// gas optimizations:
     /// 1. capture length in memory & don't read from storage for each iteration
     /// 2. uncheck incrementing pool index
-    uint256 length = poolStates.length;
+    uint256 _length = protectionPoolStates.length;
+
     /// assess the state of all registered protection pools except the dummy pool at index 0
-    for (uint256 _poolIndex = 1; _poolIndex < length; ) {
-      _assessState(poolStates[_poolIndex]);
+    for (uint256 _poolIndex = 1; _poolIndex < _length; ) {
+      _assessState(protectionPoolStates[_poolIndex]);
       unchecked {
         ++_poolIndex;
       }
     }
 
-    emit ProtectionPoolStatesAssessed(block.timestamp);
+    emit ProtectionPoolStatesAssessed();
   }
 
   /// @inheritdoc IDefaultStateManager
   function assessStateBatch(address[] calldata _pools) external override {
-    uint256 length = _pools.length;
-    for (uint256 _poolIndex; _poolIndex < length; ) {
-      PoolState storage poolState = poolStates[
-        poolStateIndex[_pools[_poolIndex]]
+    uint256 _length = _pools.length;
+    for (uint256 _poolIndex; _poolIndex < _length; ) {
+      /// Get the state of the pool by looking up the index in the mapping from the given pool address
+      ProtectionPoolState storage poolState = protectionPoolStates[
+        protectionPoolStateIndexes[_pools[_poolIndex]]
       ];
+
+      /// Only assess the state if the protection pool is registered
       if (poolState.updatedTimestamp > 0) {
         _assessState(poolState);
       }
@@ -143,34 +153,44 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
   }
 
   /// @inheritdoc IDefaultStateManager
+  /// @dev This method is only callable by a protection pool
   function calculateAndClaimUnlockedCapital(address _seller)
     external
     override
     returns (uint256 _claimedUnlockedCapital)
   {
-    PoolState storage poolState = poolStates[poolStateIndex[msg.sender]];
+    /// Get the state of the pool by looking up the index in the mapping from sender address
+    ProtectionPoolState storage poolState = protectionPoolStates[
+      protectionPoolStateIndexes[msg.sender]
+    ];
+
+    /// Only assess the state if the protection pool is registered
     if (poolState.updatedTimestamp == 0) {
       revert ProtectionPoolNotRegistered(msg.sender);
     }
 
+    /// Get the list of all lending pools for the protection pool
     address[] memory _lendingPools = poolState
       .protectionPool
       .getPoolInfo()
       .referenceLendingPools
       .getLendingPools();
 
-    /// go through all the locked capital instances for a given protection pool
-    /// and calculate the claimable amount for the seller
+    /// Iterate through all lending pools for a given protection pool
+    /// and calculate the total claimable amount for the seller
     uint256 _length = _lendingPools.length;
     for (uint256 _lendingPoolIndex; _lendingPoolIndex < _length; ) {
       address _lendingPool = _lendingPools[_lendingPoolIndex];
+
+      /// Calculate the claimable amount across all the locked capital instances for a given protection pool
       (
         uint256 _unlockedCapitalPerLendingPool,
         uint256 _snapshotId
       ) = _calculateClaimableAmount(poolState, _lendingPool, _seller);
       _claimedUnlockedCapital += _unlockedCapitalPerLendingPool;
 
-      /// update the last claimed snapshot id for the seller
+      /// update the last claimed snapshot id for the seller for the given lending pool,
+      /// so that the next time the seller claims, the calculation starts from the last claimed snapshot id
       poolState.lastClaimedSnapshotIds[_lendingPool][_seller] = _snapshotId;
 
       unchecked {
@@ -181,20 +201,29 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
 
   /** view functions */
 
+  /**
+   * @notice Returns the timestamp of the protection pool state update.
+   */
   function getPoolStateUpdateTimestamp(address _pool)
     external
     view
     returns (uint256)
   {
-    return poolStates[poolStateIndex[_pool]].updatedTimestamp;
+    return
+      protectionPoolStates[protectionPoolStateIndexes[_pool]].updatedTimestamp;
   }
 
-  function getLockedCapitals(address _pool, address _lendingPool)
+  /**
+   * @notice Returns the list of locked capital instances for a given protection pool and lending pool.
+   */
+  function getLockedCapitals(address _protectionPool, address _lendingPool)
     external
     view
     returns (LockedCapital[] memory _lockedCapitals)
   {
-    PoolState storage poolState = poolStates[poolStateIndex[_pool]];
+    ProtectionPoolState storage poolState = protectionPoolStates[
+      protectionPoolStateIndexes[_protectionPool]
+    ];
     _lockedCapitals = poolState.lockedCapitals[_lendingPool];
   }
 
@@ -203,26 +232,33 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
     address _protectionPool,
     address _seller
   ) external view override returns (uint256 _claimableUnlockedCapital) {
-    PoolState storage poolState = poolStates[poolStateIndex[_protectionPool]];
+    ProtectionPoolState storage poolState = protectionPoolStates[
+      protectionPoolStateIndexes[_protectionPool]
+    ];
 
-    /// Calculate the claimable amount only when the pool is registered
+    /// Calculate the claimable amount only if the protection pool is registered
     if (poolState.updatedTimestamp > 0) {
+      /// Get the list of all lending pools for the protection pool
       address[] memory _lendingPools = poolState
         .protectionPool
         .getPoolInfo()
         .referenceLendingPools
         .getLendingPools();
 
-      /// go through locked capital instances for all lending pools in a given protection pool
-      /// and calculate the claimable amount for the seller
+      /// Iterate through all lending pools for a given protection pool
+      /// and calculate the total claimable amount for the seller
       uint256 _length = _lendingPools.length;
       for (uint256 _lendingPoolIndex; _lendingPoolIndex < _length; ) {
         address _lendingPool = _lendingPools[_lendingPoolIndex];
+
+        /// Calculate the claimable amount across all the locked capital instances for a given protection pool
         (uint256 _unlockedCapitalPerLendingPool, ) = _calculateClaimableAmount(
           poolState,
           _lendingPool,
           _seller
         );
+
+        /// add the unlocked/claimable amount for the given lending pool to the total claimable amount
         _claimableUnlockedCapital += _unlockedCapitalPerLendingPool;
 
         unchecked {
@@ -238,7 +274,7 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
     address _lendingPoolAddress
   ) external view override returns (LendingPoolStatus) {
     return
-      poolStates[poolStateIndex[_protectionPoolAddress]]
+      protectionPoolStates[protectionPoolStateIndexes[_protectionPoolAddress]]
         .lendingPoolStateDetails[_lendingPoolAddress]
         .currentStatus;
   }
@@ -249,7 +285,7 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
    * @dev assess the state of a given protection pool and
    * update state changes & initiate related actions as needed.
    */
-  function _assessState(PoolState storage poolState) internal {
+  function _assessState(ProtectionPoolState storage poolState) internal {
     poolState.updatedTimestamp = block.timestamp;
 
     /// assess the state of all reference lending pools of this protection pool
@@ -265,10 +301,12 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
     /// Compare previous and current status of each lending pool and perform the required state transition
     uint256 _length = _lendingPools.length;
     for (uint256 _lendingPoolIndex; _lendingPoolIndex < _length; ) {
+      /// Get the lending pool state details
       address _lendingPool = _lendingPools[_lendingPoolIndex];
       LendingPoolStatusDetail storage lendingPoolStateDetail = poolState
         .lendingPoolStateDetails[_lendingPool];
 
+      /// Get the previous and current status of the lending pool
       LendingPoolStatus _previousStatus = lendingPoolStateDetail.currentStatus;
       LendingPoolStatus _currentStatus = _currentStatuses[_lendingPoolIndex];
 
@@ -287,6 +325,8 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
           _previousStatus == LendingPoolStatus.LateWithinGracePeriod) &&
         _currentStatus == LendingPoolStatus.Late
       ) {
+        /// Update the current status of the lending pool to Late
+        /// and move the lending pool to the locked state
         lendingPoolStateDetail.currentStatus = LendingPoolStatus.Late;
         _moveFromActiveToLockedState(poolState, _lendingPool);
 
@@ -302,17 +342,22 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
           (lendingPoolStateDetail.lateTimestamp +
             _getTwoPaymentPeriodsInSeconds(poolState, _lendingPool))
         ) {
-          /// State transition 4: Late -> Active
+          /// State transition 2: Late -> Active
           if (_currentStatus == LendingPoolStatus.Active) {
+            /// Update the current status of the lending pool to Active
+            /// and move the lending pool to the active state
             lendingPoolStateDetail.currentStatus = LendingPoolStatus.Active;
             _moveFromLockedToActiveState(poolState, _lendingPool);
 
             /// Clear the late timestamp
             lendingPoolStateDetail.lateTimestamp = 0;
           }
-          /// State transition 5: Late -> Defaulted
+          /// State transition 3: Late -> Defaulted
           else if (_currentStatus == LendingPoolStatus.Late) {
+            /// Update the current status of the lending pool to Active
             lendingPoolStateDetail.currentStatus = LendingPoolStatus.Defaulted;
+
+            // Default state transition will be implemented in the next version of the protocol
             // _moveFromLockedToDefaultedState(poolState, _lendingPool);
           }
         }
@@ -335,22 +380,28 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
     }
   }
 
+  /**
+   * @dev Moves the lending pool from active state to locked state.
+   * Meaning that the capital is locked in the protection pool.
+   * @param poolState The stored state of the protection pool
+   * @param _lendingPool The address of the lending pool
+   */
   function _moveFromActiveToLockedState(
-    PoolState storage poolState,
+    ProtectionPoolState storage poolState,
     address _lendingPool
   ) internal {
     IProtectionPool _protectionPool = poolState.protectionPool;
 
-    /// step 1: calculate the capital amount to be locked
-    (uint256 _capitalToLock, uint256 _snapshotId) = _protectionPool.lockCapital(
+    /// step 1: calculate & lock the capital amount in the protection pool
+    (uint256 _lockedCapital, uint256 _snapshotId) = _protectionPool.lockCapital(
       _lendingPool
     );
 
-    /// step 2: create and store an instance of locked capital
+    /// step 2: create and store an instance of locked capital for the lending pool
     poolState.lockedCapitals[_lendingPool].push(
       LockedCapital({
         snapshotId: _snapshotId,
-        amount: _capitalToLock,
+        amount: _lockedCapital,
         locked: true
       })
     );
@@ -359,19 +410,23 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
       _lendingPool,
       address(_protectionPool),
       _snapshotId,
-      _capitalToLock
+      _lockedCapital
     );
   }
 
   /**
-   * @dev Release the locked capital, so investors can claim their share of the capital
+   * @dev Releases the locked capital, so investors can claim their share of the unlocked capital
    * The capital is released/unlocked from last locked capital instance.
    * Because new lock capital instance can not be created until the latest one is active again.
+   * @param poolState The stored state of the protection pool
+   * @param _lendingPool The address of the lending pool
    */
   function _moveFromLockedToActiveState(
-    PoolState storage poolState,
+    ProtectionPoolState storage poolState,
     address _lendingPool
   ) internal {
+    /// For each lending pool, every active -> late state change creates a new instance of the locked capital.
+    /// So last item in the array represents the latest state change.
     LockedCapital storage lockedCapital = _getLatestLockedCapital(
       poolState,
       _lendingPool
@@ -388,14 +443,14 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
   /**
    * @dev Calculates the claimable amount across all locked capital instances for the given seller address for a given lending pool.
    * locked capital can be only claimed when it is released and has not been claimed before.
-   * @param poolState The state of the protection pool
+   * @param poolState The stored state of the protection pool
    * @param _lendingPool The address of the lending pool
    * @param _seller The address of the seller
-   * @return _claimableUnlockedCapital The claimable amount across all locked capital instances
+   * @return _claimableUnlockedCapital The claimable amount across all locked capital instances in underlying tokens
    * @return _latestClaimedSnapshotId The snapshot id of the latest locked capital instance from which the claimable amount is calculated
    */
   function _calculateClaimableAmount(
-    PoolState storage poolState,
+    ProtectionPoolState storage poolState,
     address _lendingPool,
     address _seller
   )
@@ -406,14 +461,17 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
       uint256 _latestClaimedSnapshotId
     )
   {
-    /// Verify that the seller does not claim the same snapshot twice
+    /// Retrieve the last claimed snapshot id for the seller from storage
     uint256 _lastClaimedSnapshotId = poolState.lastClaimedSnapshotIds[
       _lendingPool
     ][_seller];
 
+    /// Retrieve the locked capital instances for the given lending pool
     LockedCapital[] storage lockedCapitals = poolState.lockedCapitals[
       _lendingPool
     ];
+
+    /// Iterate over the locked capital instances and calculate the claimable amount
     uint256 _length = lockedCapitals.length;
     for (uint256 _index = 0; _index < _length; ) {
       LockedCapital storage lockedCapital = lockedCapitals[_index];
@@ -425,25 +483,29 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
         lockedCapital.amount
       );
 
+      /// Verify that the seller does not claim the same snapshot twice
       if (!lockedCapital.locked && _snapshotId > _lastClaimedSnapshotId) {
-        ERC20SnapshotUpgradeable _poolToken = ERC20SnapshotUpgradeable(
+        ERC20SnapshotUpgradeable _poolSToken = ERC20SnapshotUpgradeable(
           address(poolState.protectionPool)
         );
 
-        /// calculate the claimable amount for the given seller address using the snapshot balance of the seller
         console.log(
           "balance of seller: %s, total supply: %s at snapshot: %s",
-          _poolToken.balanceOfAt(_seller, _snapshotId),
-          _poolToken.totalSupplyAt(_snapshotId),
+          _poolSToken.balanceOfAt(_seller, _snapshotId),
+          _poolSToken.totalSupplyAt(_snapshotId),
           _snapshotId
         );
 
+        /// The claimable amount for the given seller is proportional to the seller's share of the total supply at the snapshot
+        /// claimable amount = (seller's snapshot balance / total supply at snapshot) * locked capital amount
         _claimableUnlockedCapital =
-          (_poolToken.balanceOfAt(_seller, _snapshotId) *
+          (_poolSToken.balanceOfAt(_seller, _snapshotId) *
             lockedCapital.amount) /
-          _poolToken.totalSupplyAt(_snapshotId);
+          _poolSToken.totalSupplyAt(_snapshotId);
 
+        /// Update the last claimed snapshot id for the seller
         _latestClaimedSnapshotId = _snapshotId;
+
         console.log(
           "Claimable amount for seller %s is %s",
           _seller,
@@ -459,26 +521,37 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
 
   /**
    * @dev Returns the latest locked capital instance for a given lending pool.
+   * @param poolState The stored state of the protection pool
+   * @param _lendingPool The address of the lending pool
    */
   function _getLatestLockedCapital(
-    PoolState storage poolState,
+    ProtectionPoolState storage poolState,
     address _lendingPool
   ) internal view returns (LockedCapital storage _lockedCapital) {
+    /// Return the last locked capital instance in the array
     LockedCapital[] storage lockedCapitals = poolState.lockedCapitals[
       _lendingPool
     ];
     _lockedCapital = lockedCapitals[lockedCapitals.length - 1];
   }
 
+  /**
+   * @dev Returns the two payment periods in seconds for a given lending pool.
+   * @param poolState The stored state of the protection pool
+   * @param _lendingPool The address of the lending pool
+   * @return The two payment periods in seconds for a given lending pool
+   */
   function _getTwoPaymentPeriodsInSeconds(
-    PoolState storage poolState,
+    ProtectionPoolState storage poolState,
     address _lendingPool
   ) internal view returns (uint256) {
-    uint256 _paymentPeriodInDays = poolState
-      .protectionPool
-      .getPoolInfo()
-      .referenceLendingPools
-      .getPaymentPeriodInDays(_lendingPool);
-    return (_paymentPeriodInDays * 2) * Constants.SECONDS_IN_DAY_UINT;
+    /// Retrieve the payment period in days for the given lending pool and convert it to seconds
+    return
+      (poolState
+        .protectionPool
+        .getPoolInfo()
+        .referenceLendingPools
+        .getPaymentPeriodInDays(_lendingPool) * 2) *
+      Constants.SECONDS_IN_DAY_UINT;
   }
 }

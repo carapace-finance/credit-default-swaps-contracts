@@ -18,7 +18,7 @@ struct LendingPoolStatusDetail {
   uint256 lateTimestamp;
 }
 
-struct PoolState {
+struct ProtectionPoolState {
   /// @notice the protection pool for which state is being tracked
   IProtectionPool protectionPool;
   /// @notice the timestamp at which the last time pool state was updated
@@ -52,7 +52,7 @@ abstract contract IDefaultStateManager {
   event ProtectionPoolRegistered(address indexed protectionPool);
 
   /// @notice emitted when lending status of all registered protection pools are assessed
-  event ProtectionPoolStatesAssessed(uint256 timestamp);
+  event ProtectionPoolStatesAssessed();
 
   /// @notice emitted when a lending pool is locked because of late payment
   event LendingPoolLocked(
@@ -85,10 +85,11 @@ abstract contract IDefaultStateManager {
     virtual;
 
   /**
-   * @notice register a protection pool. Only pool factory can call this function.
+   * @notice Registers a specified protection pool.
+   * @dev Only contract factory can call this function.
    * @param _protectionPool an address of the protection pool to register
    */
-  function registerPool(address _protectionPool) external virtual;
+  function registerProtectionPool(address _protectionPool) external virtual;
 
   /**
    * @notice assess states of all registered pools and initiate state changes & related actions as needed.

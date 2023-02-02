@@ -9,7 +9,7 @@ import "../libraries/Constants.sol";
  * @title ProtectionPoolCycleManager
  * @author Carapace Finance
  * @notice Contract to manage the current cycle of all protection pools.
- * This contract is upgradeable using the UUPS pattern.
+ * @dev This contract is upgradeable using the UUPS pattern.
  */
 contract ProtectionPoolCycleManager is
   UUPSUpgradeableBase,
@@ -26,13 +26,15 @@ contract ProtectionPoolCycleManager is
   address public contractFactoryAddress;
 
   /// @notice tracks the current cycle of all pools in the system by its address.
-  mapping(address => ProtectionPoolCycle) public protectionPoolCycles;
+  mapping(address => ProtectionPoolCycle) private protectionPoolCycles;
 
   //////////////////////////////////////////////////////
   ///             STORAGE - END                     ///
   /////////////////////////////////////////////////////
 
   /*** modifiers ***/
+
+  /// @dev Modifier to check if the caller is the contract factory.
   modifier onlyContractFactory() {
     if (msg.sender != contractFactoryAddress) {
       revert NotContractFactory(msg.sender);
@@ -78,10 +80,12 @@ contract ProtectionPoolCycleManager is
       revert ProtectionPoolAlreadyRegistered(_poolAddress);
     }
 
+    /// Cycle duration must be greater than open cycle duration
     if (_cycleParams.openCycleDuration > _cycleParams.cycleDuration) {
       revert InvalidCycleDuration(_cycleParams.cycleDuration);
     }
 
+    /// Store cycle params and start a new cycle for newly registered pool
     poolCycle.params = _cycleParams;
     _startNewCycle(_poolAddress, poolCycle, 0);
   }
@@ -90,31 +94,36 @@ contract ProtectionPoolCycleManager is
   function calculateAndSetPoolCycleState(address _protectionPoolAddress)
     external
     override
-    returns (ProtectionPoolCycleState)
+    returns (ProtectionPoolCycleState _newState)
   {
     ProtectionPoolCycle storage poolCycle = protectionPoolCycles[
       _protectionPoolAddress
     ];
 
     /// Gas optimization:
-    /// Store the current cycle state in memory instead of reading it from the storage each time.
-    ProtectionPoolCycleState currentState = poolCycle.currentCycleState;
+    /// Store the current cycle state in memory instead of reading it from the storage multiple times.
+    ProtectionPoolCycleState currentState = _newState = poolCycle
+      .currentCycleState;
 
     /// If cycle is not started, that means pool is NOT registered yet.
     /// So, we can't move the cycle state
     if (currentState == ProtectionPoolCycleState.None) {
-      return currentState;
+      return _newState;
     }
 
+    /// If cycle is open, then check if it's time to move to LOCKED state.
     if (currentState == ProtectionPoolCycleState.Open) {
       /// If current time is past the initial open duration, then move to LOCKED state.
       if (
         block.timestamp - poolCycle.currentCycleStartTime >
         poolCycle.params.openCycleDuration
       ) {
-        poolCycle.currentCycleState = ProtectionPoolCycleState.Locked;
+        poolCycle.currentCycleState = _newState = ProtectionPoolCycleState
+          .Locked;
       }
-    } else if (currentState == ProtectionPoolCycleState.Locked) {
+    }
+    /// If cycle is locked, then check if it's time to start a new cycle.
+    else if (currentState == ProtectionPoolCycleState.Locked) {
       /// If current time is past the total cycle duration, then start a new cycle.
       if (
         block.timestamp - poolCycle.currentCycleStartTime >
@@ -126,10 +135,11 @@ contract ProtectionPoolCycleManager is
           poolCycle,
           poolCycle.currentCycleIndex + 1
         );
+        _newState = ProtectionPoolCycleState.Open;
       }
     }
 
-    return poolCycle.currentCycleState;
+    return _newState;
   }
 
   /*** view functions ***/
@@ -168,17 +178,21 @@ contract ProtectionPoolCycleManager is
     external
     view
     override
-    returns (uint256 _nextCycleEndTimestamp)
+    returns (uint256)
   {
     ProtectionPoolCycle storage poolCycle = protectionPoolCycles[_poolAddress];
-    _nextCycleEndTimestamp =
-      poolCycle.currentCycleStartTime +
-      (2 * poolCycle.params.cycleDuration);
+    return
+      poolCycle.currentCycleStartTime + (2 * poolCycle.params.cycleDuration);
   }
 
   /*** internal/private functions ***/
 
-  /// @dev Starts a new protection pool cycle using specified cycle index
+  /**
+   * @dev Starts a new protection pool cycle using specified cycle index.
+   * @param _protectionPoolAddress address of the protection pool.
+   * @param _poolCycle storage pointer to the protection pool cycle.
+   * @param _cycleIndex index of the new cycle.
+   */
   function _startNewCycle(
     address _protectionPoolAddress,
     ProtectionPoolCycle storage _poolCycle,

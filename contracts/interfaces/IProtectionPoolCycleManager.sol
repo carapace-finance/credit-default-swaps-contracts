@@ -73,7 +73,6 @@ abstract contract IProtectionPoolCycleManager {
    * @notice Determines & returns the current cycle state of the given pool.
    * @notice This function also starts a new cycle if required.
    * @param _poolAddress The address of the pool.
-   * @return state The newly determined cycle state of the pool.
    */
   function calculateAndSetPoolCycleState(address _poolAddress)
     external

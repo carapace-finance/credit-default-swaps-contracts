@@ -204,7 +204,7 @@ const testContractFactory: Function = (
         ).to.equal(1); // 1 = Open
         expect(
           (
-            await protectionPoolCycleManager.protectionPoolCycles(
+            await protectionPoolCycleManager.getCurrentPoolCycle(
               _secondPoolAddress
             )
           ).currentCycleStartTime

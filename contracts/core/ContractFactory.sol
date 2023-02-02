@@ -144,14 +144,14 @@ contract ContractFactory is
     address _poolProxyAddress = address(_poolProxy);
     protectionPools.push(_poolProxyAddress);
 
-    /// register newly created pool to the pool cycle manager
+    /// register newly created protection pool to the pool cycle manager
     protectionPoolCycleManager.registerProtectionPool(
       _poolProxyAddress,
       _poolCycleParams
     );
 
-    /// register newly created pool to the default state manager
-    defaultStateManager.registerPool(_poolProxyAddress);
+    /// register newly created protection pool to the default state manager
+    defaultStateManager.registerProtectionPool(_poolProxyAddress);
 
     emit ProtectionPoolCreated(
       _poolProxyAddress,
@@ -265,10 +265,12 @@ contract ContractFactory is
     address _lendingProtocolAdapterImplementation,
     bytes memory _lendingProtocolAdapterInitData
   ) internal {
+    /// Verify that the lending protocol adapter doesn't exist
     if (
       address(lendingProtocolAdapters[_lendingProtocol]) ==
       Constants.ZERO_ADDRESS
     ) {
+      /// Create a ERC1967 proxy contract for the lending protocol adapter using specified implementation address.
       address _lendingProtocolAdapterAddress = address(
         new ERC1967Proxy(
           _lendingProtocolAdapterImplementation,
@@ -276,6 +278,7 @@ contract ContractFactory is
         )
       );
 
+      /// add the newly created lending protocol adapter to the mapping of lending protocol adapters
       lendingProtocolAdapters[_lendingProtocol] = ILendingProtocolAdapter(
         _lendingProtocolAdapterAddress
       );
