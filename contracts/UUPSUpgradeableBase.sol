@@ -6,7 +6,10 @@ import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Own
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 /**
- * @dev Base contract for all UUPSUpgradeable contracts that are intended to be used through proxy.
+ * @title UUPSUpgradeableBase
+ * @author Carapace Finance
+ * @dev Base contract for all UUPSUpgradeable contracts that are intended to be used through proxy
+ and hence can be upgraded.
  */
 abstract contract UUPSUpgradeableBase is
   Initializable,

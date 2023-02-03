@@ -171,7 +171,7 @@ const testProtectionPoolCycleManager: Function = (
           )
         ).to.equal(1); // 1 = Open
 
-        const poolCycle = await protectionPoolCycleManager.protectionPoolCycles(
+        const poolCycle = await protectionPoolCycleManager.getCurrentPoolCycle(
           _secondPoolAddress
         );
         expect(poolCycle.params.openCycleDuration).to.equal(
@@ -213,7 +213,7 @@ const testProtectionPoolCycleManager: Function = (
         ).to.equal(1); // 1 = Open
 
         const thirdPoolCycle =
-          await protectionPoolCycleManager.protectionPoolCycles(
+          await protectionPoolCycleManager.getCurrentPoolCycle(
             thirdPoolAddress
           );
         expect(thirdPoolCycle.params.openCycleDuration).to.equal(
@@ -254,7 +254,7 @@ const testProtectionPoolCycleManager: Function = (
         ).to.equal(1); // 1 = Open
 
         const fourthPoolCycle =
-          await protectionPoolCycleManager.protectionPoolCycles(
+          await protectionPoolCycleManager.getCurrentPoolCycle(
             fourthPoolAddress
           );
         expect(fourthPoolCycle.params.openCycleDuration).to.equal(
@@ -273,7 +273,7 @@ const testProtectionPoolCycleManager: Function = (
       let cycleStartTime: BigNumber;
       before(async () => {
         cycleStartTime = (
-          await protectionPoolCycleManager.protectionPoolCycles(
+          await protectionPoolCycleManager.getCurrentPoolCycle(
             _secondPoolAddress
           )
         ).currentCycleStartTime;

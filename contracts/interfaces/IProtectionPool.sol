@@ -43,15 +43,17 @@ struct ProtectionPoolParams {
 
 /// @notice Contains protection pool information
 struct ProtectionPoolInfo {
-  address poolAddress;
+  /// @notice Various parameters used to create a new protection pool. See {ProtectionPoolParams}
   ProtectionPoolParams params;
+  /// @notice address of ERC-20 compliant underlying token
   IERC20MetadataUpgradeable underlyingToken;
+  /// @notice address of reference lending pools contract representing the basket of supported lending pools
   IReferenceLendingPools referenceLendingPools;
   /// @notice A enum indicating current phase of the pool.
   ProtectionPoolPhase currentPhase;
 }
 
-/// @notice Contains information about a protection purchase from this protection pool
+/// @notice A struct to store information about a protection purchased from this protection pool
 struct ProtectionInfo {
   /// @notice the address of a protection buyer
   address buyer;
@@ -72,6 +74,8 @@ struct ProtectionInfo {
   ProtectionPurchaseParams purchaseParams;
 }
 
+/// @notice A struct to store the details of a lending pool such as
+/// total premium, total protection, active protection indexes etc.
 struct LendingPoolDetail {
   uint256 lastPremiumAccrualTimestamp;
   /// @notice Track the total amount of premium for each lending pool
@@ -86,7 +90,8 @@ struct LendingPoolDetail {
 struct WithdrawalCycleDetail {
   /// @notice total amount of sTokens requested to be withdrawn for this cycle
   uint256 totalSTokenRequested;
-  /// @notice The mapping to track the requested amount of sTokens to withdraw per protection seller for this withdrawal cycle.
+  /// @notice The mapping to track the requested amount of sTokens to withdraw
+  /// per protection seller for this withdrawal cycle.
   mapping(address => uint256) withdrawalRequests;
 }
 
@@ -102,6 +107,7 @@ struct ProtectionBuyerAccount {
   mapping(address => mapping(uint256 => uint256)) expiredProtectionIndexByLendingPool;
 }
 
+/// @notice Interface for the protection pool contract
 abstract contract IProtectionPool {
   using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
 
@@ -132,6 +138,7 @@ abstract contract IProtectionPool {
     uint256 premiumAmount,
     uint256 maxPremiumAmount
   );
+
   /*** events ***/
 
   /// @notice Emitted when a new pool is created.
@@ -142,12 +149,13 @@ abstract contract IProtectionPool {
     IReferenceLendingPools referenceLendingPools
   );
 
+  /// @notice Emitted when a protection is sold., i.e. when an investor deposits underlying tokens to the pool.
   event ProtectionSold(
     address indexed protectionSeller,
     uint256 protectionAmount
   );
 
-  /// @notice Emitted when a new protection is bought.
+  /// @notice Emitted when a new protection is bought from the pool by a buyer.
   event ProtectionBought(
     address indexed buyer,
     address indexed lendingPoolAddress,
@@ -168,14 +176,14 @@ abstract contract IProtectionPool {
     uint256 lastPremiumAccrualTimestamp
   );
 
-  /// @notice Emitted when a withdrawal request is made.
+  /// @notice Emitted when a withdrawal request is made by a seller/investor.
   event WithdrawalRequested(
     address indexed seller,
     uint256 sTokenAmount,
     uint256 withdrawalCycleIndex // An index of a pool cycle when actual withdrawal can be made
   );
 
-  /// @notice Emitted when a withdrawal is made.
+  /// @notice Emitted when a withdrawal is made by a seller/investor.
   event WithdrawalMade(
     address indexed seller,
     uint256 tokenAmount,
@@ -188,9 +196,9 @@ abstract contract IProtectionPool {
   /**
    * @notice Initializes the pool contract
    * @param _owner The owner of the pool
-   * @param _poolInfo The information about this pool.
+   * @param _poolInfo The information about this protection pool.
    * @param _premiumCalculator an address of a premium calculator contract
-   * @param _poolCycleManager an address of a pool cycle manager contract
+   * @param _poolCycleManager an address of a protection pool cycle manager contract
    * @param _defaultStateManager an address of a default state manager contract
    * @param _name a name of the sToken
    * @param _symbol a symbol of the sToken
@@ -203,14 +211,15 @@ abstract contract IProtectionPool {
     IDefaultStateManager _defaultStateManager,
     string calldata _name,
     string calldata _symbol
-  ) public virtual;
+  ) external virtual;
 
   /**
-   * @notice A buyer can buy protection for a position in lending pool when lending pool is supported & active (not defaulted or expired).
+   * @notice A buyer can buy protection for a lending position when lending pool is supported & active (not defaulted or expired).
    * Buyer must have a position in the lending pool & principal must be less or equal to the protection amount.
    * Buyer must approve underlying tokens to pay the expected premium.
    * @param _protectionPurchaseParams The protection purchase parameters such as protection amount, duration, lending pool etc.
-   * @param _maxPremiumAmount the max protection premium in underlying tokens that buyer is willing to pay
+   * @param _maxPremiumAmount the max protection premium in underlying tokens that buyer is willing to pay.
+   * If protection premium calculated at the time of transaction is higher than the max premium amount, transaction will revert.
    */
   function buyProtection(
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
@@ -218,13 +227,14 @@ abstract contract IProtectionPool {
   ) external virtual;
 
   /**
-   * @notice A buyer can renew protection for a position in lending pool when lending pool is supported & active (not defaulted or expired).
+   * @notice A buyer can renew a protection for a lending position when lending pool is supported & active (not defaulted or expired).
    * Buyer must have a existing active protection for the same lending position, meaning same lending pool & nft token id.
-   * Protection extension's duration must not exceed the end time of next pool cycle.
+   * Remaining principal in lending position must be less or equal to the renewal protection amount.
+   * Protection renewal's duration must not exceed the end time of next pool cycle.
    * Buyer must approve underlying tokens to pay the expected premium.
-   * If protection premium calculated at the time of transaction is higher than the max premium amount, transaction will revert.
    * @param _protectionPurchaseParams The protection purchase parameters such as protection amount, duration, lending pool etc.
-   * @param _maxPremiumAmount the max protection premium in underlying tokens that buyer is willing to pay
+   * @param _maxPremiumAmount the max protection premium in underlying tokens that buyer is willing to pay.
+   * If protection premium calculated at the time of transaction is higher than the max premium amount, transaction will revert.
    */
   function renewProtection(
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
@@ -233,9 +243,9 @@ abstract contract IProtectionPool {
 
   /**
    * @notice Attempts to deposit the underlying amount specified.
-   * @notice Upon successful deposit, receiver will get sTokens based on current exchange rate.
-   * @notice A deposit can only be made when the pool is in `Open` state.
-   * @notice Underlying amount needs to be approved for transfer to this contract.
+   * Upon successful deposit, receiver will get sTokens based on current exchange rate.
+   * A deposit can only be made when the protection pool is in "OpenToSellers" or "Open" phase.
+   * Underlying amount needs to be approved for transfer to this contract.
    * @param _underlyingAmount The amount of underlying token to deposit.
    * @param _receiver The address to receive the STokens.
    */
@@ -244,10 +254,11 @@ abstract contract IProtectionPool {
     virtual;
 
   /**
-   * @notice Creates a withdrawal request for the given sToken amount to allow actual withdrawal at the next pool cycle.
+   * @notice Creates a withdrawal request for the given sToken amount to allow
+   * actual withdrawal during open period following the next pool cycle's end.
    * @notice Each user can have single request per withdrawal cycle and
-   *         hence this function will overwrite any existing request.
-   * @notice The actual withdrawal could be made when next pool cycle is opened for withdrawal with other constraints.
+   * hence this function will overwrite any existing request.
+   * @notice The actual withdrawal could be made during open period following the next pool cycle's end.
    * @param _sTokenAmount The amount of sToken to withdraw.
    */
   function requestWithdrawal(uint256 _sTokenAmount) external virtual;
@@ -265,17 +276,10 @@ abstract contract IProtectionPool {
   ) external virtual;
 
   /**
-   * @notice Attempts to withdraw the sToken amount specified by the user with upper bound based on withdrawal phase.
-   * @notice A withdrawal request must be created during previous pool cycle.
-   * @notice A withdrawal can only be made when the pool is in `Open` state.
-   * @notice Proportional Underlying amount based on current exchange rate will be transferred to the receiver address.
-   * @notice Withdrawals are allowed in 2 phases:
-   *         1. Phase I: Users can withdraw their sTokens proportional to their share of total sTokens
-   *            requested for withdrawal based on leverage ratio floor.
-   *         2. Phase II: Users can withdraw up to remainder of their requested sTokens on
-   *            the first come first serve basis.
-   *         Withdrawal cycle begins at the open period of current pool cycle.
-   *         So withdrawal phase 2 will start after the half time is elapsed of current cycle's open duration.
+   * @notice Attempts to withdraw the sToken amount specified by the user.
+   * A withdrawal request must exist for current withdrawal cycle for the holder of the sToken.
+   * A withdrawal can only be made when the pool cycle is in "Open" state.
+   * Proportional Underlying amount based on current exchange rate will be transferred to the receiver address.
    * @param _sTokenWithdrawalAmount The amount of sToken to withdraw.
    * @param _receiver The address to receive the underlying token.
    */
@@ -286,11 +290,11 @@ abstract contract IProtectionPool {
   /**
    * @notice Accrues the premium from all existing protections and updates the total premium accrued.
    * This function accrues premium from the last accrual timestamp to the latest payment timestamp of the underlying lending pool.
-   * This function  also marks protections expired when duration is over.
+   * This function  also marks protections expired when protection duration has expired.
    * @param _lendingPools The lending pools for which premium needs to be accrued and protections need to be marked expired.
    * This is optional parameter. If not provided, premium will be accrued for all reference lending pools.
    *
-   * NOTE: This function iterates over all active protections and may run into gas cost limit,
+   * @dev This function iterates over all active protections and may run into gas cost limit,
    * so optional parameter is provided to limit the number of protections iterated.
    */
   function accruePremiumAndExpireProtections(address[] memory _lendingPools)
@@ -315,17 +319,20 @@ abstract contract IProtectionPool {
   /**
    * @notice Calculates & locks the required capital for specified lending pool in case late payment turns into default.
    * This method can only be called by the default state manager.
+   * @dev Function is marked payable as gas optimization
    * @param _lendingPoolAddress The address of the lending pool.
    * @return _lockedAmount The amount of capital locked.
    * @return _snapshotId The id of SToken snapshot to capture the seller's share of the locked amount.
    */
   function lockCapital(address _lendingPoolAddress)
     external
+    payable
     virtual
     returns (uint256 _lockedAmount, uint256 _snapshotId);
 
   /**
-   * @notice Claims the total unlocked capital from this protection pool for a msg.sender
+   * @notice Claims the total unlocked capital from this protection pool for a msg.sender.
+   * this function claims the capital from all the lending pools supported by this protection pool.
    * @param _receiver The address to receive the underlying token amount.
    */
   function claimUnlockedCapital(address _receiver) external virtual;
@@ -342,7 +349,7 @@ abstract contract IProtectionPool {
 
   /**
    * @notice Calculates the max protection amount allowed in underlying token for the given lending position.
-   * If buyer does not have matching lending position, then it returns 0.
+   * If a buyer(msg.sender) does not have matching lending position, then it returns 0.
    * @param _lendingPool address of the lending pool
    * @param _nftLpTokenId the id of NFT token representing the lending position of the buyer (msg.sender)
    * @return _maxAllowedProtectionAmount The max allowed protection amount in underlying token.
@@ -456,6 +463,8 @@ abstract contract IProtectionPool {
 
   /**
    * @notice Returns total premium paid by buyer for the specified lending pool.
+   * @param _buyer The address of the buyer.
+   * @param _lendingPoolAddress The address of the lending pool.
    */
   function getTotalPremiumPaidForLendingPool(
     address _buyer,

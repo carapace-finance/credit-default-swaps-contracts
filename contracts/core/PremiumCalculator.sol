@@ -12,6 +12,12 @@ import "../libraries/RiskFactorCalculator.sol";
 
 import "hardhat/console.sol";
 
+/**
+ * @title PremiumCalculator
+ * @author Carapace Finance
+ * @notice Calculates the premium amount for a protection.
+ * @dev This contract is upgradable using the UUPS pattern.
+ */
 contract PremiumCalculator is UUPSUpgradeableBase, IPremiumCalculator {
   using PRBMathSD59x18 for int256;
 
@@ -20,7 +26,7 @@ contract PremiumCalculator is UUPSUpgradeableBase, IPremiumCalculator {
   /**
    * @notice Initializes the contract.
    */
-  function initialize() public initializer {
+  function initialize() external initializer {
     __UUPSUpgradeableBase_init();
   }
 
@@ -37,7 +43,7 @@ contract PremiumCalculator is UUPSUpgradeableBase, IPremiumCalculator {
     view
     virtual
     override
-    returns (uint256 premiumAmount, bool isMinPremium)
+    returns (uint256 _premiumAmount, bool _isMinPremium)
   {
     console.log(
       "Calculating premium... protection duration in seconds: %s, protection amount: %s, leverage ratio: %s",
@@ -46,11 +52,14 @@ contract PremiumCalculator is UUPSUpgradeableBase, IPremiumCalculator {
       _leverageRatio
     );
 
-    int256 carapacePremiumRate;
-    uint256 durationInYears = _calculateDurationInYears(
+    int256 _carapacePremiumRate;
+
+    /// Calculate the duration in years
+    uint256 _durationInYears = _calculateDurationInYears(
       _protectionDurationInSeconds
     );
 
+    /// Verify if the risk factor can be calculated
     if (
       RiskFactorCalculator.canCalculateRiskFactor(
         _totalCapital,
@@ -60,7 +69,7 @@ contract PremiumCalculator is UUPSUpgradeableBase, IPremiumCalculator {
         _poolParameters.minRequiredCapital
       )
     ) {
-      int256 riskFactor = RiskFactorCalculator.calculateRiskFactor(
+      int256 _riskFactor = RiskFactorCalculator.calculateRiskFactor(
         _leverageRatio,
         _poolParameters.leverageRatioFloor,
         _poolParameters.leverageRatioCeiling,
@@ -68,41 +77,46 @@ contract PremiumCalculator is UUPSUpgradeableBase, IPremiumCalculator {
         _poolParameters.curvature
       );
 
-      carapacePremiumRate = _calculateCarapacePremiumRate(
-        durationInYears,
-        riskFactor
+      /// Calculate the carapace premium rate based on the calculated risk factor
+      _carapacePremiumRate = _calculateCarapacePremiumRate(
+        _durationInYears,
+        _riskFactor
       );
-      console.logInt(carapacePremiumRate);
+      console.logInt(_carapacePremiumRate);
     } else {
-      /// Min capital or protection not met or leverage ratio out of range. Premium is the minimum premium
-      isMinPremium = true;
+      /// This means that the risk factor cannot be calculated because of either
+      /// min capital not met or leverage ratio out of range.
+      /// Hence, the premium is the minimum premium
+      _isMinPremium = true;
     }
 
-    /// carapacePremiumRateToUse = max(carapacePremiumRate, MIN_CARAPACE_RISK_PREMIUM)
-    int256 minCarapaceRiskPremiumPercent = int256(
+    int256 _minCarapaceRiskPremiumPercent = int256(
       _poolParameters.minCarapaceRiskPremiumPercent
     );
-    int256 carapacePremiumRateToUse = carapacePremiumRate >
-      minCarapaceRiskPremiumPercent
-      ? carapacePremiumRate
-      : minCarapaceRiskPremiumPercent;
-    console.logInt(carapacePremiumRateToUse);
 
-    uint256 underlyingPremiumRate = _calculateUnderlyingPremiumRate(
-      durationInYears,
+    /// carapacePremiumRateToUse = max(carapacePremiumRate, minCarapaceRiskPremiumPercent)
+    int256 _carapacePremiumRateToUse = _carapacePremiumRate >
+      _minCarapaceRiskPremiumPercent
+      ? _carapacePremiumRate
+      : _minCarapaceRiskPremiumPercent;
+    console.logInt(_carapacePremiumRateToUse);
+
+    /// Calculate the underlying premium rate based on the protection buyer APY
+    uint256 _underlyingPremiumRate = _calculateUnderlyingPremiumRate(
+      _durationInYears,
       _protectionBuyerApy,
       _poolParameters.underlyingRiskPremiumPercent
     );
-    console.log("Underlying premium rate: %s", underlyingPremiumRate);
+    console.log("Underlying premium rate: %s", _underlyingPremiumRate);
 
-    assert(carapacePremiumRateToUse > 0);
-    uint256 premiumRate = uint256(carapacePremiumRateToUse) +
-      underlyingPremiumRate;
-    console.log("Premium rate: %s", premiumRate);
+    assert(_carapacePremiumRateToUse > 0);
+    uint256 _premiumRate = uint256(_carapacePremiumRateToUse) +
+      _underlyingPremiumRate;
+    console.log("Premium rate: %s", _premiumRate);
 
     // need to scale down once because protectionAmount & premiumRate both are in 18 decimals
-    premiumAmount =
-      (_protectionAmount * premiumRate) /
+    _premiumAmount =
+      (_protectionAmount * _premiumRate) /
       Constants.SCALE_18_DECIMALS;
   }
 
@@ -117,10 +131,9 @@ contract PremiumCalculator is UUPSUpgradeableBase, IPremiumCalculator {
     int256 _riskFactor
   ) internal pure returns (int256) {
     /// need to scale down once because durationInYears and riskFactor both are in 18 decimals
-    int256 power = (-1 * int256(_durationInYears) * _riskFactor) /
+    int256 _power = (-1 * int256(_durationInYears) * _riskFactor) /
       Constants.SCALE_18_DECIMALS_INT;
-    int256 exp = power.exp();
-    return Constants.SCALE_18_DECIMALS_INT - exp; // 1 - exp
+    return Constants.SCALE_18_DECIMALS_INT - (_power.exp()); // 1 - exp
   }
 
   /**
@@ -136,12 +149,9 @@ contract PremiumCalculator is UUPSUpgradeableBase, IPremiumCalculator {
     uint256 _underlyingRiskPremiumPercent
   ) internal pure returns (uint256) {
     // need to scale down twice because all 3 params (underlyingRiskPremiumPercent, protectionBuyerApy & duration_in_years) are in 18 decimals
-    uint256 underlyingPremiumRate = (_underlyingRiskPremiumPercent *
-      _protectionBuyerApy *
-      _durationInYears) /
+    return
+      (_underlyingRiskPremiumPercent * _protectionBuyerApy * _durationInYears) /
       (Constants.SCALE_18_DECIMALS * Constants.SCALE_18_DECIMALS);
-
-    return underlyingPremiumRate;
   }
 
   /**

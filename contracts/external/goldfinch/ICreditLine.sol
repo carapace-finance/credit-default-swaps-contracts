@@ -47,12 +47,6 @@ interface ICreditLine {
 
   function isLate() external view returns (bool);
 
-  /**
-   * Specifies the start time of the loan term. This is set upon the first drawdown.
-   * See: https://github.com/goldfinch-eng/mono/blob/14872db0fce441ef226e646bdb05843a6f48a9b5/packages/protocol/contracts/interfaces/IV2CreditLine.sol#L13
-   */
-  function termStartTime() external view returns (uint256);
-
   // Accounting variables
   function balance() external view returns (uint256);
 

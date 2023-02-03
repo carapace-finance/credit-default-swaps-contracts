@@ -15,7 +15,9 @@ import "./Constants.sol";
 import "hardhat/console.sol";
 
 /**
- * @notice Helper library for ProtectionPool contract, mainly for size reduction.
+ * @title ProtectionPoolHelper
+ * @author Carapace Finance
+ * @notice Helper library contract for ProtectionPool contract, mainly for size reduction.
  */
 library ProtectionPoolHelper {
   using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
@@ -23,6 +25,13 @@ library ProtectionPoolHelper {
   /**
    * @notice Verifies that the status of the lending pool is ACTIVE and protection can be bought,
    * otherwise reverts with the appropriate error message.
+   * @param poolCycleManager the pool cycle manager contract
+   * @param defaultStateManager the default state manager contract
+   * @param _protectionPool the address of the protection pool
+   * @param poolInfo storage pointer to the protection pool info
+   * @param _protectionStartTimestamp the timestamp when the protection starts
+   * @param _protectionPurchaseParams the protection purchase params
+   * @param _isRenewal whether the protection is being renewed or not
    */
   function verifyProtection(
     IProtectionPoolCycleManager poolCycleManager,
@@ -31,7 +40,7 @@ library ProtectionPoolHelper {
     ProtectionPoolInfo storage poolInfo,
     uint256 _protectionStartTimestamp,
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
-    bool _isExtension
+    bool _isRenewal
   ) external {
     /// Verify that the pool is not in OpenToSellers phase
     if (poolInfo.currentPhase == ProtectionPoolPhase.OpenToSellers) {
@@ -39,13 +48,13 @@ library ProtectionPoolHelper {
     }
 
     /// a buyer needs to buy protection longer than min protection duration specified in the pool params
-    /// or to extend protection longer than a day
+    /// or to renew protection longer than a day
     _verifyProtectionDuration(
       poolCycleManager,
-      poolInfo.poolAddress,
+      _protectionPool,
       _protectionStartTimestamp,
       _protectionPurchaseParams.protectionDurationInSeconds,
-      _isExtension
+      _isRenewal
         ? Constants.SECONDS_IN_DAY_UINT
         : poolInfo.params.minProtectionDurationInSeconds
     );
@@ -61,7 +70,7 @@ library ProtectionPoolHelper {
       !poolInfo.referenceLendingPools.canBuyProtection(
         msg.sender,
         _protectionPurchaseParams,
-        _isExtension
+        _isRenewal
       )
     ) {
       revert IProtectionPool.ProtectionPurchaseNotAllowed(
@@ -72,6 +81,11 @@ library ProtectionPoolHelper {
 
   /**
    * @notice Calculates the protection premium amount and related vars.
+   * @param premiumCalculator the premium calculator contract
+   * @param poolInfo storage pointer to the protection pool info
+   * @param _protectionPurchaseParams the protection purchase params
+   * @param totalSTokenUnderlying the total sToken underlying amount
+   * @param _leverageRatio the leverage ratio scaled to 18 decimals
    * @return _premiumAmountIn18Decimals The premium amount scaled to 18 decimals.
    * @return _premiumAmount The premium amount in underlying token decimals.
    * @return _isMinPremium True if the premium amount is equal to the minimum premium amount, false otherwise.
@@ -119,6 +133,15 @@ library ProtectionPoolHelper {
 
   /**
    * @notice Calculates & tracks the premium amount for the protection purchase.
+   * @param premiumCalculator the premium calculator contract
+   * @param protectionBuyerAccounts storage pointer to the protection buyer accounts
+   * @param poolInfo storage pointer to the protection pool info
+   * @param lendingPoolDetail storage pointer to the lending pool detail
+   * @param _protectionPurchaseParams the protection purchase params
+   * @param _maxPremiumAmount the maximum premium amount
+   * @return _premiumAmountIn18Decimals The premium amount scaled to 18 decimals.
+   * @return _premiumAmount The premium amount in underlying token decimals.
+   * @return _isMinPremium True if the premium amount is equal to the minimum premium amount, false otherwise.
    */
   function calculateAndTrackPremium(
     IPremiumCalculator premiumCalculator,
@@ -158,11 +181,12 @@ library ProtectionPoolHelper {
       );
     }
 
-    /// Track the premium amount
+    /// Increase the premium amount in the protection buyer account for the given lending pool
     protectionBuyerAccounts[msg.sender].lendingPoolToPremium[
       _protectionPurchaseParams.lendingPoolAddress
     ] += _premiumAmount;
 
+    /// Increase the total premium amount in the lending pool detail
     lendingPoolDetail.totalPremium += _premiumAmount;
   }
 
@@ -195,6 +219,8 @@ library ProtectionPoolHelper {
       return (0, false);
     }
 
+    /// Calculate the protection expiration timestamp and
+    /// Check if the protection is expired or not.
     uint256 _expirationTimestamp = protectionInfo.startTimestamp +
       protectionInfo.purchaseParams.protectionDurationInSeconds;
     _protectionExpired = block.timestamp > _expirationTimestamp;
@@ -233,6 +259,7 @@ library ProtectionPoolHelper {
         _secondsUntilLatestPayment = _latestPaymentTimestamp - _startTimestamp;
       }
 
+      /// Calculate the accrued premium amount scaled to 18 decimals
       uint256 _accruedPremiumIn18Decimals = AccruedPremiumCalculator
         .calculateAccruedPremium(
           _secondsUntilLastPremiumAccrual,
@@ -247,6 +274,8 @@ library ProtectionPoolHelper {
         _secondsUntilLatestPayment,
         _accruedPremiumIn18Decimals
       );
+
+      /// Scale the premium amount to underlying decimals
       _accruedPremiumInUnderlying = scale18DecimalsAmtToUnderlyingDecimals(
         _accruedPremiumIn18Decimals,
         poolInfo.underlyingToken.decimals()
@@ -256,6 +285,10 @@ library ProtectionPoolHelper {
 
   /**
    * @notice Marks the given protection as expired and moves it from active to expired protection indexes.
+   * @param protectionBuyerAccounts storage pointer to protection buyer accounts
+   * @param protectionInfo storage pointer to protection info
+   * @param lendingPoolDetail storage pointer to lending pool detail
+   * @param _protectionIndex The index of the protection to expire.
    */
   function expireProtection(
     mapping(address => ProtectionBuyerAccount) storage protectionBuyerAccounts,
@@ -263,6 +296,7 @@ library ProtectionPoolHelper {
     LendingPoolDetail storage lendingPoolDetail,
     uint256 _protectionIndex
   ) public {
+    /// Update protection info to mark it as expired
     protectionInfo.expired = true;
 
     /// remove expired protection index from activeProtectionIndexes of lendingPool & buyer account
@@ -273,13 +307,14 @@ library ProtectionPoolHelper {
     ];
     buyerAccount.activeProtectionIndexes.remove(_protectionIndex);
 
+    /// Update buyer account to add expired protection index to expiredProtectionIndexes of lendingPool
     ProtectionPurchaseParams storage purchaseParams = protectionInfo
       .purchaseParams;
     buyerAccount.expiredProtectionIndexByLendingPool[
       purchaseParams.lendingPoolAddress
     ][purchaseParams.nftLpTokenId] = _protectionIndex;
 
-    /// update total protection amount of lending pool
+    /// update total protection amount of lending pool by subtracting the expired protection amount
     lendingPoolDetail.totalProtection -= protectionInfo
       .purchaseParams
       .protectionAmount;
@@ -287,6 +322,9 @@ library ProtectionPoolHelper {
 
   /**
    * @notice Scales the given underlying token amount to the amount with 18 decimals.
+   * @param _underlyingAmt The amount to scale.
+   * @param _underlyingTokenDecimals The number of decimals of the underlying token.
+   * @return The scaled amount with 18 decimals.
    */
   function scaleUnderlyingAmtTo18Decimals(
     uint256 _underlyingAmt,
@@ -299,6 +337,9 @@ library ProtectionPoolHelper {
 
   /**
    * @notice Scales the given amount from 18 decimals to specified number of decimals.
+   * @param amt The amount to scale.
+   * @param _targetDecimals The number of decimals to scale to.
+   * @return The scaled amount with target decimals.
    */
   function scale18DecimalsAmtToUnderlyingDecimals(
     uint256 amt,
@@ -308,9 +349,13 @@ library ProtectionPoolHelper {
   }
 
   /**
-   * @dev Verifies whether a buyer can renew protection for same lending position
+   * @notice Verifies whether a buyer can renew protection for same lending position
    * in the same lending pool specified in the protection purchase params, otherwise reverts.
    * Protection can be renewed only within grace period after the protection is expired.
+   * @param protectionBuyerAccounts storage pointer to protection buyer accounts
+   * @param protectionInfos storage pointer to protection infos
+   * @param _protectionPurchaseParams The protection purchase params.
+   * @param _renewalGracePeriodInSeconds The grace period in seconds for renewal.
    */
   function verifyBuyerCanRenewProtection(
     mapping(address => ProtectionBuyerAccount) storage protectionBuyerAccounts,
@@ -355,6 +400,9 @@ library ProtectionPoolHelper {
 
   /**
    * @dev Verify that the lending pool is active, otherwise revert.
+   * @param defaultStateManager The default state manager contract.
+   * @param _protectionPoolAddress The address of the protection pool.
+   * @param _lendingPoolAddress The address of the lending pool.
    */
   function _verifyLendingPoolIsActive(
     IDefaultStateManager defaultStateManager,
@@ -388,6 +436,11 @@ library ProtectionPoolHelper {
 
   /**
    * @dev Verify that the protection duration is valid, otherwise revert.
+   * @param poolCycleManager The pool cycle manager contract.
+   * @param _poolAddress The address of the protection pool.
+   * @param _protectionStartTimestamp The protection start timestamp.
+   * @param _protectionDurationInSeconds The protection duration in seconds.
+   * @param _minProtectionDurationInSeconds The minimum protection duration in seconds.
    */
   function _verifyProtectionDuration(
     IProtectionPoolCycleManager poolCycleManager,

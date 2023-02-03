@@ -22,7 +22,8 @@ import "../libraries/Constants.sol";
  * @author Carapace Finance
  * @notice This contract is used to create new upgradable instances of following contracts using ERC1967 proxy:
  * {IProtectionPool}, {IReferenceLendingPools} and {ILendingProtocolAdapter}
- * This factory contract is also upgradeable using the UUPS pattern.
+ *
+ * @dev This factory contract is also upgradeable using the UUPS pattern.
  */
 contract ContractFactory is
   UUPSUpgradeableBase,
@@ -41,7 +42,7 @@ contract ContractFactory is
   /// @notice reference to the default state manager
   IDefaultStateManager private defaultStateManager;
 
-  /// @notice list of all pools created by this factory
+  /// @notice list of all protection pools created by this factory
   address[] private protectionPools;
 
   /// @notice list of all reference lending pools created by this factory
@@ -58,7 +59,7 @@ contract ContractFactory is
 
   /*** events ***/
 
-  /// @notice Emitted when a new pool is created.
+  /// @notice Emitted when a new protection pool is created.
   event ProtectionPoolCreated(
     address poolAddress,
     uint256 floor,
@@ -69,12 +70,12 @@ contract ContractFactory is
   );
 
   /// @notice Emitted when a new reference lending pools is created.
-  event ReferenceLendingPoolsCreated(address indexed referenceLendingPools);
+  event ReferenceLendingPoolsCreated(address referenceLendingPools);
 
   /// @notice Emitted when a new lending protocol adapter is created.
   event LendingProtocolAdapterCreated(
     LendingProtocol indexed lendingProtocol,
-    address indexed lendingProtocolAdapter
+    address lendingProtocolAdapter
   );
 
   /** errors */
@@ -86,7 +87,8 @@ contract ContractFactory is
   function initialize(
     IProtectionPoolCycleManager _protectionPoolCycleManager,
     IDefaultStateManager _defaultStateManager
-  ) public initializer {
+  ) external initializer {
+    /// initialize the UUPSUpgradeableBase contract
     __UUPSUpgradeableBase_init();
 
     protectionPoolCycleManager = _protectionPoolCycleManager;
@@ -96,6 +98,9 @@ contract ContractFactory is
   /*** state-changing functions ***/
 
   /**
+   * @notice Creates a new upgradable {IProtectionPool} instance using ERC1967 proxy.
+   * @dev Needs to be called by the owner of the factory contract.
+   * @dev This function is marked as payable for gas optimization.
    * @param _poolImpl An address of a ProtectionPool implementation.
    * @param _poolParameters struct containing pool related parameters.
    * @param _underlyingToken an address of an underlying token
@@ -113,15 +118,15 @@ contract ContractFactory is
     IPremiumCalculator _premiumCalculator,
     string calldata _name,
     string calldata _symbol
-  ) external onlyOwner returns (address) {
-    /// Create a proxy contract for the pool, which is upgradable using UUPS pattern
+  ) external payable onlyOwner {
+    /// Create a proxy contract for the protection pool using specified implementation.
+    /// This newly created proxy is upgradable using UUPS pattern
     ERC1967Proxy _poolProxy = new ERC1967Proxy(
       _poolImpl,
       abi.encodeWithSelector(
         IProtectionPool(address(0)).initialize.selector,
         _msgSender(),
         ProtectionPoolInfo({
-          poolAddress: address(0),
           params: _poolParameters,
           underlyingToken: _underlyingToken,
           referenceLendingPools: _referenceLendingPools,
@@ -134,17 +139,19 @@ contract ContractFactory is
         _symbol
       )
     );
+
+    /// Add the newly created protection pool to the list of all pools
     address _poolProxyAddress = address(_poolProxy);
     protectionPools.push(_poolProxyAddress);
 
-    /// register newly created pool to the pool cycle manager
+    /// register newly created protection pool to the pool cycle manager
     protectionPoolCycleManager.registerProtectionPool(
       _poolProxyAddress,
       _poolCycleParams
     );
 
-    /// register newly created pool to the default state manager
-    defaultStateManager.registerPool(_poolProxyAddress);
+    /// register newly created protection pool to the default state manager
+    defaultStateManager.registerProtectionPool(_poolProxyAddress);
 
     emit ProtectionPoolCreated(
       _poolProxyAddress,
@@ -154,20 +161,18 @@ contract ContractFactory is
       _referenceLendingPools,
       _premiumCalculator
     );
-
-    return _poolProxyAddress;
   }
 
   /**
    * @notice Creates a new upgradable {IReferenceLendingPools} instance using ERC1967 proxy.
-   * Needs to be called by the owner of the factory contract.
+   * @dev Needs to be called by the owner of the factory contract.
+   * @dev This function is marked as payable for gas optimization.
    * @param _referenceLendingPoolsImplementation the address of the implementation of the {IReferenceLendingPools} contract
    * @param _lendingPools the addresses of the lending pools which will be added to the basket
    * @param _lendingPoolProtocols the corresponding protocols of the lending pools which will be added to the basket
    * @param _protectionPurchaseLimitsInDays the corresponding protection purchase limits(in days) of the lending pools,
    * which will be added to the basket
    * @param _lendingProtocolAdapterFactory the address of the {LendingProtocolAdapterFactory} contract
-   * @return _referenceLendingPoolsAddress the address of the newly created {IReferenceLendingPools} instance
    */
   function createReferenceLendingPools(
     address _referenceLendingPoolsImplementation,
@@ -175,8 +180,8 @@ contract ContractFactory is
     LendingProtocol[] calldata _lendingPoolProtocols,
     uint256[] calldata _protectionPurchaseLimitsInDays,
     address _lendingProtocolAdapterFactory
-  ) external onlyOwner returns (address _referenceLendingPoolsAddress) {
-    /// Create a ERC1967 proxy contract for the reference lending pools using specified implementation address
+  ) external payable onlyOwner {
+    /// Create a ERC1967 proxy contract for the reference lending pools using specified implementation address.
     /// This instance of reference lending pools is upgradable using UUPS pattern
     ERC1967Proxy _referenceLendingPools = new ERC1967Proxy(
       _referenceLendingPoolsImplementation,
@@ -191,30 +196,30 @@ contract ContractFactory is
     );
 
     /// add the newly created reference lending pools to the list of reference lending pools
-    _referenceLendingPoolsAddress = address(_referenceLendingPools);
+    address _referenceLendingPoolsAddress = address(_referenceLendingPools);
     referenceLendingPoolsList.push(_referenceLendingPoolsAddress);
     emit ReferenceLendingPoolsCreated(_referenceLendingPoolsAddress);
   }
 
   /**
-   * @notice Creates and adds a new upgradable {ILendingProtocolAdapter} instance using ERC1967 proxy, if it doesn't exist.
-   * Needs to be called by the owner of the factory contract.
+   * @notice Creates a new upgradable {ILendingProtocolAdapter} instance using ERC1967 proxy, if it doesn't exist.
+   * If it already exists, transaction is reverted.
+   * @dev Needs to be called by the owner of the factory contract.
+   * @dev This function is marked as payable for gas optimization.
    * @param _lendingProtocol the lending protocol
    * @param _lendingProtocolAdapterImplementation the lending protocol adapter implementation
    * @param _lendingProtocolAdapterInitData Encoded function call to initialize the lending protocol adapter
-   * @return _lendingProtocolAdapter the newly created {ILendingProtocolAdapter} instance
    */
   function createLendingProtocolAdapter(
     LendingProtocol _lendingProtocol,
     address _lendingProtocolAdapterImplementation,
     bytes memory _lendingProtocolAdapterInitData
-  ) external onlyOwner returns (ILendingProtocolAdapter) {
-    return
-      _createLendingProtocolAdapter(
-        _lendingProtocol,
-        _lendingProtocolAdapterImplementation,
-        _lendingProtocolAdapterInitData
-      );
+  ) external payable onlyOwner {
+    _createLendingProtocolAdapter(
+      _lendingProtocol,
+      _lendingProtocolAdapterImplementation,
+      _lendingProtocolAdapterInitData
+    );
   }
 
   /*** view functions ***/
@@ -248,15 +253,24 @@ contract ContractFactory is
 
   /*** internal functions ***/
 
+  /**
+   * @notice Creates a new upgradable {ILendingProtocolAdapter} instance using ERC1967 proxy, if it doesn't exist.
+   * If it already exists, transaction is reverted.
+   * @param _lendingProtocol the lending protocol
+   * @param _lendingProtocolAdapterImplementation the lending protocol adapter implementation
+   * @param _lendingProtocolAdapterInitData Encoded function call to initialize the created lending protocol adapter
+   */
   function _createLendingProtocolAdapter(
     LendingProtocol _lendingProtocol,
     address _lendingProtocolAdapterImplementation,
     bytes memory _lendingProtocolAdapterInitData
-  ) internal returns (ILendingProtocolAdapter _lendingProtocolAdapter) {
+  ) internal {
+    /// Verify that the lending protocol adapter doesn't exist
     if (
       address(lendingProtocolAdapters[_lendingProtocol]) ==
       Constants.ZERO_ADDRESS
     ) {
+      /// Create a ERC1967 proxy contract for the lending protocol adapter using specified implementation address.
       address _lendingProtocolAdapterAddress = address(
         new ERC1967Proxy(
           _lendingProtocolAdapterImplementation,
@@ -264,10 +278,10 @@ contract ContractFactory is
         )
       );
 
-      _lendingProtocolAdapter = ILendingProtocolAdapter(
+      /// add the newly created lending protocol adapter to the mapping of lending protocol adapters
+      lendingProtocolAdapters[_lendingProtocol] = ILendingProtocolAdapter(
         _lendingProtocolAdapterAddress
       );
-      lendingProtocolAdapters[_lendingProtocol] = _lendingProtocolAdapter;
 
       emit LendingProtocolAdapterCreated(
         _lendingProtocol,

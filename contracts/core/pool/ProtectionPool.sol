@@ -23,8 +23,14 @@ import "hardhat/console.sol";
 /**
  * @title ProtectionPool
  * @author Carapace Finance
- * @notice Each protection pool is a market where protection sellers
+ * @notice ProtectionPool is the core contract of the protocol.
+ * Each protection pool is a market where protection sellers
  * and buyers can swap credit default risks of designated/referenced underlying loans.
+ * Protection buyers purchase protections by paying a premium in underlying tokens to the pool.
+ * Protection sellers deposit underlying tokens into the pool and receives proportionate shares of STokens.
+ * Protection sellers can withdraw their underlying tokens from the pool after requesting a withdrawal
+ * and only during the open period following the next pool cycle's end.
+ *
  * This contract is upgradeable using the UUPS pattern.
  */
 contract ProtectionPool is
@@ -56,10 +62,10 @@ contract ProtectionPool is
   /// @notice information about this protection pool
   ProtectionPoolInfo private poolInfo;
 
-  /// @notice The total underlying amount of premium from protection buyers accumulated in the pool
+  /// @notice The total underlying amount of premium paid to the pool by protection buyers
   uint256 private totalPremium;
 
-  /// @notice The total underlying amount of protection bought from this pool
+  /// @notice The total underlying amount of protection bought from this pool by protection buyers
   uint256 private totalProtection;
 
   /// @notice The total premium accrued in underlying token up to the last premium accrual timestamp
@@ -71,12 +77,14 @@ contract ProtectionPool is
    */
   uint256 private totalSTokenUnderlying;
 
-  /// @notice The array to track the info for all protection bought.
+  /// @notice The array to track all protections bought from this pool
+  /// @dev This array has dummy element at index 0 to validate the index of the protection
   ProtectionInfo[] private protectionInfos;
 
   /// @notice The mapping to track pool cycle index at which actual withdrawal will happen to withdrawal details
   mapping(uint256 => WithdrawalCycleDetail) private withdrawalCycleDetails;
 
+  /// @notice The mapping to track all lending pool details by address
   mapping(address => LendingPoolDetail) private lendingPoolDetails;
 
   /// @notice The mapping to track all protection buyer accounts by address
@@ -89,6 +97,8 @@ contract ProtectionPool is
   /*** modifiers ***/
 
   /// @notice Checks whether pool cycle is in open state. If not, reverts.
+  /// @dev This modifier is used to restrict certain functions to be called only during the open period of a pool cycle.
+  /// @dev This modifier also updates the pool cycle state before verifying the state.
   modifier whenPoolIsOpen() {
     /// Update the pool cycle state
     ProtectionPoolCycleState cycleState = poolCycleManager
@@ -100,6 +110,8 @@ contract ProtectionPool is
     _;
   }
 
+  /// @notice Checks caller is DefaultStateManager contract. If not, reverts.
+  /// @dev This modifier is used to restrict certain functions to be called only by the DefaultStateManager contract.
   modifier onlyDefaultStateManager() {
     if (msg.sender != address(defaultStateManager)) {
       revert OnlyDefaultStateManager(msg.sender);
@@ -118,14 +130,14 @@ contract ProtectionPool is
     IDefaultStateManager _defaultStateManager,
     string calldata _name,
     string calldata _symbol
-  ) public override initializer {
+  ) external override initializer {
     /// initialize parent contracts in same order as they are inherited to mimic the behavior of a constructor
     __UUPSUpgradeableBase_init();
     __ReentrancyGuard_init();
     __sToken_init(_name, _symbol);
 
+    /// set the storage variables
     poolInfo = _poolInfo;
-    poolInfo.poolAddress = address(this);
     premiumCalculator = _premiumCalculator;
     poolCycleManager = _poolCycleManager;
     defaultStateManager = _defaultStateManager;
@@ -137,9 +149,10 @@ contract ProtectionPool is
       poolInfo.referenceLendingPools
     );
 
+    /// Transfer the ownership of this pool to the specified owner
     _transferOwnership(_owner);
 
-    /// dummy protection info to make index 0 invalid
+    /// Add dummy protection info to make index 0 invalid
     protectionInfos.push();
   }
 
@@ -150,6 +163,7 @@ contract ProtectionPool is
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
     uint256 _maxPremiumAmount
   ) external override whenNotPaused nonReentrant {
+    /// Verify that user can buy protection and then create protection
     _verifyAndCreateProtection(
       block.timestamp,
       _protectionPurchaseParams,
@@ -163,7 +177,7 @@ contract ProtectionPool is
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
     uint256 _maxPremiumAmount
   ) external override whenNotPaused nonReentrant {
-    /// Verify that user can extend protection
+    /// Verify that user can renew protection
     ProtectionPoolHelper.verifyBuyerCanRenewProtection(
       protectionBuyerAccounts,
       protectionInfos,
@@ -171,6 +185,7 @@ contract ProtectionPool is
       poolInfo.params.protectionRenewalGracePeriodInSeconds
     );
 
+    /// Verify that user can buy protection and then create a new protection for renewal
     _verifyAndCreateProtection(
       block.timestamp,
       _protectionPurchaseParams,
@@ -277,6 +292,7 @@ contract ProtectionPool is
     /// Iterate all lending pools of this protection pool to check if there is new payment after last premium accrual
     uint256 length = _lendingPools.length;
     for (uint256 _lendingPoolIndex; _lendingPoolIndex < length; ) {
+      /// Retrieve lending pool detail from the storage
       address _lendingPool = _lendingPools[_lendingPoolIndex];
       LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
         _lendingPool
@@ -324,7 +340,7 @@ contract ProtectionPool is
       }
     }
 
-    /// Update the storage vars only when there was premium accrued
+    /// Gas optimization: only update storage vars if there was premium accrued
     if (_totalPremiumAccrued > 0) {
       totalPremiumAccrued += _totalPremiumAccrued;
       totalSTokenUnderlying += _totalPremiumAccrued;
@@ -340,6 +356,7 @@ contract ProtectionPool is
   /// @inheritdoc IProtectionPool
   function lockCapital(address _lendingPoolAddress)
     external
+    payable
     override
     onlyDefaultStateManager
     whenNotPaused
@@ -348,22 +365,27 @@ contract ProtectionPool is
     /// step 1: Capture protection pool's current investors by creating a snapshot of the token balance by using ERC20Snapshot in SToken
     _snapshotId = _snapshot();
 
-    /// step 2: calculate total capital to be locked:
-    /// calculate remaining principal amount for each loan protection in the lending pool.
-    /// for each loan protection, lockedAmt = min(protectionAmt, remainingPrincipal)
-    /// total locked amount = sum of lockedAmt for all loan protections
+    /// step 2: calculate total capital to be locked
     LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
       _lendingPoolAddress
     ];
 
+    /// Get indexes of active protection for a lending pool from the storage
     EnumerableSetUpgradeable.UintSet
       storage activeProtectionIndexes = lendingPoolDetail
         .activeProtectionIndexes;
+
+    /// Iterate all active protections and calculate total locked amount for this lending pool
+    /// 1. calculate remaining principal amount for each loan protection in the lending pool.
+    /// 2. for each loan protection, lockedAmt = min(protectionAmt, remainingPrincipal)
+    /// 3. total locked amount = sum of lockedAmt for all loan protections
     uint256 _length = activeProtectionIndexes.length();
     for (uint256 i; i < _length; ) {
+      /// Get protection info from the storage
       uint256 _protectionIndex = activeProtectionIndexes.at(i);
       ProtectionInfo storage protectionInfo = protectionInfos[_protectionIndex];
 
+      /// Calculate remaining principal amount for a loan protection in the lending pool
       uint256 _remainingPrincipal = poolInfo
         .referenceLendingPools
         .calculateRemainingPrincipal(
@@ -371,6 +393,8 @@ contract ProtectionPool is
           protectionInfo.buyer,
           protectionInfo.purchaseParams.nftLpTokenId
         );
+
+      /// Locked amount is minimum of protection amount and remaining principal
       uint256 _protectionAmount = protectionInfo
         .purchaseParams
         .protectionAmount;
@@ -386,13 +410,16 @@ contract ProtectionPool is
       }
     }
 
-    /// step 3: Update total locked & available capital in ProtectionPool
-    if (totalSTokenUnderlying < _lockedAmount) {
-      /// If totalSTokenUnderlying < _lockedAmount, then lock all available capital
-      _lockedAmount = totalSTokenUnderlying;
-      totalSTokenUnderlying = 0;
-    } else {
-      totalSTokenUnderlying -= _lockedAmount;
+    unchecked {
+      /// step 3: Update total locked & available capital in storage
+      if (totalSTokenUnderlying < _lockedAmount) {
+        /// If totalSTokenUnderlying < _lockedAmount, then lock all available capital
+        _lockedAmount = totalSTokenUnderlying;
+        totalSTokenUnderlying = 0;
+      } else {
+        /// Reduce the total sToken underlying amount by the locked amount
+        totalSTokenUnderlying -= _lockedAmount;
+      }
     }
   }
 
@@ -420,18 +447,21 @@ contract ProtectionPool is
   /** admin functions */
 
   /// @notice allows the owner to pause the contract
-  function pause() external onlyOwner {
+  /// @dev This function is marked as payable for gas optimization.
+  function pause() external payable onlyOwner {
     _pause();
   }
 
   /// @notice allows the owner to unpause the contract
-  function unpause() external onlyOwner {
+  /// @dev This function is marked as payable for gas optimization.
+  function unpause() external payable onlyOwner {
     _unpause();
   }
 
   /**
    * @notice Updates the leverage ratio parameters: floor, ceiling, and buffer.
    * @notice Only callable by the owner.
+   * @dev This function is marked as payable for gas optimization.
    * @param _leverageRatioFloor the new floor for the leverage ratio scaled by 18 decimals. i.e. 0.5 is 5 * 10^17
    * @param _leverageRatioCeiling the new ceiling for the leverage ratio scaled by 18 decimals. i.e. 1.5 is 1.5 * 10^18
    * @param _leverageRatioBuffer the new buffer for the leverage ratio scaled by 18 decimals. i.e. 0.05 is 5 * 10^16
@@ -440,7 +470,7 @@ contract ProtectionPool is
     uint256 _leverageRatioFloor,
     uint256 _leverageRatioCeiling,
     uint256 _leverageRatioBuffer
-  ) external onlyOwner {
+  ) external payable onlyOwner {
     poolInfo.params.leverageRatioFloor = _leverageRatioFloor;
     poolInfo.params.leverageRatioCeiling = _leverageRatioCeiling;
     poolInfo.params.leverageRatioBuffer = _leverageRatioBuffer;
@@ -449,6 +479,7 @@ contract ProtectionPool is
   /**
    * @notice Updates risk premium calculation params: curvature, minCarapaceRiskPremiumPercent & underlyingRiskPremiumPercent
    * @notice Only callable by the owner.
+   * @dev This function is marked as payable for gas optimization.
    * @param _curvature the new curvature parameter scaled by 18 decimals. i.e. 0.05 curvature is 5 * 10^16
    * @param _minCarapaceRiskPremiumPercent the new minCarapaceRiskPremiumPercent parameter scaled by 18 decimals. i.e. 0.03 is 3 * 10^16
    * @param _underlyingRiskPremiumPercent the new underlyingRiskPremiumPercent parameter scaled by 18 decimals. i.e. 0.10 is 1 * 10^17
@@ -457,7 +488,7 @@ contract ProtectionPool is
     uint256 _curvature,
     uint256 _minCarapaceRiskPremiumPercent,
     uint256 _underlyingRiskPremiumPercent
-  ) external onlyOwner {
+  ) external payable onlyOwner {
     poolInfo.params.curvature = _curvature;
     poolInfo
       .params
@@ -470,10 +501,12 @@ contract ProtectionPool is
   /**
    * @notice Updates the minimum required capital for the protection pool
    * @notice Only callable by the owner.
+   * @dev This function is marked as payable for gas optimization.
    * @param _minRequiredCapital the new minimum required capital for the protection pool in underlying token
    */
   function updateMinRequiredCapital(uint256 _minRequiredCapital)
     external
+    payable
     onlyOwner
   {
     poolInfo.params.minRequiredCapital = _minRequiredCapital;
@@ -481,16 +514,20 @@ contract ProtectionPool is
 
   /**
    * @notice Allows the owner to move pool phase after verification
+   * @notice Only callable by the owner.
+   * @dev This function is marked as payable for gas optimization.
    * @return _newPhase the new phase of the pool, if the phase is updated
    */
   function movePoolPhase()
     external
+    payable
     onlyOwner
     returns (ProtectionPoolPhase _newPhase)
   {
     ProtectionPoolPhase _currentPhase = poolInfo.currentPhase;
 
-    /// when the pool is in OpenToSellers phase, it can be moved to OpenToBuyers phase
+    /// Pool starts in OpenToSellers phase.
+    /// Once the pool has enough capital, it can be moved to OpenToBuyers phase
     if (
       _currentPhase == ProtectionPoolPhase.OpenToSellers &&
       _hasMinRequiredCapital()
@@ -498,7 +535,7 @@ contract ProtectionPool is
       poolInfo.currentPhase = _newPhase = ProtectionPoolPhase.OpenToBuyers;
       emit ProtectionPoolPhaseUpdated(_newPhase);
     } else if (_currentPhase == ProtectionPoolPhase.OpenToBuyers) {
-      /// when the pool is in OpenToBuyers phase, it can be moved to Open phase
+      /// when the pool is in OpenToBuyers phase, it can be moved to Open phase,
       /// if the leverage ratio is below the ceiling
       if (calculateLeverageRatio() <= poolInfo.params.leverageRatioCeiling) {
         poolInfo.currentPhase = _newPhase = ProtectionPoolPhase.Open;
@@ -532,7 +569,7 @@ contract ProtectionPool is
     _protections = new ProtectionInfo[](_length - 1);
     uint256 _index;
 
-    /// skip the first element in the array, as it is dummy/empty
+    /// skip the first element in the array, as it is dummy/empty protection info
     for (uint256 i = 1; i < _length; ) {
       _protections[_index] = protectionInfos[i];
 
@@ -560,11 +597,12 @@ contract ProtectionPool is
         _underlyingAmount,
         poolInfo.underlyingToken.decimals()
       );
+
+    /// if there are no sTokens in the pool, return the underlying amount
     if (totalSupply() == 0) return _scaledUnderlyingAmt;
 
-    uint256 _sTokenShares = (_scaledUnderlyingAmt *
-      Constants.SCALE_18_DECIMALS) / _getExchangeRate();
-    return _sTokenShares;
+    return
+      (_scaledUnderlyingAmt * Constants.SCALE_18_DECIMALS) / _getExchangeRate();
   }
 
   /// @inheritdoc IProtectionPool
@@ -574,11 +612,9 @@ contract ProtectionPool is
     override
     returns (uint256)
   {
-    uint256 _underlyingAmount = (_sTokenShares * _getExchangeRate()) /
-      Constants.SCALE_18_DECIMALS;
     return
       ProtectionPoolHelper.scale18DecimalsAmtToUnderlyingDecimals(
-        _underlyingAmount,
+        ((_sTokenShares * _getExchangeRate()) / Constants.SCALE_18_DECIMALS), /// underlying amount in 18 decimals
         poolInfo.underlyingToken.decimals()
       );
   }
@@ -643,12 +679,15 @@ contract ProtectionPool is
     override
     returns (ProtectionInfo[] memory _protectionInfos)
   {
+    /// Retrieve the active protection indexes for the buyer
     EnumerableSetUpgradeable.UintSet
       storage activeProtectionIndexes = protectionBuyerAccounts[_buyer]
         .activeProtectionIndexes;
     uint256 _length = activeProtectionIndexes.length();
     _protectionInfos = new ProtectionInfo[](_length);
 
+    /// Retrieve the protection info for each active protection index
+    /// and set it in the return array
     for (uint256 i; i < _length; ) {
       uint256 _protectionIndex = activeProtectionIndexes.at(i);
       _protectionInfos[i] = protectionInfos[_protectionIndex];
@@ -694,6 +733,7 @@ contract ProtectionPool is
     address _lendingPool,
     uint256 _nftLpTokenId
   ) external view override returns (uint256 _maxAllowedProtectionAmount) {
+    /// Users can not purchase protection for more than the remaining principal
     return
       poolInfo.referenceLendingPools.calculateRemainingPrincipal(
         _lendingPool,
@@ -709,6 +749,7 @@ contract ProtectionPool is
     override
     returns (uint256 _maxAllowedProtectionDurationInSeconds)
   {
+    /// Users can not purchase protection for more than the duration remaining till end of next cycle
     _maxAllowedProtectionDurationInSeconds =
       poolCycleManager.getNextCycleEndTimestamp(address(this)) -
       block.timestamp;
@@ -744,11 +785,18 @@ contract ProtectionPool is
 
   /*** internal functions */
 
+  /**
+   * @dev Verify protection purchase and create a protection if it is valid
+   * @param _protectionStartTimestamp The timestamp at which protection starts
+   * @param _protectionPurchaseParams The protection purchase params
+   * @param _maxPremiumAmount The maximum premium amount that the user is willing to pay
+   * @param _isRenewal Whether the protection is being renewed or not
+   */
   function _verifyAndCreateProtection(
     uint256 _protectionStartTimestamp,
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
     uint256 _maxPremiumAmount,
-    bool _isExtension
+    bool _isRenewal
   ) internal {
     /// Verify that user can buy protection
     ProtectionPoolHelper.verifyProtection(
@@ -758,7 +806,7 @@ contract ProtectionPool is
       poolInfo,
       _protectionStartTimestamp,
       _protectionPurchaseParams,
-      _isExtension
+      _isRenewal
     );
 
     /// Step 1: Calculate & check the leverage ratio
@@ -769,13 +817,16 @@ contract ProtectionPool is
       revert ProtectionPoolLeverageRatioTooLow(_leverageRatio);
     }
 
+    /// Retrieve the lending pool detail and
+    /// update the total protection of the lending pool by the protection amount
     LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
       _protectionPurchaseParams.lendingPoolAddress
     ];
     lendingPoolDetail.totalProtection += _protectionPurchaseParams
       .protectionAmount;
 
-    //// Step 2: Calculate the protection premium amount scaled to 18 decimals and scale it to the underlying token decimals.
+    /// Step 2: Calculate the protection premium amount scaled to 18 decimals and
+    /// scale it down to the underlying token decimals.
     (
       uint256 _premiumAmountIn18Decimals,
       uint256 _premiumAmount,
@@ -855,7 +906,7 @@ contract ProtectionPool is
 
   /**
    * @dev the exchange rate = total capital / total SToken supply
-   * @dev total capital = total seller deposits + premium accrued - default payouts
+   * @dev total capital = total seller deposits + premium accrued - locked capital - default payouts
    * @dev the rehypothecation and the protocol fees will be added in the upcoming versions
    * @return the exchange rate scaled to 18 decimals
    */
@@ -879,10 +930,18 @@ contract ProtectionPool is
     return _exchangeRate;
   }
 
+  /**
+   * @dev Calculate the minimum required capital for the pool to be able to enable protection purchases.
+   */
   function _hasMinRequiredCapital() internal view returns (bool) {
     return totalSTokenUnderlying >= poolInfo.params.minRequiredCapital;
   }
 
+  /**
+   * @dev Calculate the leverage ratio for the pool.
+   * @param _totalCapital the total capital of the pool in underlying token
+   * @return the leverage ratio scaled to 18 decimals
+   */
   function _calculateLeverageRatio(uint256 _totalCapital)
     internal
     view
@@ -961,6 +1020,12 @@ contract ProtectionPool is
     }
   }
 
+  /**
+   * @dev Deposits the specified amount of underlying token to the pool and
+   * mints the corresponding sToken shares to the receiver.
+   * @param _underlyingAmount the amount of underlying token to deposit
+   * @param _receiver the address to receive the sToken shares
+   */
   function _deposit(uint256 _underlyingAmount, address _receiver) internal {
     /// Verify that the pool is not in OpenToBuyers phase
     if (poolInfo.currentPhase == ProtectionPoolPhase.OpenToBuyers) {
@@ -989,12 +1054,17 @@ contract ProtectionPool is
     emit ProtectionSold(_receiver, _underlyingAmount);
   }
 
+  /**
+   * @dev Requests the specified amount of sToken for withdrawal from the pool.
+   * @param _sTokenAmount the amount of sToken shares to withdraw
+   */
   function _requestWithdrawal(uint256 _sTokenAmount) internal {
     uint256 _sTokenBalance = balanceOf(msg.sender);
     if (_sTokenAmount > _sTokenBalance) {
       revert InsufficientSTokenBalance(msg.sender, _sTokenBalance);
     }
 
+    /// Get current cycle index for this pool
     uint256 _currentCycleIndex = poolCycleManager.getCurrentCycleIndex(
       address(this)
     );
@@ -1008,21 +1078,29 @@ contract ProtectionPool is
       _withdrawalCycleIndex
     ];
 
+    /// Cache existing requested amount for the cycle for the sender
     uint256 _oldRequestAmount = withdrawalCycle.withdrawalRequests[msg.sender];
     withdrawalCycle.withdrawalRequests[msg.sender] = _sTokenAmount;
 
-    /// Update total requested withdrawal amount for the cycle considering existing requested amount
-    if (_oldRequestAmount > _sTokenAmount) {
-      withdrawalCycle.totalSTokenRequested -= (_oldRequestAmount -
-        _sTokenAmount);
-    } else {
-      withdrawalCycle.totalSTokenRequested += (_sTokenAmount -
-        _oldRequestAmount);
+    unchecked {
+      /// Update total requested withdrawal amount for the cycle considering existing requested amount
+      if (_oldRequestAmount > _sTokenAmount) {
+        withdrawalCycle.totalSTokenRequested -= (_oldRequestAmount -
+          _sTokenAmount);
+      } else {
+        withdrawalCycle.totalSTokenRequested += (_sTokenAmount -
+          _oldRequestAmount);
+      }
     }
 
     emit WithdrawalRequested(msg.sender, _sTokenAmount, _withdrawalCycleIndex);
   }
 
+  /**
+   * @dev Provides the requested amount of sToken for withdrawal from the pool for the specified cycle index.
+   * @param _withdrawalCycleIndex the cycle index for which the withdrawal is requested
+   * @return the requested amount of sToken to withdraw
+   */
   function _getRequestedWithdrawalAmount(uint256 _withdrawalCycleIndex)
     internal
     view

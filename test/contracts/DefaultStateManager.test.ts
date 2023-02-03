@@ -140,10 +140,12 @@ const testDefaultStateManager: Function = (
       });
     });
 
-    describe("registerPool", async () => {
+    describe("registerProtectionPool", async () => {
       it("...should NOT be callable by non-pool-factory address", async () => {
         await expect(
-          defaultStateManager.connect(account1).registerPool(ZERO_ADDRESS)
+          defaultStateManager
+            .connect(account1)
+            .registerProtectionPool(ZERO_ADDRESS)
         ).to.be.revertedWith(
           `NotContractFactory("${await account1.getAddress()}")`
         );
@@ -157,7 +159,7 @@ const testDefaultStateManager: Function = (
         await expect(
           defaultStateManager
             .connect(account1)
-            .registerPool(poolInstance.address)
+            .registerProtectionPool(poolInstance.address)
         ).to.be.revertedWith(
           `PoolAlreadyRegistered("${await poolInstance.address}")`
         );
@@ -207,6 +209,14 @@ const testDefaultStateManager: Function = (
         expect(await defaultStateManager.contractFactoryAddress()).to.equal(
           await account1.getAddress()
         );
+      });
+    });
+
+    describe("getLendingPoolStatus", async () => {
+      it("...should return NotSupported status for non-registered pool", async () => {
+        expect(
+          await defaultStateManager.getLendingPoolStatus(lendingPools[0], pool1)
+        ).to.equal(0);
       });
     });
 

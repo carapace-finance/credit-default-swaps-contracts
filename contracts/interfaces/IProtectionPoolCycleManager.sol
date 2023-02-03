@@ -8,7 +8,7 @@ enum ProtectionPoolCycleState {
   Locked // The cycle is in progress & locked for deposit & withdraw
 }
 
-/// @notice Contains pool cycle related parameters.
+/// @notice A struct to store a protection pool cycle related parameters.
 struct ProtectionPoolCycleParams {
   /// @notice Time duration for which cycle is OPEN, meaning withdraw from pool is allowed.
   uint256 openCycleDuration;
@@ -16,7 +16,7 @@ struct ProtectionPoolCycleParams {
   uint256 cycleDuration;
 }
 
-/// @notice Contains the current pool cycle info.
+/// @notice A struct to store the current cycle info of protection pool.
 struct ProtectionPoolCycle {
   /// @notice The pool cycle parameters.
   ProtectionPoolCycleParams params;
@@ -28,7 +28,8 @@ struct ProtectionPoolCycle {
   ProtectionPoolCycleState currentCycleState;
 }
 
-/// @notice Contract to manage the current cycle of various pools.
+/// @notice Interface for the protection pool cycle manager contract,
+/// which manages the cycles of the registered protection pools.
 abstract contract IProtectionPoolCycleManager {
   /*** events ***/
 
@@ -37,7 +38,7 @@ abstract contract IProtectionPoolCycleManager {
 
   /// @notice Emitted when a new pool cycle is created.
   event ProtectionPoolCycleCreated(
-    address poolAddress,
+    address indexed poolAddress,
     uint256 cycleIndex,
     uint256 cycleStartTime,
     uint256 openCycleDuration,
@@ -52,25 +53,30 @@ abstract contract IProtectionPoolCycleManager {
 
   /**
    * @notice Sets the contract factory address. Only callable by the owner.
+   * @dev Function is marked payable as gas optimization
    * @param _contractFactoryAddress address of the contract factory which is the only contract allowed to register pools.
    */
-  function setContractFactory(address _contractFactoryAddress) external virtual;
+  function setContractFactory(address _contractFactoryAddress)
+    external
+    payable
+    virtual;
 
   /**
    * @notice Registers the given protection pool and starts a new cycle for it in `Open` state.
+   * @dev Function is marked payable as gas optimization
    * @param _poolAddress The address of the pool.
    * @param _cycleParams The pool cycle parameters.
    */
   function registerProtectionPool(
     address _poolAddress,
     ProtectionPoolCycleParams calldata _cycleParams
-  ) external virtual;
+  ) external payable virtual;
 
   /**
-   * @notice Determines & returns the current cycle state of the given pool.
+   * @notice Determines & sets the current cycle state of the given pool.
    * @notice This function also starts a new cycle if required.
    * @param _poolAddress The address of the pool.
-   * @return state The newly determined cycle state of the pool.
+   * @return state The current cycle state of the given pool.
    */
   function calculateAndSetPoolCycleState(address _poolAddress)
     external

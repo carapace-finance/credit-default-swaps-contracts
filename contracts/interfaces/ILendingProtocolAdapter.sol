@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+/// @notice Enum of supported lending protocols
 enum LendingProtocol {
   Goldfinch
 }
 
+/// @notice Interface for lending protocol adapters
 abstract contract ILendingProtocolAdapter {
   /**
    * @notice Determines whether the specified lending pool's term has ended or balance has been repaid.
@@ -29,13 +31,13 @@ abstract contract ILendingProtocolAdapter {
   /**
    * @notice Returns the term end timestamp of the lending pool
    * @param _lendingPoolAddress Address of the underlying lending pool
-   * @return termEndTimestamp Timestamp of the term end
+   * @return Timestamp of the term end in seconds
    */
   function getLendingPoolTermEndTimestamp(address _lendingPoolAddress)
     external
     view
     virtual
-    returns (uint256 termEndTimestamp);
+    returns (uint256);
 
   /**
    * @notice Calculates the interest rate for the protection buyer for the specified lending pool
@@ -63,6 +65,7 @@ abstract contract ILendingProtocolAdapter {
 
   /**
    * @notice Returns the latest payment timestamp of the specified lending pool
+   * @param _lendingPool Address of the lending pool
    */
   function getLatestPaymentTimestamp(address _lendingPool)
     public
@@ -74,6 +77,7 @@ abstract contract ILendingProtocolAdapter {
    * @notice Determines whether the specified lending pool is late for payment but within the specified grace period.
    * @param _lendingPoolAddress the address of the lending pool
    * @param _gracePeriodInDays the grace period in days using unscaled value, i.e. 1 day = 1
+   * @return true if the lending pool is late for payment but within the specified grace period
    */
   function isLendingPoolLateWithinGracePeriod(
     address _lendingPoolAddress,
@@ -82,6 +86,8 @@ abstract contract ILendingProtocolAdapter {
 
   /**
    * @notice Returns the payment period of the specified lending pool in days
+   * @param _lendingPool Address of the lending pool
+   * @return Payment period in days, unscaled, i.e. 1 day = 1
    */
   function getPaymentPeriodInDays(address _lendingPool)
     public
