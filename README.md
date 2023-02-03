@@ -1,9 +1,16 @@
-## Carapace Smart Contracts Overview
+# Carapace Documentation
 
-Following is the link to google docs describing smart contracts and their interactions:
-https://docs.google.com/document/d/1RihHcf-jS45BorVufVm4aYdXdQ65CaOxtW6ljz8DCOs
+- Whitepaper: https://www.carapace.finance/WhitePaper
+- User Docs: https://www.carapace.finance/docs/
 
-## Develop Locally
+# Carapace Smart Contracts
+
+- Overview of smart contracts and their interactions:
+  https://docs.google.com/document/d/1RihHcf-jS45BorVufVm4aYdXdQ65CaOxtW6ljz8DCOs
+
+# Local Development
+
+## Setup
 
 1. This project uses following technology stack:
 
