@@ -16,7 +16,6 @@ import "@openzeppelin/hardhat-upgrades";
 
 const {
   ALCHEMY_API_KEY,
-  INFURA_API_KEY,
   MNEMONIC_WORDS,
   WALLET_INITIAL_INDEX,
   TENDERLY_ETH_MAINNET_FORK_URL,
@@ -57,7 +56,7 @@ const config: HardhatUserConfig = {
     }
   },
   solidity: {
-    version: "0.8.13",
+    version: "0.8.17",
     settings: {
       optimizer: {
         enabled: true,
