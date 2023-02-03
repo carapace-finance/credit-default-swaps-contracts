@@ -14,15 +14,7 @@ import "hardhat-gas-reporter";
 import "hardhat-storage-layout";
 import "@openzeppelin/hardhat-upgrades";
 
-const {
-  ALCHEMY_API_KEY,
-  INFURA_API_KEY,
-  MNEMONIC_WORDS,
-  WALLET_INITIAL_INDEX,
-  TENDERLY_ETH_MAINNET_FORK_URL,
-  DEPLOYMENT_ACCOUNT_PRIVATE_KEY,
-  ETHERSCAN_API_KEY
-} = process.env;
+const { ALCHEMY_API_KEY, ETHERSCAN_API_KEY } = process.env;
 
 const config: HardhatUserConfig = {
   defaultNetwork: "hardhat",
@@ -36,28 +28,18 @@ const config: HardhatUserConfig = {
       },
       gas: "auto", // gasLimit
       gasPrice: 259000000000, // check the latest gas price market in https://www.ethgasstation.info/
-      // inject: false, // optional. If true, it will EXPOSE your mnemonic in your frontend code. Then it would be available as an "in-page browser wallet" / signer which can sign without confirmation.
-      accounts: {
-        mnemonic: MNEMONIC_WORDS,
-        initialIndex: WALLET_INITIAL_INDEX ? parseInt(WALLET_INITIAL_INDEX) : 0 // set index of account to use inside wallet (defaults to 0)
-      },
       allowUnlimitedContractSize: false
-    },
-    tenderly: {
-      chainId: 1, // the chain you fork
-      url: TENDERLY_ETH_MAINNET_FORK_URL
     },
     mainnet: {
       url: `https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_API_KEY}`,
-      // url: `https://mainnet.infura.io/v3/${INFURA_API_KEY}`,
       gas: "auto", // gasLimit
-      gasPrice: 41000000000, // check the latest gas price market in https://www.ethgasstation.info/
+      gasPrice: 41000000000 // check the latest gas price market in https://www.ethgasstation.info/
       // inject: false, // optional. If true, it will EXPOSE your mnemonic in your frontend code. Then it would be available as an "in-page browser wallet" / signer which can sign without confirmation.
-      accounts: [`0x${DEPLOYMENT_ACCOUNT_PRIVATE_KEY}`]
+      // accounts: [`0x${DEPLOYMENT_ACCOUNT_PRIVATE_KEY}`]
     }
   },
   solidity: {
-    version: "0.8.13",
+    version: "0.8.17",
     settings: {
       optimizer: {
         enabled: true,

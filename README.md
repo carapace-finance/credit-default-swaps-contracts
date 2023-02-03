@@ -1,6 +1,22 @@
+## Carapace Smart Contracts Overview
+
+Following is the link to google docs describing smart contracts and their interactions:
+https://docs.google.com/document/d/1RihHcf-jS45BorVufVm4aYdXdQ65CaOxtW6ljz8DCOs
+
 ## Develop Locally
 
-1. Clone this repo and npm install
+1. This project uses following technology stack:
+
+- [Node](https://nodejs.org/en/download/) (version: 16.15)
+- [NPM](https://docs.npmjs.com/about-npm) (version: 9.4)
+- [Hardhat](https://hardhat.org/getting-started/) (version: 2.10)
+- [Solidity](https://docs.soliditylang.org/en/v0.8.17/) (version: 0.8.17)
+- [OpenZeppelin](https://docs.openzeppelin.com/contracts/4.x/) (version: 4.8)
+- [Typescript](https://www.typescriptlang.org/) (version: 4.7)
+- [Waffle](https://ethereum-waffle.readthedocs.io/en/latest/) (version: 3.4)
+- [Ethers](https://docs.ethers.io/v5/) (Version: 5)
+
+2. Clone this repo and npm install
 
 ```bash
 $ git clone https://github.com/carapace-finance/credit-default-swaps-contracts
@@ -8,59 +24,43 @@ $ cd credit-default-swaps-contracts
 $ npm install
 ```
 
-2. Create an [Alchemy](https://www.alchemy.com/) or [Infura](https://infura.io/) account and get their api key.
+3. Create an [Alchemy](https://www.alchemy.com/) account. You will need an API key to run tests.
 
-3. Declare environment variables
+4. Declare environment variables
 
 We encourage you to declare environment variables in your `.bash_profile`(or .zprofile and others) to avoid sharing your credentials accidentally. You can also make `.env` file in the root of this repository although we do not recommend it.
 
 ```bash
 export ALCHEMY_API_KEY = <alchemy_api_key>
-export INFURA_API_KEY = <infura_api_key>
-export TENDERLY_ETH_MAINNET_FORK_URL = <tenderly_fork_url>
-export DEPLOYMENT_ACCOUNT_PRIVATE_KEY = <deployment_account_private_key>
-export MNEMONIC_WORDS = <mnemonic_words>
-export WALLET_INITIAL_INDEX = "0"
-export ETHERSCAN_API_KEY = <etherscan_api_key>
-export FIRST_POOL_SALT = <first_pool_salt>
-export SECOND_POOL_SALT = <second_pool_salt>
 ```
 
-We recommend obtaining your mnemonic words from MetaMask and storing in `MNEMONIC_WORDS` so that you can use the same account when you test a dapp. Each word should be divided by space. You can create a new private key for `DEPLOYMENT_ACCOUNT_PRIVATE_KEY`or export your private key in MetaMask.
-
-You can keep `ETHERSCAN_API_KEY` empty until you deploy to the mainnet. Ask the team about salt values is when you create a new pool.
+You can keep `ETHERSCAN_API_KEY` empty until you deploy to the mainnet.
 
 You are ready to write code!
 
-## Smart Contract Code Style
+## Solidity Code Style
 
 All smart contracts use mixedCase for state variable names and function names. All other variables are prefixed with an underscore.
 This is done to easily spot the state variables.
 
-## npm Script
+## NPM Scripts
 
 ```bash
-$ npm run compile
 // compiles your contracts and generate artifacts and cache.
+$ npm run compile
 
-$ npm run node
 // runs the default network configured in the `hardhat.config.ts`.
+$ npm run node
 
-$ npm run deploy:mainnet_forked
 // deploys your contracts to the mirrored version of the mainnet in your local network.
+$ npm run deploy:mainnet_forked
 
-$ npm run test
 // runs test in the test directory.
+$ npm run test
 
-$ npm run cover
 // generate a code coverage report for testing.
+$ npm run cover
 
-$ npm run tenderly:verify
-//
-
-$ npm run tenderly:push
-//
-
-$ npm run doc
 // generate a documentation from NatSpec comments.
+$ npm run doc
 ```

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.13;
+pragma solidity 0.8.17;
 
 import {IReferenceLendingPools, LendingPoolStatus} from "./IReferenceLendingPools.sol";
 import {IProtectionPool} from "./IProtectionPool.sol";

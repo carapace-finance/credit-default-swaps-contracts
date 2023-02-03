@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.13;
+pragma solidity 0.8.17;
 
 import "@prb/math/contracts/PRBMathSD59x18.sol";
 import "./Constants.sol";

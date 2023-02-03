@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.13;
+pragma solidity 0.8.17;
 
 /// @notice Represents various states of a pool cycle.
 enum ProtectionPoolCycleState {
