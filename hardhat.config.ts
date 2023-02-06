@@ -1,4 +1,4 @@
-import { HardhatUserConfig } from "hardhat/config";
+import { HardhatUserConfig, task } from "hardhat/config";
 import "@nomiclabs/hardhat-etherscan";
 import "@nomiclabs/hardhat-waffle";
 import "@solidstate/hardhat-bytecode-exporter";
@@ -14,7 +14,12 @@ import "hardhat-gas-reporter";
 import "hardhat-storage-layout";
 import "@openzeppelin/hardhat-upgrades";
 
-const { ALCHEMY_API_KEY, ETHERSCAN_API_KEY } = process.env;
+const {
+  ALCHEMY_API_KEY,
+  ETHERSCAN_API_KEY,
+  MNEMONIC_WORDS,
+  WALLET_INITIAL_INDEX
+} = process.env;
 
 const config: HardhatUserConfig = {
   defaultNetwork: "hardhat",
@@ -28,6 +33,10 @@ const config: HardhatUserConfig = {
       },
       gas: "auto", // gasLimit
       gasPrice: 259000000000, // check the latest gas price market in https://www.ethgasstation.info/
+      accounts: {
+        mnemonic: MNEMONIC_WORDS,
+        initialIndex: WALLET_INITIAL_INDEX ? parseInt(WALLET_INITIAL_INDEX) : 0 // set index of account to use inside wallet (defaults to 0)
+      },
       allowUnlimitedContractSize: false
     },
     mainnet: {
