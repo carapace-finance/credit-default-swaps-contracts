@@ -32,5 +32,6 @@ jobs:
       - name: "Compile the contracts"
         run: "npm run compile"
 
+      - run: ls
       - name: "Test the contracts"
         run: "npm run test"
