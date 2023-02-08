@@ -11,7 +11,7 @@ env:
   ALCHEMY_API_KEY: "${{ secrets.ALCHEMY_API_KEY }}"
 
 jobs:
-  ci:
+  run-tests:
     runs-on: "macos-latest"
     steps:
       - name: "Check out the repo"
