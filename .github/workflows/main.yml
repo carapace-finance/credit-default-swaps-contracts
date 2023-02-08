@@ -32,6 +32,6 @@ jobs:
       - name: "Compile the contracts"
         run: "npm run compile"
 
-      - run: ls
+      - run: ls -a typechain-types/contracts/core/Pool
       - name: "Test the contracts"
         run: "npm run test"
