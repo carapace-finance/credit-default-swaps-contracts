@@ -7,6 +7,9 @@ on:
     branches:
       - main
 
+env:
+  ALCHEMY_API_KEY: "${{ secrets.ALCHEMY_API_KEY }}"
+
 jobs:
   ci:
     runs-on: "ubuntu-latest"
