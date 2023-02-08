@@ -1,0 +1,33 @@
+name: "CI"
+
+env:
+  DOTENV_CONFIG_PATH: "./.env.example"
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  ci:
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Check out the repo"
+        uses: "actions/checkout@v3"
+
+      - name: "Install Node.js"
+        uses: "actions/setup-node@v3"
+        with:
+          cache: "npm"
+          node-version: "16.x"
+
+      - name: "Install the dependencies"
+        run: "npm install --immutable"
+
+      - name: "Compile the contracts"
+        run: "npm run compile"
+
+      - name: "Test the contracts"
+        run: "npm run test"
