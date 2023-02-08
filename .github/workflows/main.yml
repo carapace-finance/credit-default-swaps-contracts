@@ -32,11 +32,5 @@ jobs:
       - name: "Compile the contracts"
         run: "npm run compile"
 
-      - name: "Generate contract types"
-        run: "npx hardhat typechain"
-
-      - name: "Verify contract type generation"
-        run: "ls -a typechain-types/contracts"
-
       - name: "Test the contracts"
         run: "npm run test"
