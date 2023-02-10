@@ -19,7 +19,7 @@ import {
 import { ITranchedPool } from "../../typechain-types/contracts/external/goldfinch/ITranchedPool";
 import { payToLendingPool, payToLendingPoolAddress } from "../utils/goldfinch";
 import { BigNumber } from "@ethersproject/bignumber";
-import { ReferenceLendingPools } from "../../typechain-types/contracts/core/Pool";
+import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { DefaultStateManagerV2 } from "../../typechain-types/contracts/test/DefaultStateManagerV2";
 import { cpContractFactoryInstance } from "../../utils/deploy";
 

@@ -33,10 +33,7 @@ const config: HardhatUserConfig = {
       },
       gas: "auto", // gasLimit
       gasPrice: 259000000000, // check the latest gas price market in https://www.ethgasstation.info/
-      accounts: {
-        mnemonic: MNEMONIC_WORDS,
-        initialIndex: WALLET_INITIAL_INDEX ? parseInt(WALLET_INITIAL_INDEX) : 0 // set index of account to use inside wallet (defaults to 0)
-      },
+      // accounts are set at the end of this file
       allowUnlimitedContractSize: false
     },
     mainnet: {
@@ -89,5 +86,16 @@ const config: HardhatUserConfig = {
     flat: true
   }
 };
+
+if (
+  config?.networks?.hardhat &&
+  MNEMONIC_WORDS != undefined &&
+  WALLET_INITIAL_INDEX != undefined
+) {
+  config.networks.hardhat.accounts = {
+    mnemonic: MNEMONIC_WORDS,
+    initialIndex: parseInt(WALLET_INITIAL_INDEX) // set index of account to use inside wallet (defaults to 0)
+  };
+}
 
 export default config;

@@ -1,0 +1,36 @@
+name: "Run Mainnet Fork Tests"
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+env:
+  ALCHEMY_API_KEY: "${{ secrets.ALCHEMY_API_KEY }}"
+
+jobs:
+  run-tests:
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Check out the repo"
+        uses: "actions/checkout@v3"
+
+      - name: "Install Node.js"
+        uses: "actions/setup-node@v3"
+        with:
+          cache: "npm"
+          node-version: "16.x"
+
+      - name: "Install npm"
+        run: "npm install -g npm@9.4"
+
+      - name: "Install the dependencies"
+        run: "npm install --immutable"
+
+      - name: "Compile the contracts"
+        run: "npm run compile"
+
+      - name: "Test the contracts"
+        run: "npm run test"
