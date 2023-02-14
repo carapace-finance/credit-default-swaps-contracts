@@ -18,6 +18,7 @@ import {ERC1967Proxy} from "../../contracts/external/openzeppelin/ERC1967/ERC196
 import {IPremiumCalculator} from "../../contracts/interfaces/IPremiumCalculator.sol";
 import {ProtectionPurchaseParams, LendingPoolStatus, IReferenceLendingPools} from "../../contracts/interfaces/IReferenceLendingPools.sol";
 import {PremiumCalculator} from "../../contracts/core/PremiumCalculator.sol";
+import {ProtectionPoolHelper} from "../../contracts/libraries/ProtectionPoolHelper.sol";
 
 contract FuzzTestProtectionPool is Test {
   ERC20Upgradeable private usdc;
@@ -81,10 +82,10 @@ contract FuzzTestProtectionPool is Test {
     protectionPool = ProtectionPool(address(_protectionPoolProxy));
   }
 
-  function testDeposit(uint256 _underlyingAmount, address _receiver) public {
+  function testDeposit(uint256 _depositAmount, address _receiver) public {
     /// Check that the deposit amount is within the bounds
-    _underlyingAmount = bound(
-      _underlyingAmount,
+    _depositAmount = bound(
+      _depositAmount,
       1e6, // 1 USDC
       100_000_000_000e6
     );
@@ -92,22 +93,11 @@ contract FuzzTestProtectionPool is Test {
     /// Ensure non-zero receiver address
     vm.assume(_receiver != address(0));
 
-    protectionPool.deposit(_underlyingAmount, _receiver);
+    protectionPool.deposit(_depositAmount, _receiver);
 
-    assertEq(protectionPool.getUnderlyingBalance(_receiver), _underlyingAmount);
-
-    (
-      uint256 _totalSTokenUnderlying,
-      uint256 _totalProtection,
-      uint256 _totalPremium,
-      uint256 _totalPremiumAccrued
-    ) = protectionPool.getPoolDetails();
-    assertEq(_totalSTokenUnderlying, _underlyingAmount);
-    assertEq(_totalProtection, 0);
-    assertEq(_totalPremium, 0);
-    assertEq(_totalPremiumAccrued, 0);
-
-    assertEq(protectionPool.calculateLeverageRatio(), 0);
+    /// verification
+    assertEq(protectionPool.getUnderlyingBalance(_receiver), _depositAmount);
+    _verifyProtectionPoolState(_depositAmount, 0, 0, 0);
   }
 
   function testBuyProtection(
@@ -242,6 +232,212 @@ contract FuzzTestProtectionPool is Test {
     );
   }
 
+  function testRequestWithdrawal(uint256 _withdrawalAmount, address _receiver)
+    public
+  {
+    /// Check that the withdrawal amount is within the bounds
+    _withdrawalAmount = bound(
+      _withdrawalAmount,
+      1e6, // 1 USDC
+      100_000_000_000e6
+    );
+
+    /// Ensure non-zero receiver address
+    vm.assume(_receiver != address(0));
+
+    /// make deposit
+    protectionPool.deposit(_withdrawalAmount, _receiver);
+
+    /// mock protectionPoolCycleManager.getCurrentCycleIndex
+    uint256 _currentCycleIndex = 1;
+    vm.mockCall(
+      address(protectionPoolCycleManager),
+      abi.encodeWithSelector(
+        IProtectionPoolCycleManager.getCurrentCycleIndex.selector
+      ),
+      abi.encode(_currentCycleIndex)
+    );
+
+    /// request withdrawal using receiver address
+    uint256 _sTokenWithdrawalAmt = protectionPool.balanceOf(_receiver);
+    vm.startPrank(_receiver);
+    protectionPool.requestWithdrawal(_sTokenWithdrawalAmt);
+
+    /// deposit verification
+    assertEq(protectionPool.getUnderlyingBalance(_receiver), _withdrawalAmount);
+    _verifyProtectionPoolState(_withdrawalAmount, 0, 0, 0);
+
+    /// withdrawal verification
+    uint256 _withdrawalCycleIndex = _currentCycleIndex + 2;
+    assertEq(
+      protectionPool.getTotalRequestedWithdrawalAmount(_withdrawalCycleIndex),
+      _sTokenWithdrawalAmt,
+      "TotalRequestedWithdrawalAmount"
+    );
+
+    assertEq(
+      protectionPool.getRequestedWithdrawalAmount(_withdrawalCycleIndex),
+      _sTokenWithdrawalAmt,
+      "RequestedWithdrawalAmount"
+    );
+
+    vm.stopPrank();
+  }
+
+  function testDepositAndRequestWithdrawal(
+    uint256 _withdrawalAmount,
+    address _receiver
+  ) public {
+    /// Check that the withdrawal amount is within the bounds
+    _withdrawalAmount = bound(
+      _withdrawalAmount,
+      1e6, // 1 USDC
+      100_000_000_000e6
+    );
+
+    /// Ensure non-zero receiver address
+    vm.assume(_receiver != address(0));
+
+    /// mock protectionPoolCycleManager.getCurrentCycleIndex
+    uint256 _currentCycleIndex = 1;
+    vm.mockCall(
+      address(protectionPoolCycleManager),
+      abi.encodeWithSelector(
+        IProtectionPoolCycleManager.getCurrentCycleIndex.selector
+      ),
+      abi.encode(_currentCycleIndex)
+    );
+
+    /// make deposit and request withdrawal
+    vm.startPrank(_receiver);
+    uint256 _sTokenWithdrawalAmt = ProtectionPoolHelper
+      .scaleUnderlyingAmtTo18Decimals(_withdrawalAmount, usdc.decimals());
+    protectionPool.depositAndRequestWithdrawal(
+      _withdrawalAmount,
+      _sTokenWithdrawalAmt
+    );
+
+    /// deposit verification
+    assertEq(protectionPool.getUnderlyingBalance(_receiver), _withdrawalAmount);
+    _verifyProtectionPoolState(_withdrawalAmount, 0, 0, 0);
+
+    /// withdrawal verification
+    uint256 _withdrawalCycleIndex = _currentCycleIndex + 2;
+    assertEq(
+      protectionPool.getTotalRequestedWithdrawalAmount(_withdrawalCycleIndex),
+      _sTokenWithdrawalAmt,
+      "TotalRequestedWithdrawalAmount"
+    );
+
+    assertEq(
+      protectionPool.getRequestedWithdrawalAmount(_withdrawalCycleIndex),
+      _sTokenWithdrawalAmt,
+      "RequestedWithdrawalAmount"
+    );
+
+    vm.stopPrank();
+  }
+
+  function testWithdraw(uint256 _withdrawalAmount, address _receiver) public {
+    /// Check that the withdrawal amount is within the bounds
+    _withdrawalAmount = bound(
+      _withdrawalAmount,
+      1e6, // 1 USDC
+      100_000_000_000e6
+    );
+
+    /// Ensure non-zero receiver address
+    vm.assume(_receiver != address(0));
+
+    /// make deposit
+    protectionPool.deposit(_withdrawalAmount, _receiver);
+
+    /// mock protectionPoolCycleManager.getCurrentCycleIndex
+    uint256 _currentCycleIndex = 1;
+    vm.mockCall(
+      address(protectionPoolCycleManager),
+      abi.encodeWithSelector(
+        IProtectionPoolCycleManager.getCurrentCycleIndex.selector
+      ),
+      abi.encode(_currentCycleIndex)
+    );
+
+    /// request withdrawal using receiver address
+    uint256 _sTokenWithdrawalAmt = protectionPool.balanceOf(_receiver) / 10; // 10% of the balance
+    vm.startPrank(_receiver);
+    protectionPool.requestWithdrawal(_sTokenWithdrawalAmt);
+
+    /// deposit verification
+    assertEq(protectionPool.getUnderlyingBalance(_receiver), _withdrawalAmount);
+    _verifyProtectionPoolState(_withdrawalAmount, 0, 0, 0);
+
+    /// mock protectionPoolCycleManager calls: calculateAndSetPoolCycleState to return Open pool cycle state
+    vm.mockCall(
+      address(protectionPoolCycleManager),
+      abi.encodeWithSelector(
+        IProtectionPoolCycleManager.calculateAndSetPoolCycleState.selector,
+        address(protectionPool)
+      ),
+      abi.encode(1) // Open
+    );
+
+    /// mock protectionPoolCycleManager.getCurrentCycleIndex to return the withdrawal cycle index
+    /// to ensure that the withdrawal can be processed
+    uint256 _withdrawalCycleIndex = _currentCycleIndex + 2;
+    vm.mockCall(
+      address(protectionPoolCycleManager),
+      abi.encodeWithSelector(
+        IProtectionPoolCycleManager.getCurrentCycleIndex.selector
+      ),
+      abi.encode(_withdrawalCycleIndex)
+    );
+
+    uint256 _preSTokenSupply = protectionPool.totalSupply();
+    uint256 _preUnderlyingBalance = protectionPool.getUnderlyingBalance(
+      _receiver
+    );
+
+    /// do full withdrawal
+    protectionPool.withdraw(_sTokenWithdrawalAmt, _receiver);
+
+    uint256 _postSTokenSupply = protectionPool.totalSupply();
+    uint256 _postUnderlyingBalance = protectionPool.getUnderlyingBalance(
+      _receiver
+    );
+
+    /// withdrawal verification
+
+    /// verify that the underlying balance of the receiver has decreased by the withdrawal amount
+    assertApproxEqRel(
+      _preUnderlyingBalance - _postUnderlyingBalance,
+      ProtectionPoolHelper.scale18DecimalsAmtToUnderlyingDecimals(
+        _sTokenWithdrawalAmt,
+        usdc.decimals()
+      ),
+      0.99999e18,
+      "UnderlyingBalance"
+    );
+
+    /// verify that the total supply of sTokens has decreased by the withdrawal amount
+    assertEq(_preSTokenSupply - _postSTokenSupply, _sTokenWithdrawalAmt);
+
+    assertEq(
+      protectionPool.getTotalRequestedWithdrawalAmount(_withdrawalCycleIndex),
+      0,
+      "TotalRequestedWithdrawalAmount"
+    );
+
+    assertEq(
+      protectionPool.getRequestedWithdrawalAmount(_withdrawalCycleIndex),
+      0,
+      "RequestedWithdrawalAmount"
+    );
+
+    _verifyProtectionPoolState(_postUnderlyingBalance, 0, 0, 0);
+
+    vm.stopPrank();
+  }
+
   function _setupUSDC() internal returns (ERC20Upgradeable) {
     address _usdcAddress = address(101);
     /// Mock the transferFrom call for USDC
@@ -262,10 +458,10 @@ contract FuzzTestProtectionPool is Test {
   }
 
   function _verifyProtectionPoolState(
-    uint256 _depositAmount,
-    uint256 _protectionAmount,
-    uint256 _premiumAmount,
-    uint256 _leverageRatio
+    uint256 _expectedTotalCapital,
+    uint256 _expectedTotalProtection,
+    uint256 _expectedTotalPremium,
+    uint256 _expectedLeverageRatio
   ) internal {
     (
       uint256 _totalSTokenUnderlying,
@@ -273,14 +469,26 @@ contract FuzzTestProtectionPool is Test {
       uint256 _totalPremium,
       uint256 _totalPremiumAccrued
     ) = protectionPool.getPoolDetails();
-    assertEq(_totalSTokenUnderlying, _depositAmount);
-    assertEq(_totalProtection, _protectionAmount);
-    assertApproxEqRel(_totalPremium, _premiumAmount, 0.999999e18); // 0.999999% match
-    assertEq(_totalPremiumAccrued, 0);
+
+    assertApproxEqRel(
+      _totalSTokenUnderlying,
+      _expectedTotalCapital,
+      0.999999e18,
+      "TotalSTokenUnderlying"
+    );
+    assertEq(_totalProtection, _expectedTotalProtection, "TotalProtection");
+    assertApproxEqRel(
+      _totalPremium,
+      _expectedTotalPremium,
+      0.999999e18,
+      "TotalPremium"
+    ); // 0.999999% match
+    assertEq(_totalPremiumAccrued, 0, "TotalPremiumAccrued");
     assertApproxEqRel(
       protectionPool.calculateLeverageRatio(),
-      _leverageRatio,
-      0.999999e18 // 0.999999% match
+      _expectedLeverageRatio,
+      0.999999e18, // 0.999999% match
+      "LeverageRatio"
     );
   }
 
@@ -294,8 +502,14 @@ contract FuzzTestProtectionPool is Test {
       uint256 _totalPremiumPerLP,
       uint256 _totalProtectionPerLP
     ) = protectionPool.getLendingPoolDetail(_lendingPoolAddress);
-    assertEq(_lastPremiumAccrualTimestamp, 0);
-    assertApproxEqRel(_totalPremiumPerLP, _premiumAmount, 0.999999e18); // 0.999999% match
-    assertEq(_totalProtectionPerLP, _protectionAmount);
+
+    assertEq(_lastPremiumAccrualTimestamp, 0, "LastPremiumAccrualTimestamp");
+    assertApproxEqRel(
+      _totalPremiumPerLP,
+      _premiumAmount,
+      0.999999e18,
+      "TotalPremiumPerLP"
+    ); // 0.999999% match
+    assertEq(_totalProtectionPerLP, _protectionAmount, "TotalProtectionPerLP");
   }
 }
