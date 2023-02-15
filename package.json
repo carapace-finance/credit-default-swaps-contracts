@@ -13,7 +13,7 @@
     "tenderly:push": "npx hardhat tenderly:push",
     "doc": "npx hardhat dodoc",
     "storage": "npx hardhat check",
-    "fuzz": "forge test --match-path test/fuzz/*.sol"
+    "fuzz": "forge test -vvv"
   },
   "devDependencies": {
     "@defi-wonderland/smock": "^2.1.1",

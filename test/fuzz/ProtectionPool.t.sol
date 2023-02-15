@@ -145,7 +145,11 @@ contract FuzzTestProtectionPool is Test {
 
     /// Determine deposit amount based on leverage ratio & protection amount
     /// and make deposit
-    uint256 _depositAmount = (_protectionAmount * _leverageRatio) / 1e18;
+    uint256 _depositAmount = _calculateCapitalAmount(
+      _protectionAmount,
+      _leverageRatio
+    );
+    console.log("Deposit amount: %s", _depositAmount);
     protectionPool.deposit(_depositAmount, address(this));
 
     /// mock protectionPoolCycleManager calls: calculateAndSetPoolCycleState && getNextCycleEndTimestamp
@@ -438,6 +442,58 @@ contract FuzzTestProtectionPool is Test {
     vm.stopPrank();
   }
 
+  function testLockCapital(
+    address _lendingPoolAddress,
+    address _buyer,
+    uint256 _protectionAmount,
+    uint256 _protectionDurationInSeconds,
+    uint256 _nftLpTokenId,
+    uint256 _leverageRatio,
+    uint256 _protectionBuyerAPR
+  ) public {
+    /// Ensure non-zero lending pool address
+    vm.assume(_lendingPoolAddress != address(0));
+
+    /// buy protection
+    testBuyProtection(
+      _buyer,
+      _protectionAmount,
+      _protectionDurationInSeconds,
+      _lendingPoolAddress,
+      _nftLpTokenId,
+      _leverageRatio,
+      _protectionBuyerAPR
+    );
+
+    /// mock .referenceLendingPools.calculateRemainingPrincipal
+    (
+      uint256 _totalSTokenUnderlying,
+      uint256 _totalProtection,
+      ,
+
+    ) = protectionPool.getPoolDetails();
+    vm.mockCall(
+      address(referenceLendingPools),
+      abi.encodeWithSelector(
+        IReferenceLendingPools.calculateRemainingPrincipal.selector,
+        _lendingPoolAddress,
+        _buyer,
+        _nftLpTokenId
+      ),
+      abi.encode(_totalProtection)
+    );
+
+    /// test lock capital with mocking the call by defaultStateManager
+    vm.prank(address(defaultStateManager));
+    (uint256 _lockedAmount, uint256 _snapshotId) = protectionPool.lockCapital(
+      _lendingPoolAddress
+    );
+
+    /// verify that the locked amount is equal to the total sToken underlying available
+    assertEq(_lockedAmount, _totalSTokenUnderlying, "LockedAmount");
+    assertEq(_snapshotId, 1, "SnapshotId");
+  }
+
   function _setupUSDC() internal returns (ERC20Upgradeable) {
     address _usdcAddress = address(101);
     /// Mock the transferFrom call for USDC
@@ -511,5 +567,12 @@ contract FuzzTestProtectionPool is Test {
       "TotalPremiumPerLP"
     ); // 0.999999% match
     assertEq(_totalProtectionPerLP, _protectionAmount, "TotalProtectionPerLP");
+  }
+
+  function _calculateCapitalAmount(
+    uint256 _protectionAmount,
+    uint256 _leverageRatio
+  ) internal returns (uint256) {
+    return (_protectionAmount * _leverageRatio) / 1e18;
   }
 }
