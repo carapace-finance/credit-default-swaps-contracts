@@ -97,7 +97,7 @@ contract FuzzTestProtectionPool is Test {
 
     /// verification
     assertEq(protectionPool.getUnderlyingBalance(_receiver), _depositAmount);
-    _verifyProtectionPoolState(_depositAmount, 0, 0, 0);
+    _verifyProtectionPoolState(_depositAmount, 0, 0, 0, 0);
   }
 
   function testBuyProtection(
@@ -143,59 +143,113 @@ contract FuzzTestProtectionPool is Test {
       0.30 ether // 30%
     );
 
-    /// Determine deposit amount based on leverage ratio & protection amount
-    /// and make deposit
-    uint256 _depositAmount = _calculateCapitalAmount(
+    (uint256 _depositAmount, uint256 _premiumAmount) = _depositAndBuyProtection(
+      _buyer,
       _protectionAmount,
+      _protectionDurationInSeconds,
+      _lendingPoolAddress,
+      _nftLpTokenId,
+      _leverageRatio,
+      _protectionBuyerAPR
+    );
+
+    /// verification
+    _verifyProtectionPoolState(
+      _depositAmount,
+      _protectionAmount,
+      _premiumAmount,
+      0,
       _leverageRatio
     );
-    console.log("Deposit amount: %s", _depositAmount);
-    protectionPool.deposit(_depositAmount, address(this));
 
-    /// mock protectionPoolCycleManager calls: calculateAndSetPoolCycleState && getNextCycleEndTimestamp
-    vm.mockCall(
-      address(protectionPoolCycleManager),
-      abi.encodeWithSelector(
-        IProtectionPoolCycleManager.calculateAndSetPoolCycleState.selector,
-        address(protectionPool)
-      ),
-      abi.encode(0)
+    _verifyLendingPoolDetails(
+      _lendingPoolAddress,
+      0,
+      _premiumAmount,
+      _protectionAmount
+    );
+  }
+
+  function testRenewProtection(
+    address _buyer,
+    uint256 _protectionAmount,
+    uint256 _protectionDurationInSeconds,
+    address _lendingPoolAddress,
+    uint256 _nftLpTokenId,
+    uint256 _leverageRatio,
+    uint256 _protectionBuyerAPR
+  ) public {
+    /// Ensure non-zero buyer address
+    vm.assume(_buyer != address(0));
+
+    /// Check that the protection amount is within the bounds
+    _protectionAmount = bound(
+      _protectionAmount,
+      100e6, // 100 USDC
+      10_000_000e6 // 10M USDC
     );
 
+    /// Check that the protection duration is within the bounds
+    _protectionDurationInSeconds = bound(
+      _protectionDurationInSeconds,
+      minProtectionDurationInSeconds,
+      179.5 days
+    );
+
+    /// Ensure non-zero lending pool address
+    vm.assume(_lendingPoolAddress != address(0));
+
+    /// Check that the leverage ratio is within the bounds
+    _leverageRatio = bound(
+      _leverageRatio,
+      leverageRatioFloor + 0.01 ether, // slightly above the floor
+      leverageRatioCeiling - 0.01 ether // slightly below the ceiling
+    );
+
+    /// Check that the protectionBuyerAPR is within the bounds
+    _protectionBuyerAPR = bound(
+      _protectionBuyerAPR,
+      0.01 ether, // 1%
+      0.30 ether // 30%
+    );
+
+    /// buy protection
+    (uint256 _depositAmount, uint256 _premiumAmount) = _depositAndBuyProtection(
+      _buyer,
+      _protectionAmount,
+      _protectionDurationInSeconds,
+      _lendingPoolAddress,
+      _nftLpTokenId,
+      _leverageRatio,
+      _protectionBuyerAPR
+    );
+
+    /// advance time
+    skip(_protectionDurationInSeconds + 1);
+
+    /// accrue premium and mark protection as expired
+    /// mock referenceLendingPools.getLatestPaymentTimestamp
+    uint256 _lastPremiumAccrualTimestampExpected = block.timestamp + 11;
+    vm.mockCall(
+      address(referenceLendingPools),
+      abi.encodeWithSelector(
+        IReferenceLendingPools(address(0)).getLatestPaymentTimestamp.selector,
+        _lendingPoolAddress
+      ),
+      abi.encode(_lastPremiumAccrualTimestampExpected)
+    );
+    address[] memory _lendingPools = new address[](1);
+    _lendingPools[0] = _lendingPoolAddress;
+    protectionPool.accruePremiumAndExpireProtections(_lendingPools);
+
+    /// renew protection
     vm.mockCall(
       address(protectionPoolCycleManager),
       abi.encodeWithSelector(
         IProtectionPoolCycleManager.getNextCycleEndTimestamp.selector,
         address(protectionPool)
       ),
-      abi.encode(block.timestamp + 180 days)
-    );
-
-    /// mock lending status: defaultStateManager.getLendingPoolStatus
-    vm.mockCall(
-      address(defaultStateManager),
-      abi.encodeWithSelector(
-        IDefaultStateManager.getLendingPoolStatus.selector,
-        address(protectionPool),
-        _lendingPoolAddress
-      ),
-      abi.encode(LendingPoolStatus.Active)
-    );
-
-    /// mock referenceLendingPools.canBuyProtection
-    vm.mockCall(
-      address(referenceLendingPools),
-      abi.encodeWithSelector(IReferenceLendingPools.canBuyProtection.selector),
-      abi.encode(true)
-    );
-
-    /// mock referenceLendingPools.calculateProtectionBuyerAPR
-    vm.mockCall(
-      address(referenceLendingPools),
-      abi.encodeWithSelector(
-        IReferenceLendingPools.calculateProtectionBuyerAPR.selector
-      ),
-      abi.encode(_protectionBuyerAPR)
+      abi.encode(block.timestamp + _protectionDurationInSeconds + 1)
     );
 
     ProtectionPurchaseParams
@@ -205,35 +259,30 @@ contract FuzzTestProtectionPool is Test {
         protectionAmount: _protectionAmount,
         nftLpTokenId: _nftLpTokenId
       });
-
-    /// calculate premium amount
-    (uint256 _premiumAmount, ) = premiumCalculator.calculatePremium(
-      _protectionDurationInSeconds,
-      _protectionAmount,
-      _protectionBuyerAPR,
-      _leverageRatio,
-      _depositAmount,
-      protectionPool.getPoolInfo().params
-    );
     uint256 _maxPremiumAmount = _premiumAmount + 100e6;
-
-    /// buy protection
     vm.prank(_buyer);
-    protectionPool.buyProtection(_protectionPurchaseParams, _maxPremiumAmount);
+    protectionPool.renewProtection(
+      _protectionPurchaseParams,
+      _maxPremiumAmount
+    );
 
     /// verification
+    uint256 _expectedTotalPremiumAmount = _premiumAmount * 2;
     _verifyProtectionPoolState(
       _depositAmount,
       _protectionAmount,
-      _premiumAmount,
+      _expectedTotalPremiumAmount,
+      _premiumAmount, // premium from 1st protection should be fully accrued
       _leverageRatio
     );
 
-    _verifyLendingPoolDetails(
-      _lendingPoolAddress,
-      _premiumAmount,
-      _protectionAmount
-    );
+    /// Stack too deep...
+    // _verifyLendingPoolDetails(
+    //   _lendingPoolAddress,
+    //   _lastPremiumAccrualTimestampExpected,
+    //   _expectedTotalPremiumAmount,
+    //   _protectionAmount
+    // );
   }
 
   function testRequestWithdrawal(uint256 _withdrawalAmount, address _receiver)
@@ -269,7 +318,7 @@ contract FuzzTestProtectionPool is Test {
 
     /// deposit verification
     assertEq(protectionPool.getUnderlyingBalance(_receiver), _withdrawalAmount);
-    _verifyProtectionPoolState(_withdrawalAmount, 0, 0, 0);
+    _verifyProtectionPoolState(_withdrawalAmount, 0, 0, 0, 0);
 
     /// withdrawal verification
     uint256 _withdrawalCycleIndex = _currentCycleIndex + 2;
@@ -323,7 +372,7 @@ contract FuzzTestProtectionPool is Test {
 
     /// deposit verification
     assertEq(protectionPool.getUnderlyingBalance(_receiver), _withdrawalAmount);
-    _verifyProtectionPoolState(_withdrawalAmount, 0, 0, 0);
+    _verifyProtectionPoolState(_withdrawalAmount, 0, 0, 0, 0);
 
     /// withdrawal verification
     uint256 _withdrawalCycleIndex = _currentCycleIndex + 2;
@@ -373,7 +422,7 @@ contract FuzzTestProtectionPool is Test {
 
     /// deposit verification
     assertEq(protectionPool.getUnderlyingBalance(_receiver), _withdrawalAmount);
-    _verifyProtectionPoolState(_withdrawalAmount, 0, 0, 0);
+    _verifyProtectionPoolState(_withdrawalAmount, 0, 0, 0, 0);
 
     /// mock protectionPoolCycleManager calls: calculateAndSetPoolCycleState to return Open pool cycle state
     vm.mockCall(
@@ -437,7 +486,7 @@ contract FuzzTestProtectionPool is Test {
       "RequestedWithdrawalAmount"
     );
 
-    _verifyProtectionPoolState(_postUnderlyingBalance, 0, 0, 0);
+    _verifyProtectionPoolState(_postUnderlyingBalance, 0, 0, 0, 0);
 
     vm.stopPrank();
   }
@@ -517,6 +566,7 @@ contract FuzzTestProtectionPool is Test {
     uint256 _expectedTotalCapital,
     uint256 _expectedTotalProtection,
     uint256 _expectedTotalPremium,
+    uint256 _expectedTotalPremiumAccrued,
     uint256 _expectedLeverageRatio
   ) internal {
     (
@@ -539,7 +589,12 @@ contract FuzzTestProtectionPool is Test {
       0.999999e18,
       "TotalPremium"
     ); // 0.999999% match
-    assertEq(_totalPremiumAccrued, 0, "TotalPremiumAccrued");
+    assertApproxEqRel(
+      _totalPremiumAccrued,
+      _expectedTotalPremiumAccrued,
+      0.999999e18,
+      "TotalPremiumAccrued"
+    );
     assertApproxEqRel(
       protectionPool.calculateLeverageRatio(),
       _expectedLeverageRatio,
@@ -550,8 +605,9 @@ contract FuzzTestProtectionPool is Test {
 
   function _verifyLendingPoolDetails(
     address _lendingPoolAddress,
-    uint256 _premiumAmount,
-    uint256 _protectionAmount
+    uint256 _expectedLastPremiumAccrualTimestamp,
+    uint256 _expectedPremiumAmount,
+    uint256 _expectedProtectionAmount
   ) internal {
     (
       uint256 _lastPremiumAccrualTimestamp,
@@ -559,20 +615,113 @@ contract FuzzTestProtectionPool is Test {
       uint256 _totalProtectionPerLP
     ) = protectionPool.getLendingPoolDetail(_lendingPoolAddress);
 
-    assertEq(_lastPremiumAccrualTimestamp, 0, "LastPremiumAccrualTimestamp");
+    assertEq(
+      _lastPremiumAccrualTimestamp,
+      _expectedLastPremiumAccrualTimestamp,
+      "LastPremiumAccrualTimestamp"
+    );
     assertApproxEqRel(
       _totalPremiumPerLP,
-      _premiumAmount,
+      _expectedPremiumAmount,
       0.999999e18,
       "TotalPremiumPerLP"
     ); // 0.999999% match
-    assertEq(_totalProtectionPerLP, _protectionAmount, "TotalProtectionPerLP");
+    assertEq(
+      _totalProtectionPerLP,
+      _expectedProtectionAmount,
+      "TotalProtectionPerLP"
+    );
   }
 
   function _calculateCapitalAmount(
     uint256 _protectionAmount,
     uint256 _leverageRatio
-  ) internal returns (uint256) {
+  ) internal pure returns (uint256) {
     return (_protectionAmount * _leverageRatio) / 1e18;
+  }
+
+  function _depositAndBuyProtection(
+    address _buyer,
+    uint256 _protectionAmount,
+    uint256 _protectionDurationInSeconds,
+    address _lendingPoolAddress,
+    uint256 _nftLpTokenId,
+    uint256 _leverageRatio,
+    uint256 _protectionBuyerAPR
+  ) internal returns (uint256 _depositAmount, uint256 _premiumAmount) {
+    /// Determine deposit amount based on leverage ratio & protection amount
+    /// and make deposit
+    _depositAmount = _calculateCapitalAmount(_protectionAmount, _leverageRatio);
+    console.log("Deposit amount: %s", _depositAmount);
+    protectionPool.deposit(_depositAmount, address(this));
+
+    /// mock protectionPoolCycleManager calls: calculateAndSetPoolCycleState && getNextCycleEndTimestamp
+    vm.mockCall(
+      address(protectionPoolCycleManager),
+      abi.encodeWithSelector(
+        IProtectionPoolCycleManager.calculateAndSetPoolCycleState.selector,
+        address(protectionPool)
+      ),
+      abi.encode(0)
+    );
+
+    vm.mockCall(
+      address(protectionPoolCycleManager),
+      abi.encodeWithSelector(
+        IProtectionPoolCycleManager.getNextCycleEndTimestamp.selector,
+        address(protectionPool)
+      ),
+      abi.encode(block.timestamp + 180 days)
+    );
+
+    /// mock lending status: defaultStateManager.getLendingPoolStatus
+    vm.mockCall(
+      address(defaultStateManager),
+      abi.encodeWithSelector(
+        IDefaultStateManager.getLendingPoolStatus.selector,
+        address(protectionPool),
+        _lendingPoolAddress
+      ),
+      abi.encode(LendingPoolStatus.Active)
+    );
+
+    /// mock referenceLendingPools.canBuyProtection
+    vm.mockCall(
+      address(referenceLendingPools),
+      abi.encodeWithSelector(IReferenceLendingPools.canBuyProtection.selector),
+      abi.encode(true)
+    );
+
+    /// mock referenceLendingPools.calculateProtectionBuyerAPR
+    vm.mockCall(
+      address(referenceLendingPools),
+      abi.encodeWithSelector(
+        IReferenceLendingPools.calculateProtectionBuyerAPR.selector
+      ),
+      abi.encode(_protectionBuyerAPR)
+    );
+
+    ProtectionPurchaseParams
+      memory _protectionPurchaseParams = ProtectionPurchaseParams({
+        lendingPoolAddress: _lendingPoolAddress,
+        protectionDurationInSeconds: _protectionDurationInSeconds,
+        protectionAmount: _protectionAmount,
+        nftLpTokenId: _nftLpTokenId
+      });
+
+    /// calculate premium amount
+    (_premiumAmount, ) = premiumCalculator.calculatePremium(
+      _protectionDurationInSeconds,
+      _protectionAmount,
+      _protectionBuyerAPR,
+      _leverageRatio,
+      _depositAmount,
+      protectionPool.getPoolInfo().params
+    );
+    uint256 _maxPremiumAmount = _premiumAmount + 100e6;
+
+    /// buy protection
+    vm.prank(_buyer);
+    protectionPool.buyProtection(_protectionPurchaseParams, _maxPremiumAmount);
   }
 }
