@@ -521,6 +521,7 @@ contract FuzzTestProtectionPool is Test {
       ,
 
     ) = protectionPool.getPoolDetails();
+
     vm.mockCall(
       address(referenceLendingPools),
       abi.encodeWithSelector(
