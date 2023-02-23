@@ -78,13 +78,13 @@ $ npm run doc
 
 ## Fuzz Testing with Foundry
 
-1. download `foundryup` on MacOS
+1. Download `foundryup` on MacOS
 
 ```bash
 $ curl -L https://foundry.paradigm.xyz | bash
 ```
 
-2. In bash, install Foundry by running:
+2. Install Foundry by running:
 
 ```bash
 $ foundryup
