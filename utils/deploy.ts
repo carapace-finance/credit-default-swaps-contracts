@@ -1,4 +1,4 @@
-import { ContractFactory, Signer, Contract } from "ethers";
+import { ContractFactory, Signer, Contract, BigNumber } from "ethers";
 import { parseEther } from "ethers/lib/utils";
 import { ethers, upgrades } from "hardhat";
 import { USDC_ADDRESS } from "../test/utils/constants";
@@ -36,11 +36,15 @@ let goldfinchAdapterInstance: GoldfinchAdapter;
 let referenceLendingPoolsImplementation: ReferenceLendingPools;
 let defaultStateManagerInstance: DefaultStateManager;
 let protectionPoolHelperInstance: Contract;
+let protectionPoolParams: ProtectionPoolParamsStruct;
+let protectionPoolCycleParams: ProtectionPoolCycleParamsStruct;
 
 const GOLDFINCH_LENDING_POOLS = [
   "0xb26b42dd5771689d0a7faeea32825ff9710b9c11",
   "0xd09a57127bc40d680be7cb061c2a6629fe71abef"
 ];
+const LENDING_POOL_PROTOCOLS = [0, 0]; // 0 = Goldfinch
+const LENDING_POOL_PURCHASE_LIMIT_IN_DAYS = [90, 60];
 
 (async () => {
   [deployer, account1, account2, account3, account4] =
@@ -63,7 +67,11 @@ const contractFactory: Function = async (
   return _contractFactory;
 };
 
-const deployContracts: Function = async () => {
+const deployContracts: Function = async (
+  _lendingPools: string[] = GOLDFINCH_LENDING_POOLS,
+  _lendingPoolProtocols: number[] = LENDING_POOL_PROTOCOLS,
+  _lendingPoolPurchaseLimits: number[] = LENDING_POOL_PURCHASE_LIMIT_IN_DAYS
+): Promise<boolean> => {
   try {
     // Deploy RiskFactorCalculator library
     const riskFactorCalculatorFactory = await contractFactory(
@@ -220,13 +228,11 @@ const deployContracts: Function = async () => {
     );
 
     // Create an instance of the ReferenceLendingPools
-    const _lendingProtocols = [0, 0]; // 0 = Goldfinch
-    const _purchaseLimitsInDays = [90, 60];
     await cpContractFactoryInstance.createReferenceLendingPools(
       referenceLendingPoolsImplementation.address,
-      GOLDFINCH_LENDING_POOLS,
-      _lendingProtocols,
-      _purchaseLimitsInDays,
+      _lendingPools,
+      _lendingPoolProtocols,
+      _lendingPoolPurchaseLimits,
       cpContractFactoryInstance.address
     );
     referenceLendingPoolsInstance =
@@ -243,12 +249,12 @@ const deployContracts: Function = async () => {
 
     // Create an instance of the ProtectionPool, which should be upgradable
     // Create a pool using PoolFactory instead of deploying new pool directly to mimic the prod behavior
-    const _poolCycleParams: ProtectionPoolCycleParamsStruct = {
+    protectionPoolCycleParams = {
       openCycleDuration: getDaysInSeconds(10),
       cycleDuration: getDaysInSeconds(30)
     };
 
-    const _poolParams: ProtectionPoolParamsStruct = {
+    protectionPoolParams = {
       leverageRatioFloor: parseEther("0.5"),
       leverageRatioCeiling: parseEther("1"),
       leverageRatioBuffer: parseEther("0.05"),
@@ -262,8 +268,8 @@ const deployContracts: Function = async () => {
 
     await cpContractFactoryInstance.createProtectionPool(
       protectionPoolImplementation.address,
-      _poolParams,
-      _poolCycleParams,
+      protectionPoolParams,
+      protectionPoolCycleParams,
       USDC_ADDRESS,
       referenceLendingPoolsInstance.address,
       premiumCalculatorInstance.address,
@@ -274,8 +280,11 @@ const deployContracts: Function = async () => {
     protectionPoolInstance = await getLatestProtectionPoolInstance(
       cpContractFactoryInstance
     );
+
+    return true;
   } catch (e) {
     console.log(e);
+    return false;
   }
 };
 
@@ -344,5 +353,7 @@ export {
   GOLDFINCH_LENDING_POOLS,
   getLatestReferenceLendingPoolsInstance,
   getLatestProtectionPoolInstance,
-  getProtectionPoolContractFactory
+  getProtectionPoolContractFactory,
+  protectionPoolCycleParams,
+  protectionPoolParams
 };

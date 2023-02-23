@@ -21,7 +21,7 @@ const payToLendingPool: Function = async (
 
 const payToLendingPoolAddress: Function = async (
   tranchedPoolAddress: string,
-  amount: string,
+  usdcAmount: string,
   usdcContract: Contract
 ) => {
   const tranchedPool = (await ethers.getContractAt(
@@ -29,7 +29,7 @@ const payToLendingPoolAddress: Function = async (
     tranchedPoolAddress
   )) as ITranchedPool;
 
-  await payToLendingPool(tranchedPool, amount, usdcContract);
+  await payToLendingPool(tranchedPool, usdcAmount, usdcContract);
 };
 
 // 420K principal for token 590
