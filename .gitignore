@@ -37,3 +37,8 @@ abi
 
 # bytecode
 bytecode
+
+#foundry
+out
+cache_forge
+lib

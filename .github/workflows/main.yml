@@ -1,4 +1,4 @@
-name: "Run Mainnet Fork Tests"
+name: "Run Tests"
 
 on:
   workflow_dispatch:
@@ -26,11 +26,20 @@ jobs:
       - name: "Install npm"
         run: "npm install -g npm@9.4"
 
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          cache: "lib"
+          version: nightly
+
       - name: "Install the dependencies"
         run: "npm install --immutable"
 
       - name: "Compile the contracts"
         run: "npm run compile"
 
-      - name: "Test the contracts"
+      - name: "Run Mainnet Fork Tests"
         run: "npm run test"
+
+      - name: "Run Fuzz Tests"
+        run: "npm run fuzz"

@@ -75,3 +75,19 @@ $ npm run cover
 // generate a documentation from NatSpec comments.
 $ npm run doc
 ```
+
+## Fuzz Testing with Foundry
+
+1. Download `foundryup` on MacOS
+
+```bash
+$ curl -L https://foundry.paradigm.xyz | bash
+```
+
+2. Install Foundry by running:
+
+```bash
+$ foundryup
+```
+
+If you use Windows, follow [this guide](https://book.getfoundry.sh/getting-started/installation#on-windows-build-from-the-source).
