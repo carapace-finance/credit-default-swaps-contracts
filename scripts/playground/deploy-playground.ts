@@ -6,21 +6,23 @@ import {
 } from "../../test/utils/usdc";
 import { ProtectionPurchaseParamsStruct } from "../../typechain-types/contracts/interfaces/IReferenceLendingPools";
 
-import {
-  deployer,
-  deployContracts,
-  protectionPoolInstance,
-  protectionPoolCycleManagerInstance,
-  protectionPoolParams,
-  protectionPoolCycleParams
-} from "../../utils/deploy";
 import { impersonateSignerWithEth } from "../../test/utils/utils";
 import { ProtectionPool } from "../../typechain-types/contracts/core/pool/ProtectionPool";
 import { BigNumber, Signer } from "ethers";
 import { moveForwardTime } from "../../test/utils/time";
 import { ProtectionPoolCycleManager } from "../../typechain-types/contracts/core/ProtectionPoolCycleManager";
 import { payToLendingPoolAddress } from "../../test/utils/goldfinch";
+
 import {
+  deployer,
+  deployContracts,
+  protectionPoolInstance,
+  protectionPoolCycleManagerInstance
+} from "../../utils/deploy";
+
+import {
+  PROTECTION_POOL_CYCLE_PARAMS,
+  PROTECTION_POOL_PARAMS,
   PLAYGROUND_LENDING_POOL_DETAILS_BY_ADDRESS,
   GOLDFINCH_LENDING_POOLS,
   LENDING_POOL_PROTOCOLS,
@@ -36,6 +38,8 @@ async function deployAndSetupPlayground() {
 
   console.log("Deploying contracts...");
   const result = await deployContracts(
+    PROTECTION_POOL_CYCLE_PARAMS,
+    PROTECTION_POOL_PARAMS,
     GOLDFINCH_LENDING_POOLS,
     LENDING_POOL_PROTOCOLS,
     LENDING_POOL_PURCHASE_LIMIT_IN_DAYS
@@ -87,7 +91,7 @@ async function deployAndSetupPlayground() {
       nftLpTokenId: BigNumber.from(590),
       protectionAmount: parseUSDC("150000"),
       protectionDurationInSeconds:
-        protectionPoolParams.minProtectionDurationInSeconds
+        PROTECTION_POOL_PARAMS.minProtectionDurationInSeconds
     },
     parseUSDC("35000")
   );
@@ -159,7 +163,7 @@ async function movePoolCycle(
   poolCycleManagerInstance: ProtectionPoolCycleManager
 ) {
   // move from open to locked state
-  await moveForwardTime(await protectionPoolCycleParams.openCycleDuration);
+  await moveForwardTime(await PROTECTION_POOL_CYCLE_PARAMS.openCycleDuration);
 
   await poolCycleManagerInstance.calculateAndSetPoolCycleState(
     protectionPoolInstance.address
@@ -167,9 +171,11 @@ async function movePoolCycle(
 
   // move to new cycle
   const duration = BigNumber.from(
-    await protectionPoolCycleParams.cycleDuration.toString()
+    await PROTECTION_POOL_CYCLE_PARAMS.cycleDuration.toString()
   ).sub(
-    BigNumber.from(await protectionPoolCycleParams.openCycleDuration.toString())
+    BigNumber.from(
+      await PROTECTION_POOL_CYCLE_PARAMS.openCycleDuration.toString()
+    )
   );
   await moveForwardTime(duration);
 

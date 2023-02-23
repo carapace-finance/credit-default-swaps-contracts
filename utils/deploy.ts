@@ -1,5 +1,4 @@
 import { ContractFactory, Signer, Contract, BigNumber } from "ethers";
-import { parseEther } from "ethers/lib/utils";
 import { ethers, upgrades } from "hardhat";
 import { USDC_ADDRESS } from "../test/utils/constants";
 import { ProtectionPool } from "../typechain-types/contracts/core/pool/ProtectionPool";
@@ -13,9 +12,6 @@ import { AccruedPremiumCalculator } from "../typechain-types/contracts/libraries
 import { RiskFactorCalculator } from "../typechain-types/contracts/libraries/RiskFactorCalculator";
 import { GoldfinchAdapter } from "../typechain-types/contracts/adapters/GoldfinchAdapter";
 import { DefaultStateManager } from "../typechain-types/contracts/core/DefaultStateManager";
-
-import { parseUSDC } from "../test/utils/usdc";
-import { getDaysInSeconds } from "../test/utils/time";
 
 let deployer: Signer;
 let account1: Signer;
@@ -36,15 +32,6 @@ let goldfinchAdapterInstance: GoldfinchAdapter;
 let referenceLendingPoolsImplementation: ReferenceLendingPools;
 let defaultStateManagerInstance: DefaultStateManager;
 let protectionPoolHelperInstance: Contract;
-let protectionPoolParams: ProtectionPoolParamsStruct;
-let protectionPoolCycleParams: ProtectionPoolCycleParamsStruct;
-
-const GOLDFINCH_LENDING_POOLS = [
-  "0xb26b42dd5771689d0a7faeea32825ff9710b9c11",
-  "0xd09a57127bc40d680be7cb061c2a6629fe71abef"
-];
-const LENDING_POOL_PROTOCOLS = [0, 0]; // 0 = Goldfinch
-const LENDING_POOL_PURCHASE_LIMIT_IN_DAYS = [90, 60];
 
 (async () => {
   [deployer, account1, account2, account3, account4] =
@@ -68,9 +55,11 @@ const contractFactory: Function = async (
 };
 
 const deployContracts: Function = async (
-  _lendingPools: string[] = GOLDFINCH_LENDING_POOLS,
-  _lendingPoolProtocols: number[] = LENDING_POOL_PROTOCOLS,
-  _lendingPoolPurchaseLimits: number[] = LENDING_POOL_PURCHASE_LIMIT_IN_DAYS
+  _protectionPoolCycleParams: ProtectionPoolCycleParamsStruct,
+  _protectionPoolParams: ProtectionPoolParamsStruct,
+  _lendingPools: string[],
+  _lendingPoolProtocols: number[],
+  _lendingPoolPurchaseLimitsInDays: number[]
 ): Promise<boolean> => {
   try {
     // Deploy RiskFactorCalculator library
@@ -232,7 +221,7 @@ const deployContracts: Function = async (
       referenceLendingPoolsImplementation.address,
       _lendingPools,
       _lendingPoolProtocols,
-      _lendingPoolPurchaseLimits,
+      _lendingPoolPurchaseLimitsInDays,
       cpContractFactoryInstance.address
     );
     referenceLendingPoolsInstance =
@@ -249,27 +238,10 @@ const deployContracts: Function = async (
 
     // Create an instance of the ProtectionPool, which should be upgradable
     // Create a pool using PoolFactory instead of deploying new pool directly to mimic the prod behavior
-    protectionPoolCycleParams = {
-      openCycleDuration: getDaysInSeconds(10),
-      cycleDuration: getDaysInSeconds(30)
-    };
-
-    protectionPoolParams = {
-      leverageRatioFloor: parseEther("0.5"),
-      leverageRatioCeiling: parseEther("1"),
-      leverageRatioBuffer: parseEther("0.05"),
-      minRequiredCapital: parseUSDC("100000"), // 100k
-      curvature: parseEther("0.05"),
-      minCarapaceRiskPremiumPercent: parseEther("0.02"),
-      underlyingRiskPremiumPercent: parseEther("0.1"),
-      minProtectionDurationInSeconds: getDaysInSeconds(10),
-      protectionRenewalGracePeriodInSeconds: getDaysInSeconds(14) // 2 weeks
-    };
-
     await cpContractFactoryInstance.createProtectionPool(
       protectionPoolImplementation.address,
-      protectionPoolParams,
-      protectionPoolCycleParams,
+      _protectionPoolParams,
+      _protectionPoolCycleParams,
       USDC_ADDRESS,
       referenceLendingPoolsInstance.address,
       premiumCalculatorInstance.address,
@@ -350,10 +322,7 @@ export {
   goldfinchAdapterInstance,
   referenceLendingPoolsImplementation, // implementation contract which is used to create proxy contract
   defaultStateManagerInstance,
-  GOLDFINCH_LENDING_POOLS,
   getLatestReferenceLendingPoolsInstance,
   getLatestProtectionPoolInstance,
-  getProtectionPoolContractFactory,
-  protectionPoolCycleParams,
-  protectionPoolParams
+  getProtectionPoolContractFactory
 };

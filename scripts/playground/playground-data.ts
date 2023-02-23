@@ -1,3 +1,10 @@
+import { parseEther } from "ethers/lib/utils";
+
+import { getDaysInSeconds } from "../../test/utils/time";
+import { parseUSDC } from "../../test/utils/usdc";
+import { ProtectionPoolParamsStruct } from "../../typechain-types/contracts/interfaces/IProtectionPool";
+import { ProtectionPoolCycleParamsStruct } from "../../typechain-types/contracts/interfaces/IProtectionPoolCycleManager";
+
 // Lending positions of pool can be found by looking at withdrawal txs in goldfinch app,
 // then open it in etherscan and look at logs data for TokenRedeemed event
 export const PLAYGROUND_LENDING_POOL_DETAILS_BY_ADDRESS: any = {
@@ -47,3 +54,19 @@ export const LENDING_POOL_PROTOCOLS = GOLDFINCH_LENDING_POOLS.map(() => 0); // 0
 export const LENDING_POOL_PURCHASE_LIMIT_IN_DAYS = GOLDFINCH_LENDING_POOLS.map(
   () => 270
 );
+export const PROTECTION_POOL_CYCLE_PARAMS: ProtectionPoolCycleParamsStruct = {
+  openCycleDuration: getDaysInSeconds(7),
+  cycleDuration: getDaysInSeconds(90)
+};
+
+export const PROTECTION_POOL_PARAMS: ProtectionPoolParamsStruct = {
+  leverageRatioFloor: parseEther("0.5"),
+  leverageRatioCeiling: parseEther("1"),
+  leverageRatioBuffer: parseEther("0.05"),
+  minRequiredCapital: parseUSDC("100000"), // 100k
+  curvature: parseEther("0.05"),
+  minCarapaceRiskPremiumPercent: parseEther("0.02"),
+  underlyingRiskPremiumPercent: parseEther("0.1"),
+  minProtectionDurationInSeconds: getDaysInSeconds(10),
+  protectionRenewalGracePeriodInSeconds: getDaysInSeconds(14) // 2 weeks
+};
