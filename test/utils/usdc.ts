@@ -37,10 +37,18 @@ const transferAndApproveUsdc = async (
   await _usdcContract.connect(_approver).approve(_receiver, _amount);
 };
 
+const transferUsdc = async (_receiverAddress: string, _usdcAmt: BigNumber) => {
+  const _circleAccount = await impersonateCircle();
+  const _usdcContract = getUsdcContract(_circleAccount);
+
+  await _usdcContract.transfer(_receiverAddress, _usdcAmt);
+};
+
 export {
   formatUSDC,
   parseUSDC,
   getUsdcContract,
   impersonateCircle,
-  transferAndApproveUsdc
+  transferAndApproveUsdc,
+  transferUsdc
 };

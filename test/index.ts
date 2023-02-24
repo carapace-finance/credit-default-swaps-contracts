@@ -28,15 +28,28 @@ import {
   goldfinchAdapterInstance,
   referenceLendingPoolsImplementation,
   defaultStateManagerInstance,
-  GOLDFINCH_LENDING_POOLS,
   getLatestReferenceLendingPoolsInstance,
   getProtectionPoolContractFactory
 } from "../utils/deploy";
 
+import {
+  PROTECTION_POOL_CYCLE_PARAMS,
+  PROTECTION_POOL_PARAMS,
+  GOLDFINCH_LENDING_POOLS,
+  LENDING_POOL_PROTOCOLS,
+  LENDING_POOL_PURCHASE_LIMIT_IN_DAYS
+} from "./test-data";
+
 describe("start testing", () => {
   before("deploy contracts", async () => {
     const start = Date.now();
-    await deployContracts();
+    await deployContracts(
+      PROTECTION_POOL_CYCLE_PARAMS,
+      PROTECTION_POOL_PARAMS,
+      GOLDFINCH_LENDING_POOLS,
+      LENDING_POOL_PROTOCOLS,
+      LENDING_POOL_PURCHASE_LIMIT_IN_DAYS
+    );
     console.log(`Deployed contracts in ${(Date.now() - start) / 1000} seconds`);
   });
 
