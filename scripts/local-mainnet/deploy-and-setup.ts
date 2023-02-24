@@ -27,14 +27,14 @@ import {
   GOLDFINCH_LENDING_POOLS,
   LENDING_POOL_PROTOCOLS,
   LENDING_POOL_PURCHASE_LIMIT_IN_DAYS
-} from "./playground-data";
+} from "./data";
 
 /**
  * This function deploys contracts and setups a playground for testing.
  * This requires a local hardhat node running.
  */
-async function deployAndSetupPlayground() {
-  console.log("Starting playground setup...");
+async function deployAndSetup() {
+  console.log("Starting the setup...");
 
   console.log("Deploying contracts...");
   const result = await deployContracts(
@@ -274,7 +274,7 @@ async function transferApproveAndBuyProtection(
 }
 
 (async () => {
-  await deployAndSetupPlayground();
+  await deployAndSetup();
 })().catch((err) => {
   console.error(err);
 });

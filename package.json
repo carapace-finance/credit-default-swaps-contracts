@@ -6,8 +6,8 @@
   "scripts": {
     "compile": "npx hardhat compile",
     "node": "npx hardhat node",
-    "deploy:mainnet_forked": "npx hardhat run --network localhost scripts/deploy-mainnet-forked.ts",
-    "playground": "npx hardhat run --network localhost scripts/playground/deploy-playground.ts",
+    "deploy:mainnet_forked": "npx hardhat run --network localhost scripts/local-mainnet/deploy.ts",
+    "playground": "npx hardhat run --network localhost scripts/local-mainnet/deploy-and-setup.ts",
     "test": "npx hardhat test",
     "cover": "npx hardhat coverage",
     "tenderly:verify": "npx hardhat tenderly:verify",
