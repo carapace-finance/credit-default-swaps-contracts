@@ -57,14 +57,30 @@ This is done to easily spot the state variables.
 ## NPM Scripts
 
 ```bash
-// compiles your contracts and generate artifacts and cache.
+// compiles all contracts and generate artifacts and cache.
 $ npm run compile
 
-// runs the default network configured in the `hardhat.config.ts`.
+// runs the default network `hardhat` configured in the `hardhat.config.ts`.
+// default network `hardhat` is a forked version of the mainnet.
 $ npm run node
 
-// deploys your contracts to the mirrored version of the mainnet in your local network.
+// runs the task `node-for-graph` configured in the `hardhat.config.ts`.
+// This task runs a `localhost` network bound to hostname `0.0.0.0`
+$ npm run node:0
+
+// deploys all contracts to the forked version of the mainnet in the local network.
 $ npm run deploy:mainnet_forked
+
+// deploys all contracts to the forked version of the mainnet running locally
+// and sets up the contracts with test transactions.
+// This script should be executed after `npm run node` is running for local UI development.
+$ npm run deploy-and-setup:mainnet_forked
+
+// deploys all contracts to the localhost network without mainnet forking
+// and sets up the contracts with test transactions.
+// Mocks are used for the following externally dependent contracts: USDC and GoldfinchAdapter.
+// This script should be executed after `npm run node:0` is running for local subgraph development.
+$ npm run deploy-mock-and-setup:localhost
 
 // runs test in the test directory.
 $ npm run test
