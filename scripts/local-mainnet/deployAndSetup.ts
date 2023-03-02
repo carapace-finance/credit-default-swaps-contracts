@@ -1,19 +1,22 @@
 import { formatEther, parseEther } from "@ethersproject/units";
+import { BigNumber, Signer } from "ethers";
+import { ERC20Upgradeable } from "../../typechain-types/@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable";
+
+import { ProtectionPurchaseParamsStruct } from "../../typechain-types/contracts/interfaces/IReferenceLendingPools";
+import { ProtectionPool } from "../../typechain-types/contracts/core/pool/ProtectionPool";
+import { ProtectionPoolCycleManager } from "../../typechain-types/contracts/core/ProtectionPoolCycleManager";
+
 import {
   transferUsdc,
   getUsdcContract,
-  parseUSDC,
-  formatUSDC
+  parseUSDC
 } from "../../test/utils/usdc";
-import { ProtectionPurchaseParamsStruct } from "../../typechain-types/contracts/interfaces/IReferenceLendingPools";
-
 import { impersonateSignerWithEth } from "../../test/utils/utils";
-import { ProtectionPool } from "../../typechain-types/contracts/core/pool/ProtectionPool";
-import { BigNumber, Signer } from "ethers";
 import { moveForwardTime } from "../../test/utils/time";
-import { ProtectionPoolCycleManager } from "../../typechain-types/contracts/core/ProtectionPoolCycleManager";
-import { payToLendingPoolAddress } from "../../test/utils/goldfinch";
-
+import {
+  payToLendingPoolAddress,
+  transferLendingPosition
+} from "../../test/utils/goldfinch";
 import { deployContracts, DeployContractsResult } from "../../utils/deploy";
 
 import {
@@ -24,7 +27,6 @@ import {
   LENDING_POOL_PROTOCOLS,
   LENDING_POOL_PURCHASE_LIMIT_IN_DAYS
 } from "./data";
-import { ERC20Upgradeable } from "../../typechain-types/@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable";
 
 /**
  * This function deploys contracts and setups a playground for testing.
@@ -46,7 +48,14 @@ export async function deployAndSetup(useMock: boolean) {
     LENDING_POOL_PURCHASE_LIMIT_IN_DAYS,
     useMock
   );
-  if (!result.success) {
+
+  if (
+    !result.success ||
+    !result.deployer ||
+    !result.protectionPoolInstance ||
+    !result.protectionPoolCycleManagerInstance ||
+    (useMock && !result.mockUsdcInstance)
+  ) {
     console.error("Deploying contracts failed");
     return;
   }
@@ -61,11 +70,15 @@ export async function deployAndSetup(useMock: boolean) {
   const deployerAddress = await deployer.getAddress();
   console.log("Deployed contracts, Deployer address: ", deployerAddress);
 
-  // transfer usdc to deployer only when not using mock
+  // transfer usdc & lending positions to deployer only when not using mock
   if (!useMock) {
     await transferUsdc(deployerAddress, parseUSDC("100000")); // 100K USDC
+
+    // transfer all lending positions to the deployer
+    await transferLendingPositionsToDeployer(deployerAddress);
   }
   // in mock mode, deployer has 100M USDC
+  // in non-mock mode, lending position check always passes in mock GoldfinchAdapter, so no need to transfer
 
   // Setup another user account
   const userAddress = "0x008c84421da5527f462886cec43d2717b686a7e4";
@@ -111,19 +124,21 @@ export async function deployAndSetup(useMock: boolean) {
   console.log("********** Pool Phase: OpenToBuyers **********");
 
   const lendingPoolAddress = GOLDFINCH_LENDING_POOLS[0];
+  const lendingPoolDetails =
+    PLAYGROUND_LENDING_POOL_DETAILS_BY_ADDRESS[lendingPoolAddress];
 
   // buy protection 1
   await transferApproveAndBuyProtection(
+    deployer,
     protectionPoolInstance,
     {
       lendingPoolAddress: lendingPoolAddress,
-      nftLpTokenId: BigNumber.from(590),
+      nftLpTokenId: BigNumber.from(lendingPoolDetails.lendingPosition.tokenId),
       protectionAmount: parseUSDC("150000"),
       protectionDurationInSeconds:
         PROTECTION_POOL_PARAMS.minProtectionDurationInSeconds
     },
     parseUSDC("35000"),
-    useMock,
     useMock ? mockUsdcInstance : getUsdcContract(deployer)
   );
 
@@ -267,10 +282,10 @@ async function approveAndDeposit(
 }
 
 async function transferApproveAndBuyProtection(
+  deployer: Signer,
   protectionPoolInstance: ProtectionPool,
   purchaseParams: ProtectionPurchaseParamsStruct,
   maxPremiumAmt: BigNumber,
-  useMock: boolean,
   usdcContract: ERC20Upgradeable
 ) {
   // Update purchase params based on lending pool details
@@ -279,10 +294,6 @@ async function transferApproveAndBuyProtection(
     PLAYGROUND_LENDING_POOL_DETAILS_BY_ADDRESS[
       lendingPoolAddress.toLowerCase()
     ];
-  const buyer = await impersonateSignerWithEth(
-    lendingPoolDetails.lendingPosition.owner,
-    "10"
-  );
   purchaseParams.nftLpTokenId = lendingPoolDetails.lendingPosition.tokenId;
 
   console.log(
@@ -290,28 +301,36 @@ async function transferApproveAndBuyProtection(
     await protectionPoolInstance.getPoolDetails()
   );
 
-  console.log(
-    "Using Lending pool position: ",
-    lendingPoolDetails.lendingPosition
-  );
-
-  const buyerAddress = await buyer.getAddress();
-
-  // transfer usdc to buyer, the lending position owner
-  if (useMock) {
-    await usdcContract.transfer(buyerAddress, maxPremiumAmt);
-  } else {
-    await transferUsdc(buyerAddress, maxPremiumAmt);
-  }
-
-  // Approve premium USDC
+  // Approve premium USDC from deployer to protection pool
   await usdcContract
-    .connect(buyer)
+    .connect(deployer)
     .approve(protectionPoolInstance.address, maxPremiumAmt);
 
   console.log("Purchasing a protection using params: ", purchaseParams);
 
+  // Deployer should be able to buy protection
   return await protectionPoolInstance
-    .connect(buyer)
+    .connect(deployer)
     .buyProtection(purchaseParams, maxPremiumAmt);
+}
+
+async function transferLendingPositionsToDeployer(deployerAddress: string) {
+  console.log("Transferring all lending positions to deployer...");
+  const promises = Object.keys(PLAYGROUND_LENDING_POOL_DETAILS_BY_ADDRESS).map(
+    async (key: string) => {
+      const lendingPoolDetails =
+        PLAYGROUND_LENDING_POOL_DETAILS_BY_ADDRESS[key];
+
+      return await transferLendingPosition(
+        lendingPoolDetails.lendingPosition.owner,
+        deployerAddress,
+        lendingPoolDetails.lendingPosition.tokenId
+      );
+    }
+  );
+
+  // wait for all lending position transfers to complete
+  await Promise.all(promises);
+
+  console.log("Transferred lending positions to deployer...");
 }
