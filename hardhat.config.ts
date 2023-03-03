@@ -14,6 +14,7 @@ import "hardhat-gas-reporter";
 import "hardhat-storage-layout";
 import "@openzeppelin/hardhat-upgrades";
 import "@nomicfoundation/hardhat-foundry";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
 
 const {
   ALCHEMY_API_KEY,
@@ -28,6 +29,7 @@ const config: HardhatUserConfig = {
     hardhat: {
       forking: {
         url: `https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_API_KEY}`,
+        // url: "https://mainnet.gateway.tenderly.co/6ZPssnDskim7cIosJXAHVs",
         // url: `https://mainnet.infura.io/v3/${INFURA_API_KEY}`,
         // 09/23/2022: We are pinning to this block number to avoid goldfinch pool & token position changes
         blockNumber: 15598870
@@ -36,6 +38,9 @@ const config: HardhatUserConfig = {
       gasPrice: 259000000000, // check the latest gas price market in https://www.ethgasstation.info/
       // accounts are set at the end of this file
       allowUnlimitedContractSize: false
+    },
+    localhost: {
+      url: "http://0.0.0.0:8545"
     },
     mainnet: {
       url: `https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_API_KEY}`,
@@ -98,5 +103,28 @@ if (
     initialIndex: parseInt(WALLET_INITIAL_INDEX) // set index of account to use inside wallet (defaults to 0)
   };
 }
+
+/**
+ * Task to start a local node using the localhost network configuration,
+ * which is bound to hostname 0.0.0.0.
+ * This custom task is needed because the in-built hardhat `node` task doesn't allow
+ * to specify the network configuration to use with the `network` argument.
+ */
+task(
+  "node-for-graph",
+  "Starts a local node with the localhost network configuration with hostname bound to 0.0.0.0"
+).setAction(async (args, hre: HardhatRuntimeEnvironment) => {
+  // get localhost network config and mark it as default
+  const localhostConfig = hre.config.networks.localhost;
+  hre.config.networks.defaultNetwork = localhostConfig;
+
+  // remove forking config from hardhat network config
+  // so that local node doesn't fork from mainnet
+  hre.config.networks.hardhat.forking = undefined;
+  await hre.run("node", {
+    network: "localhost",
+    hostname: "0.0.0.0"
+  });
+});
 
 export default config;

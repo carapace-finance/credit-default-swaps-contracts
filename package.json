@@ -6,8 +6,10 @@
   "scripts": {
     "compile": "npx hardhat compile",
     "node": "npx hardhat node",
+    "node:0": "npx hardhat node-for-graph",
     "deploy:mainnet_forked": "npx hardhat run --network localhost scripts/local-mainnet/deploy.ts",
     "deploy-and-setup:mainnet_forked": "npx hardhat run --network localhost scripts/local-mainnet/deploy-and-setup.ts",
+    "deploy-mock-and-setup:localhost": "npx hardhat run --network localhost scripts/deploy-mock-and-setup.ts",
     "test": "npx hardhat test",
     "cover": "npx hardhat coverage",
     "tenderly:verify": "npx hardhat tenderly:verify",

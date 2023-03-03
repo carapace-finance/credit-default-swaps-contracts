@@ -4,7 +4,7 @@ import { deployer } from "../../utils/deploy";
 
 export const impersonateSignerWithEth = async (
   address: string,
-  ethValue: string
+  ethValue: string = "10"
 ): Promise<Signer> => {
   const signer = await ethers.getImpersonatedSigner(address);
   // send ethValue to address

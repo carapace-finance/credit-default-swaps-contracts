@@ -1,5 +1,6 @@
-import { ContractFactory, Signer, Contract, BigNumber } from "ethers";
+import { ContractFactory, Signer, Contract } from "ethers";
 import { ethers, upgrades } from "hardhat";
+import { ERC20Upgradeable } from "../typechain-types/@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable";
 import { USDC_ADDRESS } from "../test/utils/constants";
 import { ProtectionPool } from "../typechain-types/contracts/core/pool/ProtectionPool";
 import { ProtectionPoolParamsStruct } from "../typechain-types/contracts/interfaces/IProtectionPool";
@@ -12,6 +13,17 @@ import { AccruedPremiumCalculator } from "../typechain-types/contracts/libraries
 import { RiskFactorCalculator } from "../typechain-types/contracts/libraries/RiskFactorCalculator";
 import { GoldfinchAdapter } from "../typechain-types/contracts/adapters/GoldfinchAdapter";
 import { DefaultStateManager } from "../typechain-types/contracts/core/DefaultStateManager";
+import { MockUsdc } from "../typechain-types/contracts/test/MockUsdc";
+
+export interface DeployContractsResult {
+  success: boolean;
+  deployer?: Signer | undefined;
+  protectionPoolInstance?: ProtectionPool | undefined;
+  cpContractFactoryInstance?: CPContractFactory | undefined;
+  protectionPoolCycleManagerInstance?: ProtectionPoolCycleManager | undefined;
+  defaultStateManagerInstance?: DefaultStateManager | undefined;
+  mockUsdcInstance?: ERC20Upgradeable | undefined;
+}
 
 let deployer: Signer;
 let account1: Signer;
@@ -32,6 +44,7 @@ let goldfinchAdapterInstance: GoldfinchAdapter;
 let referenceLendingPoolsImplementation: ReferenceLendingPools;
 let defaultStateManagerInstance: DefaultStateManager;
 let protectionPoolHelperInstance: Contract;
+let mockUsdcInstance: ERC20Upgradeable;
 
 (async () => {
   [deployer, account1, account2, account3, account4] =
@@ -59,8 +72,9 @@ const deployContracts: Function = async (
   _protectionPoolParams: ProtectionPoolParamsStruct,
   _lendingPools: string[],
   _lendingPoolProtocols: number[],
-  _lendingPoolPurchaseLimitsInDays: number[]
-): Promise<boolean> => {
+  _lendingPoolPurchaseLimitsInDays: number[],
+  _useMock: boolean = false
+): Promise<DeployContractsResult> => {
   try {
     // Deploy RiskFactorCalculator library
     const riskFactorCalculatorFactory = await contractFactory(
@@ -103,10 +117,11 @@ const deployContracts: Function = async (
         unsafeAllowLinkedLibraries: true
       }
     )) as PremiumCalculator;
-    await premiumCalculatorInstance.deployed();
+
     console.log(
-      "PremiumCalculator deployed to:",
-      premiumCalculatorInstance.address
+      "PremiumCalculator deployed to: %s at block number %s",
+      premiumCalculatorInstance.address,
+      await ethers.provider.getBlockNumber()
     );
 
     // Deploy a proxy to ProtectionPoolCycleManager contract
@@ -118,8 +133,9 @@ const deployContracts: Function = async (
     )) as ProtectionPoolCycleManager;
     await protectionPoolCycleManagerInstance.deployed();
     console.log(
-      "ProtectionPoolCycleManager is deployed to: ",
-      protectionPoolCycleManagerInstance.address
+      "ProtectionPoolCycleManager is deployed to: %s at block number %s",
+      protectionPoolCycleManagerInstance.address,
+      await ethers.provider.getBlockNumber()
     );
 
     // Deploy a proxy to DefaultStateManager contract
@@ -131,8 +147,9 @@ const deployContracts: Function = async (
     )) as DefaultStateManager;
     await defaultStateManagerInstance.deployed();
     console.log(
-      "DefaultStateManager is deployed to: ",
-      defaultStateManagerInstance.address
+      "DefaultStateManager is deployed to: %s at block number %s",
+      defaultStateManagerInstance.address,
+      await ethers.provider.getBlockNumber()
     );
 
     // Deploy ProtectionPoolHelper library contract
@@ -160,8 +177,9 @@ const deployContracts: Function = async (
     )) as CPContractFactory;
     await cpContractFactoryInstance.deployed();
     console.log(
-      "ContractFactory is deployed to: ",
-      cpContractFactoryInstance.address
+      "ContractFactory is deployed to: %s at block number %s",
+      cpContractFactoryInstance.address,
+      await ethers.provider.getBlockNumber()
     );
 
     /// Sets pool factory address into the ProtectionPoolCycleManager & DefaultStateManager
@@ -174,14 +192,28 @@ const deployContracts: Function = async (
       .connect(deployer)
       .setContractFactory(cpContractFactoryInstance.address);
 
-    // Deploy GoldfinchAdapter implementation contract
-    const goldfinchAdapterFactory = await contractFactory("GoldfinchAdapter");
-    goldfinchAdapterImplementation = await goldfinchAdapterFactory.deploy();
-    await goldfinchAdapterImplementation.deployed();
-    console.log(
-      "GoldfinchAdapter implementation is deployed to:",
-      goldfinchAdapterImplementation.address
-    );
+    // Deploy MockGoldfinchAdapter implementation contract
+    if (_useMock) {
+      const mockGoldfinchAdapterFactory = await contractFactory(
+        "MockGoldfinchAdapter"
+      );
+      goldfinchAdapterImplementation =
+        await mockGoldfinchAdapterFactory.deploy();
+      await goldfinchAdapterImplementation.deployed();
+      console.log(
+        "MockGoldfinchAdapter implementation is deployed to:",
+        goldfinchAdapterImplementation.address
+      );
+    } else {
+      // Deploy GoldfinchAdapter implementation contract
+      const goldfinchAdapterFactory = await contractFactory("GoldfinchAdapter");
+      goldfinchAdapterImplementation = await goldfinchAdapterFactory.deploy();
+      await goldfinchAdapterImplementation.deployed();
+      console.log(
+        "GoldfinchAdapter implementation is deployed to:",
+        goldfinchAdapterImplementation.address
+      );
+    }
 
     // Create an upgradable instance of GoldfinchAdapter
     await cpContractFactoryInstance.createLendingProtocolAdapter(
@@ -195,13 +227,14 @@ const deployContracts: Function = async (
 
     // Retrieve an instance of GoldfinchAdapter from the LendingProtocolAdapterFactory
     goldfinchAdapterInstance = (await ethers.getContractAt(
-      "GoldfinchAdapter",
+      _useMock ? "MockGoldfinchAdapter" : "GoldfinchAdapter",
       await cpContractFactoryInstance.getLendingProtocolAdapter(0)
     )) as GoldfinchAdapter;
 
     console.log(
-      "GoldfinchAdapter is deployed at: ",
-      goldfinchAdapterInstance.address
+      "GoldfinchAdapter is deployed at: %s at block number %s",
+      goldfinchAdapterInstance.address,
+      await ethers.provider.getBlockNumber()
     );
 
     // Deploy ReferenceLendingPools Implementation contract
@@ -232,9 +265,29 @@ const deployContracts: Function = async (
     protectionPoolImplementation = await protectionPoolFactory.deploy();
     await protectionPoolImplementation.deployed();
     console.log(
-      "ProtectionPool implementation is deployed to: ",
-      protectionPoolImplementation.address
+      "ProtectionPool implementation is deployed to: %s at block number %s",
+      protectionPoolImplementation.address,
+      await ethers.provider.getBlockNumber()
     );
+
+    if (_useMock) {
+      /// deploy mock USDC contract
+      const mockUSDCFactory = await contractFactory("MockUsdc");
+      mockUsdcInstance = (await upgrades.deployProxy(mockUSDCFactory, [
+        await deployer.getAddress()
+      ])) as MockUsdc;
+      await mockUsdcInstance.deployed();
+      console.log(
+        "MockUsdc is deployed to: %s at block number %s",
+        mockUsdcInstance.address,
+        await ethers.provider.getBlockNumber()
+      );
+
+      console.log(
+        "Balance of deployer: %s",
+        await mockUsdcInstance.balanceOf(await deployer.getAddress())
+      );
+    }
 
     // Create an instance of the ProtectionPool, which should be upgradable
     // Create a pool using PoolFactory instead of deploying new pool directly to mimic the prod behavior
@@ -242,7 +295,7 @@ const deployContracts: Function = async (
       protectionPoolImplementation.address,
       _protectionPoolParams,
       _protectionPoolCycleParams,
-      USDC_ADDRESS,
+      _useMock ? mockUsdcInstance.address : USDC_ADDRESS,
       referenceLendingPoolsInstance.address,
       premiumCalculatorInstance.address,
       "sToken11",
@@ -253,10 +306,18 @@ const deployContracts: Function = async (
       cpContractFactoryInstance
     );
 
-    return true;
+    return {
+      success: true,
+      deployer,
+      protectionPoolInstance,
+      protectionPoolCycleManagerInstance,
+      defaultStateManagerInstance,
+      cpContractFactoryInstance,
+      mockUsdcInstance
+    };
   } catch (e) {
     console.log(e);
-    return false;
+    return { success: false };
   }
 };
 
@@ -288,8 +349,9 @@ async function getLatestProtectionPoolInstance(
   )) as ProtectionPool;
 
   console.log(
-    "Latest ProtectionPool instance is deployed at: ",
-    newPoolInstance.address
+    "Latest ProtectionPool instance is deployed at: %s at block number %s",
+    newPoolInstance.address,
+    await ethers.provider.getBlockNumber()
   );
   return newPoolInstance;
 }
