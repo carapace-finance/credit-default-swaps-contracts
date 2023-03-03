@@ -1634,11 +1634,28 @@ const testProtectionPool: Function = (
           ).to.be.revertedWith("NoExpiredProtectionToRenew");
         });
 
+        it("...should fail when protection extension's duration is shorter than required minProtectionDuration", async () => {
+          // Min protection duration is 10 days
+          // so protection renewal with < 10 days duration should fail
+          _newProtectionDurationInSeconds = getDaysInSeconds(10).sub(1);
+          await expect(
+            protectionPool.connect(_protectionBuyer3).renewProtection(
+              {
+                lendingPoolAddress: _lendingPool2,
+                nftLpTokenId: 579,
+                protectionAmount: parseUSDC("101"),
+                protectionDurationInSeconds: _newProtectionDurationInSeconds
+              },
+              parseUSDC("10000")
+            )
+          ).to.be.revertedWith("ProtectionDurationTooShort");
+        });
+
         it("...should fail when protection extension's duration is longer than next pool cycle's end", async () => {
           // Day 31: we are in day 1 of pool cycle 2, so next pool cycle's(cycle 3) end is at 90 days
           // expired protection's duration is 30 days,
           // so protection extension's with > 60 days duration should fail
-          _newProtectionDurationInSeconds = getDaysInSeconds(60) + 1;
+          _newProtectionDurationInSeconds = getDaysInSeconds(60).add(1);
           await expect(
             protectionPool.connect(_protectionBuyer3).renewProtection(
               {
