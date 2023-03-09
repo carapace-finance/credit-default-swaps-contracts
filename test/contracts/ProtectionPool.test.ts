@@ -1580,7 +1580,8 @@ const testProtectionPool: Function = (
       });
 
       describe("renewProtection", () => {
-        const _newProtectionAmt = parseUSDC("40000");
+        // original protection amount is 30K USDC, so new protection amount should be <= 30K USDC
+        const _newProtectionAmt = parseUSDC("30000");
         let _newProtectionDurationInSeconds: BigNumber;
         let _expiredProtection3: ProtectionInfoStructOutput;
         let _renewalProtection: ProtectionInfoStructOutput;
@@ -1670,17 +1671,39 @@ const testProtectionPool: Function = (
         });
 
         it("...should fail when premium is higher than specified maxProtectionPremium", async () => {
+          const _renewalProtectionPurchaseParams = {
+            lendingPoolAddress: _lendingPool2,
+            nftLpTokenId: 579,
+            protectionAmount: _newProtectionAmt,
+            protectionDurationInSeconds: getDaysInSeconds(59)
+          };
+          const [_expectedPremium] =
+            await protectionPool.calculateProtectionPremium(
+              _renewalProtectionPurchaseParams
+            );
+          const _maxProtectionPremium = _expectedPremium.sub(parseUSDC("21"));
+          await expect(
+            protectionPool
+              .connect(_protectionBuyer3)
+              .renewProtection(
+                _renewalProtectionPurchaseParams,
+                _maxProtectionPremium
+              )
+          ).to.be.revertedWith("PremiumExceedsMaxPremiumAmount");
+        });
+
+        it("...should fail when renewal protection amount is higher than original", async () => {
           await expect(
             protectionPool.connect(_protectionBuyer3).renewProtection(
               {
                 lendingPoolAddress: _lendingPool2,
                 nftLpTokenId: 579,
-                protectionAmount: parseUSDC("40000"),
+                protectionAmount: _newProtectionAmt.add(1),
                 protectionDurationInSeconds: getDaysInSeconds(59)
               },
               parseUSDC("901")
             )
-          ).to.be.revertedWith("PremiumExceedsMaxPremiumAmount");
+          ).to.be.revertedWith("CanNotRenewProtectionWithHigherRenewalAmount");
         });
 
         it("...should succeed for expired protection within grace period", async () => {
@@ -1705,8 +1728,8 @@ const testProtectionPool: Function = (
 
           expect(await getActiveProtections()).to.have.lengthOf(4);
           expect((await protectionPool.getPoolDetails())[1]).to.eq(
-            parseUSDC("200000")
-          ); // 100K + 50K + 10K + 40K extension
+            parseUSDC("190000")
+          ); // 100K + 50K + 10K + 30K renewal
 
           _renewalProtection = (await getActiveProtections())[3];
         });

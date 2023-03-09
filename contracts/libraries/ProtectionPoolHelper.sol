@@ -369,6 +369,7 @@ library ProtectionPoolHelper {
     if (_renewalProtectionIndex == 0) {
       revert IProtectionPool.NoExpiredProtectionToRenew();
     }
+    /// This means a buyer has expired protection for the same lending position
 
     ProtectionInfo storage expiredProtectionInfo = protectionInfos[
       _renewalProtectionIndex
@@ -377,22 +378,22 @@ library ProtectionPoolHelper {
       storage expiredProtectionPurchaseParams = expiredProtectionInfo
         .purchaseParams;
 
-    /// This means a buyer has expired protection for the same lending position
+    /// If we are NOT within grace period after the protection has expired, then revert
     if (
-      expiredProtectionPurchaseParams.lendingPoolAddress ==
-      _protectionPurchaseParams.lendingPoolAddress &&
-      expiredProtectionPurchaseParams.nftLpTokenId ==
-      _protectionPurchaseParams.nftLpTokenId
+      block.timestamp >
+      (expiredProtectionInfo.startTimestamp +
+        expiredProtectionPurchaseParams.protectionDurationInSeconds +
+        _renewalGracePeriodInSeconds)
     ) {
-      /// If we are NOT within grace period after the protection is expired, then revert
-      if (
-        block.timestamp >
-        (expiredProtectionInfo.startTimestamp +
-          expiredProtectionPurchaseParams.protectionDurationInSeconds +
-          _renewalGracePeriodInSeconds)
-      ) {
-        revert IProtectionPool.CanNotRenewProtectionAfterGracePeriod();
-      }
+      revert IProtectionPool.CanNotRenewProtectionAfterGracePeriod();
+    }
+
+    /// If the renewal protection amount is higher than expired protection, then revert
+    if (
+      _protectionPurchaseParams.protectionAmount >
+      expiredProtectionPurchaseParams.protectionAmount
+    ) {
+      revert IProtectionPool.CanNotRenewProtectionWithHigherRenewalAmount();
     }
   }
 
