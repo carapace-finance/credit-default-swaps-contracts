@@ -1,6 +1,7 @@
 import { formatEther, parseEther } from "@ethersproject/units";
 import { BigNumber, Signer } from "ethers";
 import { ERC20Upgradeable } from "../../typechain-types/@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable";
+import { ethers } from "hardhat";
 
 import { ProtectionPurchaseParamsStruct } from "../../typechain-types/contracts/interfaces/IReferenceLendingPools";
 import { ProtectionPool } from "../../typechain-types/contracts/core/pool/ProtectionPool";
@@ -135,8 +136,7 @@ export async function deployAndSetup(useMock: boolean) {
       lendingPoolAddress: lendingPoolAddress,
       nftLpTokenId: BigNumber.from(lendingPoolDetails.lendingPosition.tokenId),
       protectionAmount: parseUSDC("150000"),
-      protectionDurationInSeconds:
-        PROTECTION_POOL_PARAMS.minProtectionDurationInSeconds
+      protectionDurationInSeconds: (90 * 2 - 5) * 24 * 60 * 60 // PROTECTION_POOL_PARAMS.minProtectionDurationInSeconds
     },
     parseUSDC("35000"),
     useMock ? mockUsdcInstance : getUsdcContract(deployer)
@@ -146,6 +146,7 @@ export async function deployAndSetup(useMock: boolean) {
     "Pool's details after buyProtection",
     await protectionPoolInstance.getPoolDetails()
   );
+  console.log("block number: ", await ethers.provider.getBlockNumber());
 
   console.log(
     "Protection Pool leverage ratio: ",
@@ -177,7 +178,7 @@ export async function deployAndSetup(useMock: boolean) {
     protectionPoolCycleManagerInstance
   );
 
-  console.log("********** Pool Cycle: 2, Day: 31     **********");
+  console.log("********** Pool Cycle: 2, Day: 91     **********");
 
   // Deposit 3
   await approveAndDeposit(
@@ -193,7 +194,9 @@ export async function deployAndSetup(useMock: boolean) {
     protectionPoolCycleManagerInstance
   );
 
-  console.log("********** Pool Cycle: 3, Day: 62     **********");
+  console.log("block number: ", await ethers.provider.getBlockNumber());
+
+  console.log("********** Pool Cycle: 3, Day: 182     **********");
 
   if (!useMock) {
     // make payment to all playground lending pools for 3 months, so user can buy protections for them
@@ -208,7 +211,13 @@ export async function deployAndSetup(useMock: boolean) {
     }
   }
 
-  console.log("Playground setup completed.");
+  await protectionPoolInstance.accruePremiumAndExpireProtections(
+    GOLDFINCH_LENDING_POOLS
+  );
+  console.log("Accure premium & expire protetion: ", GOLDFINCH_LENDING_POOLS);
+
+  console.log("Setup completed.");
+  console.log("block number: ", await ethers.provider.getBlockNumber());
 }
 
 async function movePoolCycle(
