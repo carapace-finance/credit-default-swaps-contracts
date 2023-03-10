@@ -235,10 +235,6 @@ library ProtectionPoolHelper {
       uint256 _secondsUntilNow;
       if (_protectionExpired) {
         _secondsUntilNow = _expirationTimestamp - _startTimestamp;
-        console.log(
-          "Protection expired for amt: %s",
-          protectionInfo.purchaseParams.protectionAmount
-        );
       } else {
         _secondsUntilNow = block.timestamp - _startTimestamp;
       }
@@ -280,6 +276,8 @@ library ProtectionPoolHelper {
     LendingPoolDetail storage lendingPoolDetail,
     uint256 _protectionIndex
   ) public {
+    console.log("Protection expired for amt: %s", protectionInfo.purchaseParams.protectionAmount);
+    
     /// Update protection info to mark it as expired
     protectionInfo.expired = true;
 
