@@ -793,10 +793,51 @@ const testProtectionPool: Function = (
           ).to.be.revertedWith("PremiumExceedsMaxPremiumAmount"); // actual premium: 2186.178950
         });
 
+        xit("...gas consumption test", async () => {
+          const gasUsage = [];
+          const _buyer1 = await getGoldfinchLender1();
+
+          for (let index = 0; index < 25; index++) {
+            const _expectedPremiumAmt = parseUSDC("10000");
+            await transferAndApproveUsdcToPool(_buyer1, _expectedPremiumAmt);
+
+            const _protectionAmt = parseUSDC("1000");
+
+            await protectionPool
+              .connect(_buyer1)
+              .buyProtection(
+                {
+                  lendingPoolAddress: _lendingPool2,
+                  nftLpTokenId: 590,
+                  protectionAmount: _protectionAmt,  // 100K USDC
+                  protectionDurationInSeconds: getDaysInSeconds(40)
+                },
+                _expectedPremiumAmt
+              );
+            const tx = await protectionPool.accruePremiumAndExpireProtections(
+              [],
+              { gasLimit: 10_000_000 } // 30_000_000 is block gas limit
+            );
+            const receipt = await tx.wait();
+
+            console.log(
+              `Gas used with protection count: ${
+                (await getActiveProtections()).length
+              }: ${receipt.gasUsed.toString()}`
+            );
+            gasUsage.push(`${receipt.gasUsed}`);
+          }
+          console.log(
+            `***** accruePremiumAndExpireProtections Gas Usage:\n${gasUsage.join(
+              "\n"
+            )}`
+          );
+        });
+
         it("...1st buy protection is successful", async () => {
           const _initialBuyerAccountId: BigNumber = BigNumber.from(1);
           const _initialPremiumAmountOfAccount: BigNumber = BigNumber.from(0);
-          const _premiumTotalOfLendingPoolIdBefore: BigNumber = (
+          const _premiumTotalOfLendingPoolBefore: BigNumber = (
             await protectionPool.getLendingPoolDetail(_lendingPool2)
           )[0];
           const _premiumTotalBefore: BigNumber = (
@@ -836,12 +877,13 @@ const testProtectionPool: Function = (
               PROTECTION_BUYER1_ADDRESS,
               _lendingPool2
             );
-          const _premiumTotalOfLendingPoolIdAfter: BigNumber = (
+          const _premiumTotalOfLendingPoolAfter: BigNumber = (
             await protectionPool.getLendingPoolDetail(_lendingPool2)
-          )[1];
+          )[0];
           const _premiumTotalAfter: BigNumber = (
             await protectionPool.getPoolDetails()
           )[2];
+
           expect(
             _premiumAmountOfAccountAfter.sub(_initialPremiumAmountOfAccount)
           ).to.eq(_expectedPremiumAmount);
@@ -849,9 +891,11 @@ const testProtectionPool: Function = (
           expect(_premiumTotalBefore.add(_expectedPremiumAmount)).to.eq(
             _premiumTotalAfter
           );
+
           expect(
-            _premiumTotalOfLendingPoolIdBefore.add(_expectedPremiumAmount)
-          ).to.eq(_premiumTotalOfLendingPoolIdAfter);
+            _premiumTotalOfLendingPoolBefore.add(_expectedPremiumAmount)
+          ).to.eq(_premiumTotalOfLendingPoolAfter);
+
           expect((await protectionPool.getPoolDetails())[1]).to.eq(
             _protectionAmount
           );
@@ -1437,13 +1481,6 @@ const testProtectionPool: Function = (
       });
 
       describe("accruePremiumAndExpireProtections", async () => {
-        it("...should NOT accrue premium", async () => {
-          // no premium should be accrued because there is no new payment
-          await expect(
-            protectionPool.accruePremiumAndExpireProtections([])
-          ).to.not.emit(protectionPool, "PremiumAccrued");
-        });
-
         it("...should accrue premium, expire protections & update last accrual timestamp", async () => {
           expect((await protectionPool.getPoolDetails())[3]).to.eq(0);
           const _totalSTokenUnderlyingBefore = (
@@ -1453,39 +1490,30 @@ const testProtectionPool: Function = (
           /// Time needs to be moved ahead by 31 days to apply payment to lending pool
           await moveForwardTimeByDays(31);
 
-          // pay to lending pool
-          await payToLendingPoolAddress(_lendingPool2, "100000", USDC);
-          await payToLendingPoolAddress(_lendingPool1, "100000", USDC);
-
           // accrue premium
           expect(await protectionPool.accruePremiumAndExpireProtections([]))
             .to.emit(protectionPool, "PremiumAccrued")
             .to.emit(protectionPool, "ProtectionExpired");
 
-          // 1599.26 + 707.59 + 410.23 + 641.89 = ~3358.97
-          const _expectedPremiumLowerBound = parseUSDC("3358.90");
+          // 958.655673 + 1698.159998 + 410.239842 + 641.890263 = ~3708.945776
+          const _expectedPremiumLowerBound = parseUSDC("3708.94");
+          const _expectedPremiumUpperBound = parseUSDC("3708.95");
           expect((await protectionPool.getPoolDetails())[3])
             .to.be.gt(_expectedPremiumLowerBound)
-            .and.to.be.lt(parseUSDC("3359"));
+            .and.to.be.lt(_expectedPremiumUpperBound);
 
+          // total sToken underlying should be increased by the premium
           expect(
             (await protectionPool.getPoolDetails())[0].sub(
               _totalSTokenUnderlyingBefore
             )
           )
             .to.be.gt(_expectedPremiumLowerBound)
-            .and.to.be.lt(parseUSDC("3359"));
+            .and.to.be.lt(_expectedPremiumUpperBound);
 
-          expect(
-            (await protectionPool.getLendingPoolDetail(_lendingPool2))[0]
-          ).to.be.eq(
-            await referenceLendingPools.getLatestPaymentTimestamp(_lendingPool2)
-          );
-
-          expect(
-            (await protectionPool.getLendingPoolDetail(_lendingPool1))[0]
-          ).to.be.eq(
-            await referenceLendingPools.getLatestPaymentTimestamp(_lendingPool1)
+          // last accrual timestamp should be updated
+          expect((await protectionPool.getPoolDetails())[4]).to.be.eq(
+            await getLatestBlockTimestamp()
           );
         });
 
@@ -1516,6 +1544,14 @@ const testProtectionPool: Function = (
           expect(allProtections[3].expired).to.eq(false);
           expect((await protectionPool.getPoolDetails())[1]).to.eq(
             parseUSDC("150000")
+          );
+        });
+
+        it("...should work correctly on 2nd run", async () => {
+          await protectionPool.accruePremiumAndExpireProtections([]);
+          // last accrual timestamp should be updated
+          expect((await protectionPool.getPoolDetails())[4]).to.be.eq(
+            await getLatestBlockTimestamp()
           );
         });
       });
@@ -2784,8 +2820,6 @@ const testProtectionPool: Function = (
       expect(await network.provider.send("evm_revert", [snapshotId2])).to.be.eq(
         true
       );
-
-      await protectionPool.accruePremiumAndExpireProtections([]);
     });
   });
 };
