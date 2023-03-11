@@ -32,6 +32,7 @@ import { ProtectionPoolV2 } from "../../typechain-types/contracts/test/Protectio
 
 const testProtectionPool: Function = (
   deployer: Signer,
+  operator: Signer,
   owner: Signer,
   buyer: Signer,
   seller: Signer,
@@ -49,7 +50,12 @@ const testProtectionPool: Function = (
 
     const _newFloor: BigNumber = parseEther("0.4");
     const _newCeiling: BigNumber = parseEther("1.1");
+    const OPERATOR_ROLE = ethers.utils.keccak256(
+      ethers.utils.toUtf8Bytes("OPERATOR_ROLE")
+    );
+
     let deployerAddress: string;
+    let operatorAddress: string;
     let sellerAddress: string;
     let account4Address: string;
     let buyerAddress: string;
@@ -239,6 +245,7 @@ const testProtectionPool: Function = (
 
     before("setup", async () => {
       deployerAddress = await deployer.getAddress();
+      operatorAddress = await operator.getAddress();
       sellerAddress = await seller.getAddress();
       buyerAddress = await buyer.getAddress();
       ownerAddress = await owner.getAddress();
@@ -286,6 +293,7 @@ const testProtectionPool: Function = (
         it("...should disable initialize after construction", async () => {
           await expect(
             protectionPoolImplementation.initialize(
+              operatorAddress,
               ZERO_ADDRESS,
               poolInfo,
               ZERO_ADDRESS,
@@ -327,6 +335,7 @@ const testProtectionPool: Function = (
         await expect(
           protectionPool.initialize(
             ZERO_ADDRESS,
+            operatorAddress,
             poolInfo,
             ZERO_ADDRESS,
             ZERO_ADDRESS,
@@ -401,6 +410,39 @@ const testProtectionPool: Function = (
 
       it("...getAllProtections should return empty array", async () => {
         expect((await protectionPool.getAllProtections()).length).to.eq(0);
+      });
+
+      it("...should grant DEFAULT_ADMIN role to the owner", async () => {
+        expect(await protectionPool.hasRole(await protectionPool.DEFAULT_ADMIN_ROLE(), deployerAddress)).to.be.true;
+      });
+
+      it("...should grant the operator role to the operator", async () => { 
+        expect(
+          await protectionPool.hasRole(
+            OPERATOR_ROLE,
+            operatorAddress
+          )
+        ).to.be.true;
+      });
+
+      it("...owner should be able to revoke the operator role", async () => { 
+        await protectionPool.revokeRole(OPERATOR_ROLE, await operator.getAddress());
+        expect(
+          await protectionPool.hasRole(
+            OPERATOR_ROLE,
+            operatorAddress
+          )
+        ).to.be.false;
+      });
+
+      it("...owner should be able to grant the operator role", async () => { 
+        await protectionPool.grantRole(OPERATOR_ROLE, await operator.getAddress());
+        expect(
+          await protectionPool.hasRole(
+            OPERATOR_ROLE,
+            operatorAddress
+          )
+        ).to.be.true;
       });
     });
 
@@ -814,7 +856,7 @@ const testProtectionPool: Function = (
                 },
                 _expectedPremiumAmt
               );
-            const tx = await protectionPool.accruePremiumAndExpireProtections(
+            const tx = await protectionPool.connect(operator).accruePremiumAndExpireProtections(
               [],
               { gasLimit: 10_000_000 } // 30_000_000 is block gas limit
             );
@@ -1481,6 +1523,14 @@ const testProtectionPool: Function = (
       });
 
       describe("accruePremiumAndExpireProtections", async () => {
+        it("...should fail when called by non-operator", async () => {
+          await expect(
+            protectionPool.connect(seller).accruePremiumAndExpireProtections([])
+          ).to.be.revertedWith(
+            `AccessControl: account ${sellerAddress.toLowerCase()} is missing role ${OPERATOR_ROLE}`
+          );
+        });
+
         it("...should accrue premium, expire protections & update last accrual timestamp", async () => {
           expect((await protectionPool.getPoolDetails())[3]).to.eq(0);
           const _totalSTokenUnderlyingBefore = (
@@ -1491,7 +1541,9 @@ const testProtectionPool: Function = (
           await moveForwardTimeByDays(31);
 
           // accrue premium
-          expect(await protectionPool.accruePremiumAndExpireProtections([]))
+          expect(await protectionPool
+            .connect(operator)
+            .accruePremiumAndExpireProtections([]))
             .to.emit(protectionPool, "PremiumAccrued")
             .to.emit(protectionPool, "ProtectionExpired");
 
@@ -1548,7 +1600,9 @@ const testProtectionPool: Function = (
         });
 
         it("...should work correctly on 2nd run", async () => {
-          await protectionPool.accruePremiumAndExpireProtections([]);
+          await protectionPool
+            .connect(operator)
+            .accruePremiumAndExpireProtections([]);
           // last accrual timestamp should be updated
           expect((await protectionPool.getPoolDetails())[4]).to.be.eq(
             await getLatestBlockTimestamp()
@@ -2291,7 +2345,9 @@ const testProtectionPool: Function = (
         it("...accrue premium and expire protections", async () => {
           // should expire 2 protections
           expect((await getActiveProtections()).length).to.eq(2);
-          await protectionPool.accruePremiumAndExpireProtections([]);
+          await protectionPool
+            .connect(operator)
+            .accruePremiumAndExpireProtections([]);
           expect((await getActiveProtections()).length).to.eq(0);
         });
 

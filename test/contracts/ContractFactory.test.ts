@@ -20,6 +20,7 @@ const LENDING_POOL_1 = "0x759f097f3153f5d62ff1c2d82ba78b6350f223e3";
 
 const testContractFactory: Function = (
   deployer: Signer,
+  operator: Signer,
   account1: Signer,
   cpContractFactory: ContractFactory,
   premiumCalculator: PremiumCalculator,
@@ -105,6 +106,7 @@ const testContractFactory: Function = (
           cpContractFactory
             .connect(account1)
             .createProtectionPool(
+              await operator.getAddress(),
               poolImplementation.address,
               _poolParams,
               _poolCycleParams,
@@ -136,6 +138,7 @@ const testContractFactory: Function = (
           cpContractFactory
             .connect(deployer)
             .createProtectionPool(
+              await operator.getAddress(),
               ZERO_ADDRESS,
               _poolParams,
               _poolCycleParams,
@@ -155,6 +158,7 @@ const testContractFactory: Function = (
 
         await expect(
           cpContractFactory.createProtectionPool(
+            await operator.getAddress(),
             poolImplementation.address,
             _poolParams,
             _poolCycleParams,
