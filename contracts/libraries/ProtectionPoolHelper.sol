@@ -23,7 +23,8 @@ library ProtectionPoolHelper {
   using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
 
   /**
-   * @notice Verifies that the status of the lending pool is ACTIVE and protection can be bought,
+   * @notice Verifies that the status of the lending pool is ACTIVE, protection can be bought
+   * and there is no existing protection for the same lending pool position,
    * otherwise reverts with the appropriate error message.
    * @param poolCycleManager the pool cycle manager contract
    * @param defaultStateManager the default state manager contract
@@ -38,6 +39,7 @@ library ProtectionPoolHelper {
     IDefaultStateManager defaultStateManager,
     address _protectionPool,
     ProtectionPoolInfo storage poolInfo,
+    LendingPoolDetail storage lendingPoolDetail,
     uint256 _protectionStartTimestamp,
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
     bool _isRenewal
@@ -45,6 +47,13 @@ library ProtectionPoolHelper {
     /// Verify that the pool is not in OpenToSellers phase
     if (poolInfo.currentPhase == ProtectionPoolPhase.OpenToSellers) {
       revert IProtectionPool.ProtectionPoolInOpenToSellersPhase();
+    }
+
+    /// verify there is no existing protection for the same lending pool position
+    uint256 _existingProtectionIndex = lendingPoolDetail
+      .activeProtectionIndexByTokenId[_protectionPurchaseParams.nftLpTokenId];
+    if (_existingProtectionIndex > 0) {
+      revert IProtectionPool.ProtectionAlreadyExistsForLendingPoolPosition();
     }
 
     /// a buyer needs to buy protection longer than min protection duration specified in the pool params
@@ -277,9 +286,12 @@ library ProtectionPoolHelper {
     uint256 _protectionIndex
   ) public {
     console.log("Protection expired for amt: %s", protectionInfo.purchaseParams.protectionAmount);
-    
+
     /// Update protection info to mark it as expired
     protectionInfo.expired = true;
+
+    ProtectionPurchaseParams storage purchaseParams = protectionInfo
+      .purchaseParams;
 
     /// remove expired protection index from activeProtectionIndexes of lendingPool & buyer account
     address _buyer = protectionInfo.buyer;
@@ -288,10 +300,9 @@ library ProtectionPoolHelper {
       _buyer
     ];
     buyerAccount.activeProtectionIndexes.remove(_protectionIndex);
+    lendingPoolDetail.activeProtectionIndexByTokenId[purchaseParams.nftLpTokenId] = 0;
 
     /// Update buyer account to add expired protection index to expiredProtectionIndexes of lendingPool
-    ProtectionPurchaseParams storage purchaseParams = protectionInfo
-      .purchaseParams;
     buyerAccount.expiredProtectionIndexByLendingPool[
       purchaseParams.lendingPoolAddress
     ][purchaseParams.nftLpTokenId] = _protectionIndex;

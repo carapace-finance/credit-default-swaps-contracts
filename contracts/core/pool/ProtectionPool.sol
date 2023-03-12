@@ -795,12 +795,18 @@ contract ProtectionPool is
     uint256 _maxPremiumAmount,
     bool _isRenewal
   ) internal {
+    /// Retrieve the lending pool detail
+    LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
+      _protectionPurchaseParams.lendingPoolAddress
+    ];
+
     /// Verify that user can buy protection
     ProtectionPoolHelper.verifyProtection(
       poolCycleManager,
       defaultStateManager,
       address(this),
       poolInfo,
+      lendingPoolDetail,
       _protectionStartTimestamp,
       _protectionPurchaseParams,
       _isRenewal
@@ -814,11 +820,7 @@ contract ProtectionPool is
       revert ProtectionPoolLeverageRatioTooLow(_leverageRatio);
     }
 
-    /// Retrieve the lending pool detail and
     /// update the total protection of the lending pool by the protection amount
-    LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
-      _protectionPurchaseParams.lendingPoolAddress
-    ];
     lendingPoolDetail.totalProtection += _protectionPurchaseParams
       .protectionAmount;
 
@@ -882,6 +884,9 @@ contract ProtectionPool is
     // the total locked amount for the lending pool, when/if pool is late for payment
     uint256 _protectionIndex = protectionInfos.length - 1;
     lendingPoolDetail.activeProtectionIndexes.add(_protectionIndex);
+    lendingPoolDetail.activeProtectionIndexByTokenId[
+      _protectionPurchaseParams.nftLpTokenId
+    ] = _protectionIndex;
     protectionBuyerAccounts[msg.sender].activeProtectionIndexes.add(
       _protectionIndex
     );
