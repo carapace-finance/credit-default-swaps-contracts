@@ -233,9 +233,12 @@ abstract contract IProtectionPool {
 
   /**
    * @notice A buyer can renew a protection for a lending position when lending pool is supported & active (not defaulted or expired).
-   * Buyer must have a existing active protection for the same lending position, meaning same lending pool & nft token id.
+   * Buyer must have a existing expired protection for the same lending position, meaning same lending pool & nft token id.
+   * Renewal protection amount could not be higher than the original protection amount.
    * Remaining principal in lending position must be less or equal to the renewal protection amount.
+   * Renewed protection will start right after the expiration time of the original protection.
    * Protection renewal's duration must not exceed the end time of next pool cycle.
+   * Protection can only be renewed during the grace period after the expiration of the original protection.
    * Buyer must approve underlying tokens to pay the expected premium.
    * @param _protectionPurchaseParams The protection purchase parameters such as protection amount, duration, lending pool etc.
    * @param _maxPremiumAmount the max protection premium in underlying tokens that buyer is willing to pay.

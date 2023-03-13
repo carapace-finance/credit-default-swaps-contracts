@@ -1759,7 +1759,7 @@ const testProtectionPool: Function = (
           // Day 31: we are in day 1 of pool cycle 2, so next pool cycle's(cycle 3) end is at 90 days
           // expired protection's duration is 30 days,
           // so protection extension's with > 60 days duration should fail
-          _newProtectionDurationInSeconds = getDaysInSeconds(60).add(1);
+          _newProtectionDurationInSeconds = getDaysInSeconds(62);
           await expect(
             protectionPool.connect(_protectionBuyer3).renewProtection(
               {
@@ -1814,7 +1814,7 @@ const testProtectionPool: Function = (
             _protectionBuyer3,
             parseUSDC("2000")
           );
-
+          
           // Day 31: we are in day 1 of pool cycle 2, so next pool cycle's(cycle 3) end is at 90 days
           // expired protection's duration is 30 days,
           // so protection renewal with < 60 days duration should succeed
@@ -1846,9 +1846,13 @@ const testProtectionPool: Function = (
           ).to.eq(_newProtectionDurationInSeconds);
         });
 
-        it("...protection renewal should start now", async () => {
+        it("...protection renewal should start just after expiration of existing protection", async () => {
+          const _protectionExpirationTimestamp =
+            _expiredProtection3.startTimestamp.add(
+              _expiredProtection3.purchaseParams.protectionDurationInSeconds
+            );
           expect(_renewalProtection.startTimestamp).to.eq(
-            await getLatestBlockTimestamp()
+            _protectionExpirationTimestamp.add(1)
           );
         });
 

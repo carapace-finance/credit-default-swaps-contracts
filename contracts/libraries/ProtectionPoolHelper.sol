@@ -349,13 +349,15 @@ library ProtectionPoolHelper {
    * @param protectionInfos storage pointer to protection infos
    * @param _protectionPurchaseParams The protection purchase params.
    * @param _renewalGracePeriodInSeconds The grace period in seconds for renewal.
+   * @return _renewalStartTimestamp The timestamp when the renewal starts,
+   * which is just after the end of the expired protection
    */
   function verifyBuyerCanRenewProtection(
     mapping(address => ProtectionBuyerAccount) storage protectionBuyerAccounts,
     ProtectionInfo[] storage protectionInfos,
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
     uint256 _renewalGracePeriodInSeconds
-  ) external view {
+  ) external view returns (uint256 _renewalStartTimestamp) {
     uint256 _renewalProtectionIndex = protectionBuyerAccounts[msg.sender]
       .expiredProtectionIndexByLendingPool[
         _protectionPurchaseParams.lendingPoolAddress
@@ -390,6 +392,12 @@ library ProtectionPoolHelper {
     ) {
       revert IProtectionPool.CanNotRenewProtectionWithHigherRenewalAmount();
     }
+
+    /// Protection renewal should start just after the end of the expired protection
+    _renewalStartTimestamp = expiredProtectionInfo
+      .startTimestamp +
+      expiredProtectionPurchaseParams.protectionDurationInSeconds + 
+      1;
   }
 
   /**

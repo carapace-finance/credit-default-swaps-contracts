@@ -191,7 +191,7 @@ contract ProtectionPool is
     uint256 _maxPremiumAmount
   ) external override whenNotPaused nonReentrant {
     /// Verify that user can renew protection
-    ProtectionPoolHelper.verifyBuyerCanRenewProtection(
+    uint256 _renewalStartTimestamp = ProtectionPoolHelper.verifyBuyerCanRenewProtection(
       protectionBuyerAccounts,
       protectionInfos,
       _protectionPurchaseParams,
@@ -200,7 +200,7 @@ contract ProtectionPool is
 
     /// Verify that user can buy protection and then create a new protection for renewal
     _verifyAndCreateProtection(
-      block.timestamp,
+      _renewalStartTimestamp,
       _protectionPurchaseParams,
       _maxPremiumAmount,
       true
