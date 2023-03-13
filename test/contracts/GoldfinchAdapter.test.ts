@@ -19,6 +19,8 @@ import { GoldfinchAdapterV2 } from "../../typechain-types/contracts/test/Goldfin
 
 const GOLDFINCH_ALMAVEST_BASKET_6_ADDRESS =
   "0x418749e294cabce5a714efccc22a8aade6f9db57";
+  const GOLDFINCH_ALMAVEST_BASKET_5_ADDRESS =
+    "0x1d596d28a7923a22aa013b0e7082bba23daa656b";
 const BUYER3 = "0x10a590f528eff3d5de18c90da6e03a4acdde3a7d";
 
 const testGoldfinchAdapter: Function = (
@@ -94,6 +96,17 @@ const testGoldfinchAdapter: Function = (
             "0x00c27fc71b159a346e179b4a1608a0865e8a7470"
           )
         ).to.be.true;
+      });
+
+      it("...should work for a lending pool with CreditLine v1", async () => {
+        // see: https://app.goldfinch.finance/pools/0x1d596D28A7923a22aA013b0e7082bbA23DAA656b
+        // https://etherscan.io/address/0x1d596D28A7923a22aA013b0e7082bbA23DAA656b#readContract
+        // no "isLate" function in CreditLine v1
+        expect(
+          await goldfinchAdapter.isLendingPoolLate(
+            GOLDFINCH_ALMAVEST_BASKET_5_ADDRESS
+          )
+        ).to.be.false;
       });
     });
 
@@ -232,6 +245,14 @@ const testGoldfinchAdapter: Function = (
         ).to.eq(false);
       });
 
+      it("...should return false when payment is not late for lending pool with CreditLine v1", async () => {
+        expect(
+          await goldfinchAdapter.isLendingPoolLateWithinGracePeriod(
+            GOLDFINCH_ALMAVEST_BASKET_5_ADDRESS, 1
+          )
+        ).to.be.false;
+      });
+
       it("...should return true when payment is late but within grace period", async () => {
         // Move time forward by 1 second
         await moveForwardTime(BigNumber.from(1));
@@ -271,7 +292,7 @@ const testGoldfinchAdapter: Function = (
           )
         ).to.eq(false);
       });
-
+      
       it("...should return false when payment is late and after grace period", async () => {
         // Move time forward by a day
         await moveForwardTime(getDaysInSeconds(1));
@@ -333,6 +354,36 @@ const testGoldfinchAdapter: Function = (
             "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf"
           )
         ).to.eq(BigNumber.from(30));
+      });
+    });
+
+    describe("isLendingPoolLate after moving forward time", () => {
+      it("...should return true for a pool which had current payment", async () => {
+        expect(
+          await goldfinchAdapter.isLendingPoolLate(
+            "0x759f097f3153f5d62ff1c2d82ba78b6350f223e3"
+          )
+        ).to.be.true;
+      });
+
+      it("...should return true for a pool with late payment", async () => {
+        // see: https://app.goldfinch.finance/pools/0x00c27fc71b159a346e179b4a1608a0865e8a7470
+        expect(
+          await goldfinchAdapter.isLendingPoolLate(
+            "0x00c27fc71b159a346e179b4a1608a0865e8a7470"
+          )
+        ).to.be.true;
+      });
+
+      it("...should return true for a lending pool with CreditLine v1", async () => {
+        // see: https://app.goldfinch.finance/pools/0x1d596D28A7923a22aA013b0e7082bbA23DAA656b
+        // https://etherscan.io/address/0x1d596D28A7923a22aA013b0e7082bbA23DAA656b#readContract
+        // no "isLate" function in CreditLine v1
+        expect(
+          await goldfinchAdapter.isLendingPoolLate(
+            GOLDFINCH_ALMAVEST_BASKET_5_ADDRESS
+          )
+        ).to.be.true;
       });
     });
 
