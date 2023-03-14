@@ -425,10 +425,6 @@ const testDefaultStateManager: Function = (
 
         describe("multiple locked capital instances", async () => { 
           before(async () => {
-            console.log(
-              "Pool details: ",
-              await protectionPoolInstance.getPoolDetails()
-            );
             // Remaining capital in pool should be 40K USDC because 120K USDC is locked
             const _totalSTokenUnderlying = (await protectionPoolInstance.getPoolDetails())[0];
             expect(_totalSTokenUnderlying).to.eq(parseUSDC("40000"));
@@ -447,13 +443,6 @@ const testDefaultStateManager: Function = (
             await expect(defaultStateManager.assessStateBatch([pool1]))
               .to.emit(defaultStateManager, "ProtectionPoolStatesAssessed")
               .to.emit(defaultStateManager, "LendingPoolLocked");
-
-            expect(
-              await defaultStateManager.getLendingPoolStatus(
-                pool1,
-                lendingPools[1]
-              )
-            ).to.eq(3); // Late
           });
 
           it("...should create 2nd lock capital instance for 2nd lending pool in protection pool 1", async () => {
@@ -491,8 +480,8 @@ const testDefaultStateManager: Function = (
               )
             ).to.be.eq(parseUSDC("25000"));
           });
-          
-          it("...should return correct claimable amount from 2 locked capital instances for seller from pool 1", async () => {
+
+          it("...should move 2nd lending pool from Late to Active state", async () => {
             // Move 2nd lending pool from Late o Active state
             for (let i = 0; i < 2; i++) {
               await moveForwardTimeByDays(30);
@@ -508,6 +497,15 @@ const testDefaultStateManager: Function = (
               }
             }
 
+            expect(
+              await defaultStateManager.getLendingPoolStatus(
+                pool1,
+                lendingPools[1]
+              )
+            ).to.eq(1); // Active
+          });
+          
+          it("...should return correct claimable amount from 2 locked capital instances for seller from pool 1", async () => {
             // so seller should be able claim 1/2 of the 1st unlocked capital = 25K (50% of 50K)
             // so seller should be able claim 1/2 of the 2nd unlocked capital = 20K (50% of 40K)
             expect(
