@@ -501,7 +501,7 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
 
         /// The claimable amount for the given seller is proportional to the seller's share of the total supply at the snapshot
         /// claimable amount = (seller's snapshot balance / total supply at snapshot) * locked capital amount
-        _claimableUnlockedCapital =
+        _claimableUnlockedCapital +=
           (_poolSToken.balanceOfAt(_seller, _snapshotId) *
             lockedCapital.amount) /
           _poolSToken.totalSupplyAt(_snapshotId);

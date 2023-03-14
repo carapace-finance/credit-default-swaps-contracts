@@ -1,10 +1,11 @@
 import { DefaultStateManager } from "../../typechain-types/contracts/core/DefaultStateManager";
 import { expect } from "chai";
-import { Contract, Signer, ContractFactory } from "ethers";
+import { Contract, Signer } from "ethers";
 import { ZERO_ADDRESS } from "../utils/constants";
 import { ProtectionPool } from "../../typechain-types/contracts/core/pool/ProtectionPool";
 import { ContractFactory as CPContractFactory } from "../../typechain-types/contracts/core/ContractFactory";
 import { ethers, upgrades } from "hardhat";
+import { parseEther } from "ethers/lib/utils";
 import {
   parseUSDC,
   getUsdcContract,
@@ -21,7 +22,7 @@ import { payToLendingPool, payToLendingPoolAddress } from "../utils/goldfinch";
 import { BigNumber } from "@ethersproject/bignumber";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { DefaultStateManagerV2 } from "../../typechain-types/contracts/test/DefaultStateManagerV2";
-import { cpContractFactoryInstance } from "../../utils/deploy";
+import { cpContractFactoryInstance, protectionPoolInstance } from "../../utils/deploy";
 
 const testDefaultStateManager: Function = (
   deployer: Signer,
@@ -246,11 +247,20 @@ const testDefaultStateManager: Function = (
           await poolInstance.getPoolDetails();
 
         expect(_totalSTokenUnderlying).to.equal(parseUSDC("100200"));
-
         expect(_totalProtection).to.equal(parseUSDC("120000"));
 
         // deposit capital into pool
-        await depositToPool(seller, parseUSDC("19800"));
+        await protectionPoolInstance.updateLeverageRatioParams(
+          parseEther("0.5"),
+          parseEther("1.5"),
+          parseEther("0.05")
+        );
+        await depositToPool(seller, parseUSDC("59800"));
+
+        // 100,200 + 59,800 = 160,000
+        expect((await poolInstance.getPoolDetails())[0]).to.equal(
+          parseUSDC("160000")
+        );
 
         // Pool should be in Open phase
         expect((await poolInstance.getPoolInfo()).currentPhase).to.eq(2);
@@ -386,23 +396,127 @@ const testDefaultStateManager: Function = (
         });
 
         it("...should return correct claimable amount for seller from pool 1", async () => {
-          // seller should be able claim 1/3rd of the locked capital = 16.66K (33.33% of 50K)
+          // Seller has deposited 80K USDC out of 160k total capital,
+          // so seller should be able claim 1/2 of the locked capital = 25K (50% of 50K)
+          expect(await protectionPoolInstance.balanceOf(sellerAddress)).to.be.eq(parseEther("80000"));  // 80K sToken
           expect(
             await defaultStateManager.calculateClaimableUnlockedAmount(
               pool1,
               sellerAddress
             )
-          ).to.be.eq(parseUSDC("16666.666666"));
+          ).to.be.eq(parseUSDC("25000"));
         });
 
         it("...should return correct claimable amount for account 1 from pool 1", async () => {
-          // Account 1 should be able claim 1/3rd of the locked capital = 16.66K (33.33% of 50K)
+          // Account1 has deposited 40K USDC out of 160k total capital,
+          // so account1 should be able claim 1/4 of the locked capital = 12,5K (25% of 50K)
+          const account1Address = await account1.getAddress();
+          expect(
+            await protectionPoolInstance.balanceOf(account1Address)
+          ).to.be.eq(parseEther("40000"));  // 40K sToken
+          
           expect(
             await defaultStateManager.calculateClaimableUnlockedAmount(
               pool1,
-              await account1.getAddress()
+              account1Address
             )
-          ).to.be.eq(parseUSDC("16666.666666"));
+          ).to.be.eq(parseUSDC("12500"));
+        });
+
+        describe("multiple locked capital instances", async () => { 
+          before(async () => {
+            console.log(
+              "Pool details: ",
+              await protectionPoolInstance.getPoolDetails()
+            );
+            // Remaining capital in pool should be 40K USDC because 120K USDC is locked
+            const _totalSTokenUnderlying = (await protectionPoolInstance.getPoolDetails())[0];
+            expect(_totalSTokenUnderlying).to.eq(parseUSDC("40000"));
+
+            expect(
+              await defaultStateManager.getLendingPoolStatus(
+                pool1,
+                lendingPools[1]
+              )
+            ).to.eq(1); // Active
+            
+            // Move time forward by 31 days and make no payment to 2nd lending pool
+            await moveForwardTimeByDays(31);
+
+            // 2nd lending pool should move from Active to Late state
+            await expect(defaultStateManager.assessStateBatch([pool1]))
+              .to.emit(defaultStateManager, "ProtectionPoolStatesAssessed")
+              .to.emit(defaultStateManager, "LendingPoolLocked");
+
+            expect(
+              await defaultStateManager.getLendingPoolStatus(
+                pool1,
+                lendingPools[1]
+              )
+            ).to.eq(3); // Late
+          });
+
+          it("...should create 2nd lock capital instance for 2nd lending pool in protection pool 1", async () => {
+            // 2nd lending pool should move from LateWithinGracePeriod to Late state with a locked capital instance
+            expect(
+              await defaultStateManager.getLendingPoolStatus(
+                pool1,
+                lendingPools[1]
+              )
+            ).to.eq(3); // Late
+
+            const lockedCapitalsLendingPool2 =
+              await defaultStateManager.getLockedCapitals(
+                pool1,
+                lendingPools[1]
+              );
+            expect(lockedCapitalsLendingPool2.length).to.eq(2);
+            expect(lockedCapitalsLendingPool2[1].snapshotId).to.eq(3);
+
+            // locked capital amount should be same as total protection bought from lending pool 2,
+            // but total capital remaining is 40K USDC, so 40K will be locked
+            expect(lockedCapitalsLendingPool2[1].amount).to.eq(
+              parseUSDC("40000")
+            );
+            expect(lockedCapitalsLendingPool2[1].locked).to.eq(true);
+          });
+
+          it("...should return correct claimable amount from 1st locked capital instance for seller from pool 1", async () => {
+            // so seller should be able claim 1/2 of the 1st unlocked capital = 25K (50% of 50K)
+            // 2nd locked capital is not unlocked yet
+            expect(
+              await defaultStateManager.calculateClaimableUnlockedAmount(
+                pool1,
+                sellerAddress
+              )
+            ).to.be.eq(parseUSDC("25000"));
+          });
+          
+          it("...should return correct claimable amount from 2 locked capital instances for seller from pool 1", async () => {
+            // Move 2nd lending pool from Late o Active state
+            for (let i = 0; i < 2; i++) {
+              await moveForwardTimeByDays(30);
+              await payToLendingPool(lendingPool2, "300000", usdcContract);
+
+              if (i === 0) {
+                await defaultStateManager.assessStateBatch([pool1]);
+              } else {
+                // after second payment, 2nd lending pool should move from Late to Active state
+                await expect(defaultStateManager.assessStateBatch([pool1]))
+                  .to.emit(defaultStateManager, "ProtectionPoolStatesAssessed")
+                  .to.emit(defaultStateManager, "LendingPoolUnlocked");
+              }
+            }
+
+            // so seller should be able claim 1/2 of the 1st unlocked capital = 25K (50% of 50K)
+            // so seller should be able claim 1/2 of the 2nd unlocked capital = 20K (50% of 40K)
+            expect(
+              await defaultStateManager.calculateClaimableUnlockedAmount(
+                pool1,
+                sellerAddress
+              )
+            ).to.be.eq(parseUSDC("45000")); // 25K + 20K
+          });
         });
       });
 
@@ -461,15 +575,15 @@ const testDefaultStateManager: Function = (
           await defaultStateManager.getLendingPoolStatus(pool1, lendingPools[1])
         ).to.eq(3); // Late
 
-        // 2nd lending pool should have 2 locked capital instances at this point
+        // 2nd lending pool should have 3 locked capital instances at this point
         const lockedCapitalsLendingPool2 =
           await defaultStateManager.getLockedCapitals(pool1, lendingPools[1]);
-        expect(lockedCapitalsLendingPool2.length).to.eq(2);
-        expect(lockedCapitalsLendingPool2[1].snapshotId).to.eq(3);
+        expect(lockedCapitalsLendingPool2.length).to.eq(3);
+        expect(lockedCapitalsLendingPool2[2].snapshotId).to.eq(4);
 
         // locked capital amount should be 0 as protection pool has no capital left to lock
-        expect(lockedCapitalsLendingPool2[1].amount).to.eq(0);
-        expect(lockedCapitalsLendingPool2[1].locked).to.eq(true);
+        expect(lockedCapitalsLendingPool2[2].amount).to.eq(0);
+        expect(lockedCapitalsLendingPool2[2].locked).to.eq(true);
       });
 
       it("...2nd lending pool in protection pool 1 should be in default state with locked capital", async () => {
@@ -620,3 +734,4 @@ const testDefaultStateManager: Function = (
 };
 
 export { testDefaultStateManager };
+
