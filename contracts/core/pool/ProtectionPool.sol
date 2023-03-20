@@ -1059,21 +1059,26 @@ contract ProtectionPool is
    * @param _sTokenAmount the amount of sToken shares to withdraw
    */
   function _requestWithdrawal(uint256 _sTokenAmount) internal {
-    uint256 _sTokenBalance = balanceOf(msg.sender);
-    if (_sTokenAmount > _sTokenBalance) {
-      revert InsufficientSTokenBalance(msg.sender, _sTokenBalance);
-    }
-
     /// Get current cycle index for this pool
     uint256 _currentCycleIndex = poolCycleManager.getCurrentCycleIndex(
       address(this)
     );
+    
+    /// Verify that user's total withdrawal amount across 3 cycles is <= sToken balance
+    /// total requested withdrawal amount = Withdrawal requested for for n+2, n+1 & n cycles
+    uint256 _totalWithdrawalAmount = _sTokenAmount +  /// n+2 cycle
+      withdrawalCycleDetails[_currentCycleIndex + 1].withdrawalRequests[msg.sender] + 
+      withdrawalCycleDetails[_currentCycleIndex].withdrawalRequests[msg.sender];
+
+    uint256 _sTokenBalance = balanceOf(msg.sender);
+    if (_totalWithdrawalAmount > _sTokenBalance) {
+      revert InsufficientSTokenBalance(msg.sender, _sTokenBalance);
+    }
 
     /// Actual withdrawal is allowed in open period of cycle after next cycle
-    /// For example: if request is made in at some time in cycle 1,
+    /// For example: if request is made at some time in cycle 1,
     /// then withdrawal is allowed in open period of cycle 3
     uint256 _withdrawalCycleIndex = _currentCycleIndex + 2;
-
     WithdrawalCycleDetail storage withdrawalCycle = withdrawalCycleDetails[
       _withdrawalCycleIndex
     ];
@@ -1082,18 +1087,36 @@ contract ProtectionPool is
     uint256 _oldRequestAmount = withdrawalCycle.withdrawalRequests[msg.sender];
     withdrawalCycle.withdrawalRequests[msg.sender] = _sTokenAmount;
 
+    _updateTotalSTokenRequested(
+      withdrawalCycle,
+      _oldRequestAmount,
+      _sTokenAmount
+    );
+
+    emit WithdrawalRequested(msg.sender, _sTokenAmount, _withdrawalCycleIndex);
+  }
+
+  /**
+   * @dev Updates the total requested withdrawal amount for the cycle considering existing requested amount.
+   * @param withdrawalCycle the withdrawal cycle detail
+   * @param _oldRequestAmount the existing requested amount for the cycle for the seller
+   * @param _newRequestAmount the new requested amount for the cycle for the seller
+   */
+  function _updateTotalSTokenRequested(
+    WithdrawalCycleDetail storage withdrawalCycle,
+    uint256 _oldRequestAmount,
+    uint256 _newRequestAmount
+  ) internal {
     unchecked {
       /// Update total requested withdrawal amount for the cycle considering existing requested amount
-      if (_oldRequestAmount > _sTokenAmount) {
+      if (_oldRequestAmount > _newRequestAmount) {
         withdrawalCycle.totalSTokenRequested -= (_oldRequestAmount -
-          _sTokenAmount);
+          _newRequestAmount);
       } else {
-        withdrawalCycle.totalSTokenRequested += (_sTokenAmount -
+        withdrawalCycle.totalSTokenRequested += (_newRequestAmount -
           _oldRequestAmount);
       }
     }
-
-    emit WithdrawalRequested(msg.sender, _sTokenAmount, _withdrawalCycleIndex);
   }
 
   /**
@@ -1110,5 +1133,71 @@ contract ProtectionPool is
       withdrawalCycleDetails[_withdrawalCycleIndex].withdrawalRequests[
         msg.sender
       ];
+  }
+
+  /**
+   * @dev Updates the withdrawal request for the sender based on the token transfer.
+   * @param _from the address from which the tokens are transferred
+   * @param _to the address to which the tokens are transferred
+   * @param _amount the amount of tokens transferred
+   */
+  function _afterTokenTransfer(
+    address _from,
+    address _to,
+    uint256 _amount
+  ) internal virtual override {
+    super._afterTokenTransfer(_from, _to, _amount);
+
+    /// when `from` is zero, `amount` tokens have been minted for `to`, 
+    /// so we don NOT need to update from's withdrawal requests.
+    /// when `to` is zero, `amount` of `from`'s tokens have been burned because of withdrawal,
+    /// and request is already updated in withdraw function,
+    /// so we do NOT need to update from's withdrawal requests here
+    if (_from == address(0) || _to == address(0)) {
+      return;
+    }
+
+    /// starting from current cycle index(n) up to n+2 cycle, 
+    /// update withdrawal requests of the sender to ensure that
+    /// total requested amount across 3 cycles does not exceed the new balance
+    uint256 _currentCycleIndex = poolCycleManager.getCurrentCycleIndex(
+      address(this)
+    );
+    uint256 _lastCycleIndex = _currentCycleIndex + 2;
+
+    /// total requested amount allowed across 3 cycles
+    uint256 _totalWithdrawalAllowed = balanceOf(_from);
+
+    for (uint256 i = _currentCycleIndex; i <= _lastCycleIndex;) {
+      WithdrawalCycleDetail storage withdrawalCycle = withdrawalCycleDetails[
+        i
+      ];
+      uint256 _oldRequestAmount = withdrawalCycle.withdrawalRequests[_from];
+      
+      /// Only update withdrawal request if it exists
+      if (_oldRequestAmount > 0) {
+        uint256 _newRequestAmount = _oldRequestAmount < _totalWithdrawalAllowed 
+          ? _oldRequestAmount 
+          : _totalWithdrawalAllowed;
+        withdrawalCycle.withdrawalRequests[_from] = _newRequestAmount;
+        
+        /// update total requested withdrawal amount for remaining cycles by current cycle's requested amount
+        _totalWithdrawalAllowed -= _newRequestAmount;
+
+        console.log("Withdrawal cycle: %s", i);
+        console.log("totalWithdrawalAllowed: %s, old request amount: %s new request amount: %s", _totalWithdrawalAllowed, _oldRequestAmount, _newRequestAmount);
+
+        /// update current cycle's total requested withdrawal by the difference between old and new request amount
+        _updateTotalSTokenRequested(
+          withdrawalCycle,
+          _oldRequestAmount,
+          _newRequestAmount
+        );
+      }
+
+      unchecked {
+        ++i;
+      }
+    }
   }
 }
