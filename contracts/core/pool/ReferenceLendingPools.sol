@@ -328,10 +328,6 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
       _lendingPoolAddress
     );
 
-    if (_adapter.isLendingPoolExpired(_lendingPoolAddress)) {
-      return LendingPoolStatus.Expired;
-    }
-
     if (
       _adapter.isLendingPoolLateWithinGracePeriod(
         _lendingPoolAddress,
@@ -343,6 +339,10 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
 
     if (_adapter.isLendingPoolLate(_lendingPoolAddress)) {
       return LendingPoolStatus.Late;
+    }
+
+    if (_adapter.isLendingPoolExpired(_lendingPoolAddress)) {
+      return LendingPoolStatus.Expired;
     }
 
     return LendingPoolStatus.Active;
