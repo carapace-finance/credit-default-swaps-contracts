@@ -155,15 +155,12 @@ contract GoldfinchAdapter is UUPSUpgradeableBase, ILendingProtocolAdapter {
     address _lender,
     uint256 _nftLpTokenId
   ) public view override returns (uint256 _principalRemaining) {
-    IPoolTokens _poolTokens = _getPoolTokens();
+    IPoolTokens.TokenInfo memory _tokenInfo = _getPoolTokens()
+      .getTokenInfo(_nftLpTokenId);
 
-    /// If lender owns the NFT, then calculate the remaining principal
+    /// If token exists and lender owns the NFT, then calculate the remaining principal
     /// otherwise, the remaining principal is zero
-    if (_poolTokens.ownerOf(_nftLpTokenId) == _lender) {
-      IPoolTokens.TokenInfo memory _tokenInfo = _poolTokens.getTokenInfo(
-        _nftLpTokenId
-      );
-
+    if (_tokenInfo.pool != address(0) && _isOwnerOfPoolToken(_lender, _nftLpTokenId)) {
       /// If the token is for the specified lending pool and is a junior tranche, then calculate the remaining principal
       /// otherwise, the remaining principal is zero
       /// Only junior tranche is allowed to have protection coverage
@@ -305,5 +302,26 @@ contract GoldfinchAdapter is UUPSUpgradeableBase, ILendingProtocolAdapter {
 
     uint256 secondsElapsedSinceFullPayment = block.timestamp - _lastFullPaymentTime;
     return _balance > 0 && secondsElapsedSinceFullPayment > (_paymentPeriodInDays * Constants.SECONDS_IN_DAY_UINT);
+  }
+
+  /**
+   * @dev Checks whether the specified NFT LP token id is owned by the given owner
+   * @param _owner address of the owner
+   * @param _nftLpTokenId the NFT LP token id
+   */
+  function _isOwnerOfPoolToken(address _owner, uint256 _nftLpTokenId)
+    internal
+    view
+    returns (bool)
+  {
+    /// try-catch ownerOf() to avoid reverts, 
+    /// specifically "ERC721: owner query for nonexistent token" for burned or split tokens
+    try IPoolTokens(_getPoolTokens()).ownerOf(_nftLpTokenId) returns (
+      address _tokenOwner
+    ) {
+      return _tokenOwner == _owner;
+    } catch {
+      return false;
+    }
   }
 }
