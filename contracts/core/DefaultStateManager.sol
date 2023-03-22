@@ -165,7 +165,7 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
       protectionPoolStateIndexes[msg.sender]
     ];
 
-    /// Only assess the state if the protection pool is registered
+    /// Only process the claim when function is called by the protection pool
     if (poolState.updatedTimestamp == 0) {
       revert ProtectionPoolNotRegistered(msg.sender);
     }
@@ -192,7 +192,9 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
 
       /// update the last claimed snapshot id for the seller for the given lending pool,
       /// so that the next time the seller claims, the calculation starts from the last claimed snapshot id
-      poolState.lastClaimedSnapshotIds[_lendingPool][_seller] = _snapshotId;
+      if (_snapshotId > 0) {
+        poolState.lastClaimedSnapshotIds[_lendingPool][_seller] = _snapshotId;
+      }
 
       unchecked {
         ++_lendingPoolIndex;
@@ -462,10 +464,10 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
       uint256 _latestClaimedSnapshotId
     )
   {
-    /// Retrieve the last claimed snapshot id for the seller from storage
-    uint256 _lastClaimedSnapshotId = poolState.lastClaimedSnapshotIds[
-      _lendingPool
-    ][_seller];
+    /// Start with the last claimed snapshot id for the seller from storage
+    _latestClaimedSnapshotId = poolState.lastClaimedSnapshotIds[_lendingPool][
+      _seller
+    ];
 
     /// Retrieve the locked capital instances for the given lending pool
     LockedCapital[] storage lockedCapitals = poolState.lockedCapitals[
@@ -485,7 +487,7 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
       );
 
       /// Verify that the seller does not claim the same snapshot twice
-      if (!lockedCapital.locked && _snapshotId > _lastClaimedSnapshotId) {
+      if (!lockedCapital.locked && _snapshotId > _latestClaimedSnapshotId) {
         ERC20SnapshotUpgradeable _poolSToken = ERC20SnapshotUpgradeable(
           address(poolState.protectionPool)
         );

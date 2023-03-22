@@ -2167,10 +2167,12 @@ const testProtectionPool: Function = (
           expect(await claimAndVerifyUnlockedCapital(seller, true)).to.be.gt(0);
         });
 
-        it("...seller should  NOT be able to claim again", async () => {
-          expect(await claimAndVerifyUnlockedCapital(seller, false)).to.be.eq(
-            0
-          );
+        it("...seller should  NOT be able to repeat claim again", async () => {
+          for (let i = 0; i < 10; i++) {
+            expect(await claimAndVerifyUnlockedCapital(seller, false)).to.be.eq(
+              0
+            );
+          }
         });
 
         it("...owner should be  able to claim his share of unlocked capital from pool 1", async () => {
@@ -2178,7 +2180,11 @@ const testProtectionPool: Function = (
         });
 
         it("...owner should  NOT be able to claim again", async () => {
-          expect(await claimAndVerifyUnlockedCapital(owner, false)).to.be.eq(0);
+          for (let i = 0; i < 8; i++) {
+            expect(await claimAndVerifyUnlockedCapital(owner, false)).to.be.eq(
+              0
+            );
+          }
         });
 
         it("...account 4 should be  able to claim his share of unlocked capital from pool 1", async () => {
@@ -2188,9 +2194,11 @@ const testProtectionPool: Function = (
         });
 
         it("...account 4 should  NOT be able to claim again", async () => {
-          expect(await claimAndVerifyUnlockedCapital(account4, false)).to.be.eq(
-            0
-          );
+          for (let i = 0; i < 5; i++) {
+            expect(
+              await claimAndVerifyUnlockedCapital(account4, false)
+            ).to.be.eq(0);
+          }
         });
 
         it("...has correct total underlying amount", async () => {

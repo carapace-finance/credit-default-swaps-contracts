@@ -4,8 +4,8 @@ pragma solidity 0.8.17;
 /// @notice Represents various states of a pool cycle.
 enum ProtectionPoolCycleState {
   None, // The cycle state for unregistered pools.
-  Open, // The cycle is open for deposit & withdraw
-  Locked // The cycle is in progress & locked for deposit & withdraw
+  Open, // The cycle is opened for both deposit & withdraw
+  Locked // The cycle is in progress & locked for withdraw but opened for deposit
 }
 
 /// @notice A struct to store a protection pool cycle related parameters.
