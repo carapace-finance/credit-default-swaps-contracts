@@ -134,6 +134,7 @@ abstract contract IProtectionPool {
   error ProtectionPoolInOpenToBuyersPhase();
   error NoExpiredProtectionToRenew();
   error CanNotRenewProtectionAfterGracePeriod();
+  error CanNotRenewProtectionWithHigherRenewalAmount();
   error PremiumExceedsMaxPremiumAmount(
     uint256 premiumAmount,
     uint256 maxPremiumAmount
