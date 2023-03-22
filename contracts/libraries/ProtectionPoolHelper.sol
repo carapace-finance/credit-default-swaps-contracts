@@ -54,9 +54,7 @@ library ProtectionPoolHelper {
       _protectionPool,
       _protectionStartTimestamp,
       _protectionPurchaseParams.protectionDurationInSeconds,
-      _isRenewal
-        ? Constants.SECONDS_IN_DAY_UINT
-        : poolInfo.params.minProtectionDurationInSeconds
+      poolInfo.params.minProtectionDurationInSeconds
     );
 
     /// Verify that the lending pool is active
