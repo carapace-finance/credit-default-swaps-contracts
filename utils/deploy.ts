@@ -1,4 +1,4 @@
-import { ContractFactory, Signer, Contract } from "ethers";
+import { ContractFactory, Signer, Contract, BigNumber } from "ethers";
 import { ethers, upgrades } from "hardhat";
 import { ERC20Upgradeable } from "../typechain-types/@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable";
 import { USDC_ADDRESS } from "../test/utils/constants";
@@ -14,6 +14,7 @@ import { RiskFactorCalculator } from "../typechain-types/contracts/libraries/Ris
 import { GoldfinchAdapter } from "../typechain-types/contracts/adapters/GoldfinchAdapter";
 import { DefaultStateManager } from "../typechain-types/contracts/core/DefaultStateManager";
 import { MockUsdc } from "../typechain-types/contracts/test/MockUsdc";
+import { LATE_PAYMENT_GRACE_PERIOD_IN_DAYS } from "../scripts/local-mainnet/data";
 
 export interface DeployContractsResult {
   success: boolean;
@@ -75,6 +76,7 @@ const deployContracts: Function = async (
   _lendingPools: string[],
   _lendingPoolProtocols: number[],
   _lendingPoolPurchaseLimitsInDays: number[],
+  _latePaymentGracePeriodInDays: BigNumber = BigNumber.from(LATE_PAYMENT_GRACE_PERIOD_IN_DAYS),
   _useMock: boolean = false
 ): Promise<DeployContractsResult> => {
   try {
@@ -257,7 +259,8 @@ const deployContracts: Function = async (
       _lendingPools,
       _lendingPoolProtocols,
       _lendingPoolPurchaseLimitsInDays,
-      cpContractFactoryInstance.address
+      cpContractFactoryInstance.address,
+      _latePaymentGracePeriodInDays
     );
     referenceLendingPoolsInstance =
       await getLatestReferenceLendingPoolsInstance(cpContractFactoryInstance);

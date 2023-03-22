@@ -75,13 +75,16 @@ abstract contract IReferenceLendingPools {
    * @param _protectionPurchaseLimitsInDays the corresponding protection purchase limits(in days) of the lending pools,
    * which will be added to the basket
    * @param _lendingProtocolAdapterFactory the address of the contract which implements interface {LendingProtocolAdapterFactory}
+   * @param _latePaymentGracePeriodInDays the grace period in days after which a lending pool will be considered late for payment in
+   * unscaled value, i.e. 1 day = 1
    */
   function initialize(
     address _owner,
     address[] calldata _lendingPools,
     LendingProtocol[] calldata _lendingPoolProtocols,
     uint256[] calldata _protectionPurchaseLimitsInDays,
-    address _lendingProtocolAdapterFactory
+    address _lendingProtocolAdapterFactory,
+    uint256 _latePaymentGracePeriodInDays
   ) external virtual;
 
   /**

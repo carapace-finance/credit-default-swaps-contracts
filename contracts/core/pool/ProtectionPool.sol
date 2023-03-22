@@ -141,7 +141,8 @@ contract ProtectionPool is
     __UUPSUpgradeableBase_init();
     __ReentrancyGuard_init();
     __sToken_init(_name, _symbol);
-
+    __AccessControl_init();
+    
     /// set the storage variables
     poolInfo = _poolInfo;
     premiumCalculator = _premiumCalculator;

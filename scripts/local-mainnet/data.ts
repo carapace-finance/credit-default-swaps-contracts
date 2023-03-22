@@ -70,3 +70,5 @@ export const PROTECTION_POOL_PARAMS: ProtectionPoolParamsStruct = {
   minProtectionDurationInSeconds: getDaysInSeconds(10),
   protectionRenewalGracePeriodInSeconds: getDaysInSeconds(14) // 2 weeks
 };
+
+export const LATE_PAYMENT_GRACE_PERIOD_IN_DAYS = 7;

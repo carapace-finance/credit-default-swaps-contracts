@@ -16,6 +16,7 @@ import { ethers, network, upgrades } from "hardhat";
 import { BigNumber } from "@ethersproject/bignumber";
 import { ReferenceLendingPoolsV2 } from "../../typechain-types/contracts/test/ReferenceLendingPoolsV2";
 import { payToLendingPoolAddress } from "../utils/goldfinch";
+import { LATE_PAYMENT_GRACE_PERIOD_IN_DAYS } from "../../scripts/local-mainnet/data";
 
 const LENDING_POOL_3 = "0x89d7c618a4eef3065da8ad684859a547548e6169";
 const BUYER1 = "0x12c2cfda0a51fe2a68e443868bcbf3d6f6e2dda2";
@@ -75,7 +76,8 @@ const testReferenceLendingPools: Function = (
               [],
               [],
               [],
-              ZERO_ADDRESS
+              ZERO_ADDRESS,
+              1
             )
           ).to.be.revertedWith(
             "Initializable: contract is already initialized"
@@ -136,7 +138,8 @@ const testReferenceLendingPools: Function = (
               [],
               [],
               [],
-              ZERO_ADDRESS
+              ZERO_ADDRESS,
+              1
             )
           ).to.be.revertedWith(
             "Initializable: contract is already initialized"
@@ -167,11 +170,44 @@ const testReferenceLendingPools: Function = (
               [],
               [],
               [],
-              ZERO_ADDRESS
+              ZERO_ADDRESS,
+              1
             )
           )
             .emit(referenceLendingPoolsInstance, "OwnershipTransferred")
             .withArgs(_implementationDeployerAddress, _deployerAddress);
+        });
+
+        it("...should have late payment grace period set", async () => { 
+          expect(await referenceLendingPoolsInstance.latePaymentGracePeriodInDays()).to.be.eq(LATE_PAYMENT_GRACE_PERIOD_IN_DAYS);
+        });
+      });
+
+      describe("updateLatePaymentGracePeriodInDays", async () => {
+        const _newLatePaymentGracePeriodInDays = BigNumber.from(11);
+
+        it("...should revert when not called by owner", async () => {
+          await expect(
+            referenceLendingPoolsInstance
+              .connect(account1)
+              .updateLatePaymentGracePeriodInDays(
+                _newLatePaymentGracePeriodInDays
+              )
+          ).to.be.revertedWith("Ownable: caller is not the owner");
+        });
+
+        it("...should be updatable when called by owner", async () => {
+          await referenceLendingPoolsInstance
+            .updateLatePaymentGracePeriodInDays(_newLatePaymentGracePeriodInDays);
+
+          expect(
+            await referenceLendingPoolsInstance.latePaymentGracePeriodInDays()
+          ).to.be.eq(_newLatePaymentGracePeriodInDays);
+
+          // set it back to deployed value
+          await referenceLendingPoolsInstance.updateLatePaymentGracePeriodInDays(
+            LATE_PAYMENT_GRACE_PERIOD_IN_DAYS
+          );
         });
       });
 
@@ -617,7 +653,7 @@ const testReferenceLendingPools: Function = (
 
       it("...should return LateWithinGracePeriod when payment is late but within grace period", async () => {
         // Move time forward by 1 second
-        await moveForwardTime(BigNumber.from(1));
+        await moveForwardTime(BigNumber.from(LATE_PAYMENT_GRACE_PERIOD_IN_DAYS));
 
         // Lending pool is late but within grace period, so should return LateWithinGracePeriod status
         expect(await getLendingPoolStatus(_lendingPool)).to.eq(2); // LateWithinGracePeriod
@@ -625,7 +661,7 @@ const testReferenceLendingPools: Function = (
 
       it("...should return false when payment is late and after grace period", async () => {
         // Move time forward by one more day
-        await moveForwardTime(getDaysInSeconds(1));
+        await moveForwardTime(getDaysInSeconds(LATE_PAYMENT_GRACE_PERIOD_IN_DAYS));
 
         // Lending pool is late and after grace period, so should return Late status
         // Total time elapsed since last payment = 30 days + 1 day + 1 second

@@ -18,7 +18,6 @@ library Constants {
   uint256 public constant SECONDS_IN_DAY_UINT = 60 * 60 * 24;
 
   address public constant ZERO_ADDRESS = address(0);
-  uint256 public constant LATE_PAYMENT_GRACE_PERIOD_IN_DAYS = 1;
 
   bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 }

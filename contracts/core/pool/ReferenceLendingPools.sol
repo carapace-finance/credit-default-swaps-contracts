@@ -25,6 +25,9 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
    * @dev DO NOT CHANGE THE ORDER OF THESE VARIABLES ONCE DEPLOYED
    */
 
+  /// @notice the grace period in days after which a lending pool will be considered late for payment in unscaled value, i.e. 1 day = 1
+  uint256 public latePaymentGracePeriodInDays;
+
   /// @notice the lending protocol adapter factory
   ILendingProtocolAdapterFactory private lendingProtocolAdapterFactory;
 
@@ -55,7 +58,8 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
     address[] calldata _lendingPools,
     LendingProtocol[] calldata _lendingPoolProtocols,
     uint256[] calldata _protectionPurchaseLimitsInDays,
-    address _lendingProtocolAdapterFactory
+    address _lendingProtocolAdapterFactory,
+    uint256 _latePaymentGracePeriodInDays
   ) external override initializer {
     if (
       _lendingPools.length != _lendingPoolProtocols.length ||
@@ -75,6 +79,7 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
     /// Initialize the UUPSUpgradeableBase
     __UUPSUpgradeableBase_init();
 
+    latePaymentGracePeriodInDays = _latePaymentGracePeriodInDays;
     lendingProtocolAdapterFactory = ILendingProtocolAdapterFactory(
       _lendingProtocolAdapterFactory
     );
@@ -119,6 +124,17 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
       _lendingPoolProtocol,
       _protectionPurchaseLimitInDays
     );
+  }
+
+  /**
+   * Updates the late payment grace period in days.
+   * @dev This function can only be called by the owner of this contract.
+   * @param _latePaymentGracePeriodInDays the new late payment grace period in days
+   */
+  function updateLatePaymentGracePeriodInDays(
+    uint256 _latePaymentGracePeriodInDays
+  ) external onlyOwner {
+    latePaymentGracePeriodInDays = _latePaymentGracePeriodInDays;
   }
 
   /** view functions */
@@ -331,7 +347,7 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
     if (
       _adapter.isLendingPoolLateWithinGracePeriod(
         _lendingPoolAddress,
-        Constants.LATE_PAYMENT_GRACE_PERIOD_IN_DAYS
+        latePaymentGracePeriodInDays
       )
     ) {
       return LendingPoolStatus.LateWithinGracePeriod;
