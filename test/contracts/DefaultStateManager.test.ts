@@ -240,8 +240,8 @@ const testDefaultStateManager: Function = (
 
       before(async () => {
         // State of the pool 1 after pool tests
-        // 70K protection in lending pool 3: 0xb26B42Dd5771689D0a7faEea32825ff9710b9c11
-        // 50K protection in lending pool 3: 0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf
+        // 70K protection in lending pool 2: 0xd09a57127bc40d680be7cb061c2a6629fe71abef
+        // 50K protection in lending pool 3: 0x89d7c618a4eef3065da8ad684859a547548e6169
         // total sToken underlying = 100,200
         // total protection: 120,000
         const [_totalSTokenUnderlying, _totalProtection] =
@@ -327,10 +327,14 @@ const testDefaultStateManager: Function = (
         // Move time forward by LATE_PAYMENT_GRACE_PERIOD_IN_DAYS day + 1 second last payment timestamp
         await moveForwardTimeByDays(LATE_PAYMENT_GRACE_PERIOD_IN_DAYS);
         for (let i = 0; i < 2; i++) {
+          console.log("assessing lending pool status: %s", lendingPools[i]);
+
           await defaultStateManager.assessLendingPoolStatus(
             pool1,
             lendingPools[i]
           );
+
+          console.log("assessed lending pool status: %s", lendingPools[i]);
           // both lending pools should move from LateWithinGracePeriod to Late state
           expect(
             await defaultStateManager.getLendingPoolStatus(

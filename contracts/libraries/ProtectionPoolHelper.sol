@@ -285,8 +285,6 @@ library ProtectionPoolHelper {
     LendingPoolDetail storage lendingPoolDetail,
     uint256 _protectionIndex
   ) public {
-    console.log("Protection expired for amt: %s", protectionInfo.purchaseParams.protectionAmount);
-
     /// Update protection info to mark it as expired
     protectionInfo.expired = true;
 
@@ -311,6 +309,8 @@ library ProtectionPoolHelper {
     lendingPoolDetail.totalProtection -= protectionInfo
       .purchaseParams
       .protectionAmount;
+
+    console.log("Protection(%s) expired for amt: %s", purchaseParams.nftLpTokenId, protectionInfo.purchaseParams.protectionAmount);
   }
 
   /**
