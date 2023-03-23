@@ -1746,7 +1746,9 @@ const testProtectionPool: Function = (
             "0xBB34666407e47f87a44E4540ee765909506CB105",
             _expectedPremiumAmt
           );
-         
+          
+          await payToLendingPoolAddress(_lendingPool2, "300000", USDC);
+
           await protectionPool.connect(_protectionBuyer).buyProtection(
             {
               lendingPoolAddress: _lendingPool2,

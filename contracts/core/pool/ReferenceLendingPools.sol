@@ -267,6 +267,16 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
       );
   }
 
+  /// @inheritdoc IReferenceLendingPools
+  function getLendingPoolStatus(address _lendingPoolAddress)
+    external
+    view
+    override
+    returns (LendingPoolStatus)
+  {
+    return _getLendingPoolStatus(_lendingPoolAddress);
+  }
+
   /** internal functions */
 
   /**

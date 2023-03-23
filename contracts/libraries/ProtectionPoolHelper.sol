@@ -410,8 +410,8 @@ library ProtectionPoolHelper {
     IDefaultStateManager defaultStateManager,
     address _protectionPoolAddress,
     address _lendingPoolAddress
-  ) internal view {
-    LendingPoolStatus poolStatus = defaultStateManager.getLendingPoolStatus(
+  ) internal {
+    LendingPoolStatus poolStatus = defaultStateManager.assessLendingPoolStatus(
       _protectionPoolAddress,
       _lendingPoolAddress
     );
