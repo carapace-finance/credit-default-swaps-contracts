@@ -663,7 +663,7 @@ contract FuzzTestProtectionPool is Test {
     vm.mockCall(
       address(defaultStateManager),
       abi.encodeWithSelector(
-        IDefaultStateManager.getLendingPoolStatus.selector,
+        IDefaultStateManager.assessLendingPoolStatus.selector,
         address(protectionPool),
         _lendingPoolAddress
       ),
