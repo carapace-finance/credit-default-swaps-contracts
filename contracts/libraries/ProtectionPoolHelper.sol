@@ -189,18 +189,16 @@ library ProtectionPoolHelper {
   }
 
   /**
-   * @dev Accrues premium for given loan protection from last premium accrual to the latest payment timestamp.
+   * @dev Accrues premium for given loan protection from last premium accrual to the current timestamp.
    * @param protectionInfo The loan protection to accrue premium for.
    * @param _lastPremiumAccrualTimestamp The timestamp of last premium accrual.
-   * @param _latestPaymentTimestamp The timestamp of latest payment made to the underlying lending pool.
    * @return _accruedPremiumInUnderlying The premium accrued for the protection.
    * @return _protectionExpired Whether the loan protection has expired or not.
    */
   function verifyAndAccruePremium(
     ProtectionPoolInfo storage poolInfo,
     ProtectionInfo storage protectionInfo,
-    uint256 _lastPremiumAccrualTimestamp,
-    uint256 _latestPaymentTimestamp
+    uint256 _lastPremiumAccrualTimestamp
   )
     external
     view
@@ -208,60 +206,44 @@ library ProtectionPoolHelper {
   {
     uint256 _startTimestamp = protectionInfo.startTimestamp;
 
-    /// This means no payment has been made after the protection is bought or protection starts in the future.
-    /// so no premium needs to be accrued.
-    if (
-      _latestPaymentTimestamp < _startTimestamp ||
-      _startTimestamp > block.timestamp
-    ) {
-      return (0, false);
-    }
-
     /// Calculate the protection expiration timestamp and
-    /// Check if the protection is expired or not.
+    /// Check if the protection is expired or not before accrual premium logic
     uint256 _expirationTimestamp = protectionInfo.startTimestamp +
       protectionInfo.purchaseParams.protectionDurationInSeconds;
     _protectionExpired = block.timestamp > _expirationTimestamp;
 
     /// Only accrue premium if the protection is expired
-    /// or latest payment is made after the protection start & last premium accrual
+    /// or current timestamp is after last premium accrual (once per block)
     if (
       _protectionExpired ||
-      (_latestPaymentTimestamp > _startTimestamp &&
-        _latestPaymentTimestamp > _lastPremiumAccrualTimestamp)
+      block.timestamp > _lastPremiumAccrualTimestamp
     ) {
       /**
-       * <-Protection Bought(second: 0) --- last accrual --- now(latestPaymentTimestamp) --- Expiration->
+       * <-Protection Bought(second: 0) --- last accrual --- now --- Expiration->
        * The time line starts when protection is bought and ends when protection is expired.
        * secondsUntilLastPremiumAccrual is the second elapsed since the last accrual timestamp.
-       * secondsUntilLatestPayment is the second elapsed until latest payment is made.
+       * _secondsUntilNow is the second elapsed until now after the protection is bought.
        */
 
       // When premium is accrued for the first time, the _secondsUntilLastPremiumAccrual is 0.
       uint256 _secondsUntilLastPremiumAccrual;
       if (_lastPremiumAccrualTimestamp > _startTimestamp) {
-        _secondsUntilLastPremiumAccrual =
-          _lastPremiumAccrualTimestamp -
-          _startTimestamp;
+        _secondsUntilLastPremiumAccrual = _lastPremiumAccrualTimestamp - _startTimestamp;
       }
 
-      /// if loan protection is expired, then accrue premium till expiration and mark it for removal
-      uint256 _secondsUntilLatestPayment;
+      /// if loan protection is expired, then accrue premium till expiration timestamp.
+      uint256 _secondsUntilNow;
       if (_protectionExpired) {
-        _secondsUntilLatestPayment = _expirationTimestamp - _startTimestamp;
-        console.log(
-          "Protection expired for amt: %s",
-          protectionInfo.purchaseParams.protectionAmount
-        );
+        _secondsUntilNow = _expirationTimestamp - _startTimestamp;
       } else {
-        _secondsUntilLatestPayment = _latestPaymentTimestamp - _startTimestamp;
+        _secondsUntilNow = block.timestamp - _startTimestamp;
       }
 
       /// Calculate the accrued premium amount scaled to 18 decimals
       uint256 _accruedPremiumIn18Decimals = AccruedPremiumCalculator
         .calculateAccruedPremium(
           _secondsUntilLastPremiumAccrual,
-          _secondsUntilLatestPayment,
+          _secondsUntilNow,
           protectionInfo.K,
           protectionInfo.lambda
         );
@@ -269,7 +251,7 @@ library ProtectionPoolHelper {
       console.log(
         "accruedPremium from second %s to %s: ",
         _secondsUntilLastPremiumAccrual,
-        _secondsUntilLatestPayment,
+        _secondsUntilNow,
         _accruedPremiumIn18Decimals
       );
 
@@ -294,6 +276,8 @@ library ProtectionPoolHelper {
     LendingPoolDetail storage lendingPoolDetail,
     uint256 _protectionIndex
   ) public {
+    console.log("Protection expired for amt: %s", protectionInfo.purchaseParams.protectionAmount);
+    
     /// Update protection info to mark it as expired
     protectionInfo.expired = true;
 
