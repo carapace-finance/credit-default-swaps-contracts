@@ -79,9 +79,6 @@ contract ProtectionPool is
    */
   uint256 private totalSTokenUnderlying;
 
-  /// @notice The timestamp of the last premium accrual
-  uint256 private lastPremiumAccrualTimestamp;
-
   /// @notice The array to track all protections bought from this pool
   /// @dev This array has dummy element at index 0 to validate the index of the protection
   ProtectionInfo[] private protectionInfos;
@@ -614,7 +611,8 @@ contract ProtectionPool is
     override
     returns (
       uint256 _totalPremium,
-      uint256 _totalProtection
+      uint256 _totalProtection,
+      uint256 _lastPremiumAccrualTimestamp
     )
   {
     LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
@@ -622,6 +620,8 @@ contract ProtectionPool is
     ];
     _totalPremium = lendingPoolDetail.totalPremium;
     _totalProtection = lendingPoolDetail.totalProtection;
+    _lastPremiumAccrualTimestamp = lendingPoolDetail
+      .lastPremiumAccrualTimestamp;
   }
 
   /// @inheritdoc IProtectionPool
@@ -716,15 +716,13 @@ contract ProtectionPool is
       uint256 _totalSTokenUnderlying,
       uint256 _totalProtection,
       uint256 _totalPremium,
-      uint256 _totalPremiumAccrued,
-      uint256 _lastPremiumAccrualTimestamp
+      uint256 _totalPremiumAccrued
     )
   {
     _totalSTokenUnderlying = totalSTokenUnderlying;
     _totalProtection = totalProtection;
     _totalPremium = totalPremium;
     _totalPremiumAccrued = totalPremiumAccrued;
-    _lastPremiumAccrualTimestamp = lastPremiumAccrualTimestamp;
   }
 
   /// @inheritdoc IProtectionPool
@@ -923,10 +921,6 @@ contract ProtectionPool is
     uint256 _totalPremiumAccrued;
     uint256 _totalProtectionRemoved;
 
-    /// Cache the last premium accrual timestamp from the storage
-    uint256 _lastPremiumAccrualTimestamp = lastPremiumAccrualTimestamp;
-    console.log("lastPremiumAccrualTimestamp: %s", _lastPremiumAccrualTimestamp);
-
     /// Iterate all lending pools of this protection pool to check if there is new payment after last premium accrual
     uint256 length = _lendingPools.length;
     for (uint256 _lendingPoolIndex; _lendingPoolIndex < length; ) {
@@ -935,6 +929,10 @@ contract ProtectionPool is
       LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
         _lendingPool
       ];
+
+      /// Cache the last premium accrual timestamp from the storage
+      uint256 _lastPremiumAccrualTimestamp = lendingPoolDetail.lastPremiumAccrualTimestamp;
+      console.log("lastPremiumAccrualTimestamp: %s for lending pool: %s", _lastPremiumAccrualTimestamp, _lendingPool);
 
       /// Iterate all active protections for this lending pool and
       /// accrue premium since last premium accrual timestamp
@@ -948,6 +946,13 @@ contract ProtectionPool is
       _totalPremiumAccrued += _accruedPremiumForLendingPool;
       _totalProtectionRemoved += _totalProtectionRemovedForLendingPool;
 
+      /// Persist the last premium accrual timestamp in the storage,
+      /// only if there was premium accrued
+      if (_accruedPremiumForLendingPool > 0) {
+        lendingPoolDetail.lastPremiumAccrualTimestamp = block.timestamp;
+        emit PremiumAccrued(_lendingPool, _accruedPremiumForLendingPool);
+      }
+
       unchecked {
         ++_lendingPoolIndex;
       }
@@ -957,11 +962,6 @@ contract ProtectionPool is
     if (_totalPremiumAccrued > 0) {
       totalPremiumAccrued += _totalPremiumAccrued;
       totalSTokenUnderlying += _totalPremiumAccrued;
-
-      /// Persist the last premium accrual timestamp in the storage,
-      /// only if there was premium accrued
-      lastPremiumAccrualTimestamp = block.timestamp;
-      emit PremiumAccrued(_totalPremiumAccrued);
     }
 
     /// Reduce the total protection amount of this protection pool

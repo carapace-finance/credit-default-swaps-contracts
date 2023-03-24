@@ -130,6 +130,7 @@ describe("start testing", () => {
         deployer,
         account1,
         account3,
+        operator,
         defaultStateManagerInstance,
         cpContractFactoryInstance,
         protectionPoolInstance,

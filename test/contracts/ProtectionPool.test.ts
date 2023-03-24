@@ -1658,9 +1658,9 @@ const testProtectionPool: Function = (
             .and.to.be.lt(_expectedPremiumUpperBound);
 
           // last accrual timestamp should be updated
-          expect((await protectionPool.getPoolDetails())[4]).to.be.eq(
-            await getLatestBlockTimestamp()
-          );
+          expect(
+            (await protectionPool.getLendingPoolDetail(_lendingPool2))[2]
+          ).to.be.eq(await getLatestBlockTimestamp());
         });
 
         it("...should mark protections 2 & 3 expired", async () => {
@@ -1698,9 +1698,9 @@ const testProtectionPool: Function = (
             .connect(operator)
             .accruePremiumAndExpireProtections([]);
           // last accrual timestamp should be updated
-          expect((await protectionPool.getPoolDetails())[4]).to.be.eq(
-            await getLatestBlockTimestamp()
-          );
+           expect(
+             (await protectionPool.getLendingPoolDetail(_lendingPool1))[2]
+           ).to.be.eq(await getLatestBlockTimestamp());
         });
       });
 
@@ -2591,7 +2591,7 @@ const testProtectionPool: Function = (
               lendingPoolAddress: _lendingPool1,
               nftLpTokenId: 645,
               protectionAmount: parseUSDC("20000"),
-              protectionDurationInSeconds: getDaysInSeconds(13)
+              protectionDurationInSeconds: getDaysInSeconds(11)
             },
             parseUSDC("10000")
           );
@@ -3128,6 +3128,9 @@ const testProtectionPool: Function = (
       expect(await network.provider.send("evm_revert", [snapshotId2])).to.be.eq(
         true
       );
+      
+      // // accrue premium and expire protections
+      await protectionPool.connect(operator).accruePremiumAndExpireProtections([]);
     });
   });
 };
