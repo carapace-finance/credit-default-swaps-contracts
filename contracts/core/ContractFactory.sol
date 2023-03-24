@@ -101,6 +101,7 @@ contract ContractFactory is
    * @notice Creates a new upgradable {IProtectionPool} instance using ERC1967 proxy.
    * @dev Needs to be called by the owner of the factory contract.
    * @dev This function is marked as payable for gas optimization.
+   * @param _operator An address of a protection pool operator.
    * @param _poolImpl An address of a ProtectionPool implementation.
    * @param _poolParameters struct containing pool related parameters.
    * @param _underlyingToken an address of an underlying token
@@ -110,6 +111,7 @@ contract ContractFactory is
    * @param _symbol a symbol of the sToken
    */
   function createProtectionPool(
+    address _operator,
     address _poolImpl,
     ProtectionPoolParams calldata _poolParameters,
     ProtectionPoolCycleParams calldata _poolCycleParams,
@@ -126,6 +128,7 @@ contract ContractFactory is
       abi.encodeWithSelector(
         IProtectionPool(address(0)).initialize.selector,
         _msgSender(),
+        _operator,
         ProtectionPoolInfo({
           params: _poolParameters,
           underlyingToken: _underlyingToken,

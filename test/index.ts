@@ -11,6 +11,7 @@ import { testDefaultStateManager } from "./contracts/DefaultStateManager.test";
 
 import {
   deployer,
+  operator,
   account1,
   account2,
   account3,
@@ -83,6 +84,7 @@ describe("start testing", () => {
     it("run the ContractFactory test", async () => {
       testContractFactory(
         deployer,
+        operator,
         account1,
         cpContractFactoryInstance,
         premiumCalculatorInstance,
@@ -109,6 +111,7 @@ describe("start testing", () => {
     it("run the ProtectionPool test", async () => {
       testProtectionPool(
         deployer,
+        operator,
         account1,
         account2,
         account3,

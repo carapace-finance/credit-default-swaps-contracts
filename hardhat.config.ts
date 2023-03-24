@@ -37,7 +37,8 @@ const config: HardhatUserConfig = {
       gas: "auto", // gasLimit
       gasPrice: 259000000000, // check the latest gas price market in https://www.ethgasstation.info/
       // accounts are set at the end of this file
-      allowUnlimitedContractSize: false
+      // TODO: make this false once ProtectionPool size issue is fixed
+      allowUnlimitedContractSize: true
     },
     localhost: {
       url: "http://0.0.0.0:8545"

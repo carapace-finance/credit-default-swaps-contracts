@@ -195,6 +195,7 @@ abstract contract IProtectionPool {
   /**
    * @notice Initializes the pool contract
    * @param _owner The owner of the pool
+   * @param _operator The operator of the pool who can execute certain functions required for pool operations
    * @param _poolInfo The information about this protection pool.
    * @param _premiumCalculator an address of a premium calculator contract
    * @param _poolCycleManager an address of a protection pool cycle manager contract
@@ -204,6 +205,7 @@ abstract contract IProtectionPool {
    */
   function initialize(
     address _owner,
+    address _operator,
     ProtectionPoolInfo calldata _poolInfo,
     IPremiumCalculator _premiumCalculator,
     IProtectionPoolCycleManager _poolCycleManager,
@@ -288,6 +290,7 @@ abstract contract IProtectionPool {
 
   /**
    * @notice Accrues the premium from all existing protections and updates the total premium accrued.
+   * This function is only callable by the operator.
    * This function accrues premium from the last accrual timestamp to the latest payment timestamp of the underlying lending pool.
    * This function  also marks protections expired when protection duration has expired.
    * @param _lendingPools The lending pools for which premium needs to be accrued and protections need to be marked expired.

@@ -18,6 +18,7 @@ import { MockUsdc } from "../typechain-types/contracts/test/MockUsdc";
 export interface DeployContractsResult {
   success: boolean;
   deployer?: Signer | undefined;
+  operator?: Signer | undefined;
   protectionPoolInstance?: ProtectionPool | undefined;
   cpContractFactoryInstance?: CPContractFactory | undefined;
   protectionPoolCycleManagerInstance?: ProtectionPoolCycleManager | undefined;
@@ -26,6 +27,7 @@ export interface DeployContractsResult {
 }
 
 let deployer: Signer;
+let operator: Signer;
 let account1: Signer;
 let account2: Signer;
 let account3: Signer;
@@ -47,7 +49,7 @@ let protectionPoolHelperInstance: Contract;
 let mockUsdcInstance: ERC20Upgradeable;
 
 (async () => {
-  [deployer, account1, account2, account3, account4] =
+  [deployer, account1, account2, account3, account4, operator] =
     await ethers.getSigners();
   console.log("Deployer address: ", await deployer.getAddress());
 })().catch((err) => {
@@ -292,6 +294,7 @@ const deployContracts: Function = async (
     // Create an instance of the ProtectionPool, which should be upgradable
     // Create a pool using PoolFactory instead of deploying new pool directly to mimic the prod behavior
     await cpContractFactoryInstance.createProtectionPool(
+      await operator.getAddress(),
       protectionPoolImplementation.address,
       _protectionPoolParams,
       _protectionPoolCycleParams,
@@ -309,6 +312,7 @@ const deployContracts: Function = async (
     return {
       success: true,
       deployer,
+      operator,
       protectionPoolInstance,
       protectionPoolCycleManagerInstance,
       defaultStateManagerInstance,
@@ -367,6 +371,7 @@ async function getProtectionPoolContractFactory(
 
 export {
   deployer,
+  operator,
   account1,
   account2,
   account3,

@@ -21,6 +21,8 @@ import {PremiumCalculator} from "../../contracts/core/PremiumCalculator.sol";
 import {ProtectionPoolHelper} from "../../contracts/libraries/ProtectionPoolHelper.sol";
 
 contract FuzzTestProtectionPool is Test {
+  address private constant OPERATOR_ADDRESS = address(0x11);
+
   ERC20Upgradeable private usdc;
   ProtectionPool private protectionPool;
   IPremiumCalculator private premiumCalculator;
@@ -70,6 +72,7 @@ contract FuzzTestProtectionPool is Test {
       abi.encodeWithSelector(
         IProtectionPool(address(0)).initialize.selector,
         address(this),
+        OPERATOR_ADDRESS,
         poolInfo,
         premiumCalculator,
         protectionPoolCycleManager,
@@ -227,18 +230,9 @@ contract FuzzTestProtectionPool is Test {
     skip(_protectionDurationInSeconds + 1);
 
     /// accrue premium and mark protection as expired
-    /// mock referenceLendingPools.getLatestPaymentTimestamp
-    uint256 _lastPremiumAccrualTimestampExpected = block.timestamp + 11;
-    vm.mockCall(
-      address(referenceLendingPools),
-      abi.encodeWithSelector(
-        IReferenceLendingPools(address(0)).getLatestPaymentTimestamp.selector,
-        _lendingPoolAddress
-      ),
-      abi.encode(_lastPremiumAccrualTimestampExpected)
-    );
     address[] memory _lendingPools = new address[](1);
     _lendingPools[0] = _lendingPoolAddress;
+    vm.prank(OPERATOR_ADDRESS);
     protectionPool.accruePremiumAndExpireProtections(_lendingPools);
 
     /// renew protection

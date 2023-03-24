@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.17;
 
+import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {EnumerableSetUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
 import {IERC20MetadataUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 import {SafeERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
@@ -37,7 +38,8 @@ contract ProtectionPool is
   UUPSUpgradeableBase,
   ReentrancyGuardUpgradeable,
   IProtectionPool,
-  SToken
+  SToken,
+  AccessControlUpgradeable
 {
   /*** libraries ***/
   using SafeERC20Upgradeable for IERC20MetadataUpgradeable;
@@ -127,6 +129,7 @@ contract ProtectionPool is
   /// @inheritdoc IProtectionPool
   function initialize(
     address _owner,
+    address _operator,
     ProtectionPoolInfo calldata _poolInfo,
     IPremiumCalculator _premiumCalculator,
     IProtectionPoolCycleManager _poolCycleManager,
@@ -157,6 +160,13 @@ contract ProtectionPool is
 
     /// Add dummy protection info to make index 0 invalid
     protectionInfos.push();
+
+    /// grant owner the default admin role, 
+    /// so that owner can grant & revoke any roles
+    _grantRole(DEFAULT_ADMIN_ROLE, _owner);
+
+    /// grant an operator role to the specified operator address
+    _grantRole(Constants.OPERATOR_ROLE, _operator);
   }
 
   /*** state-changing functions ***/
@@ -282,6 +292,7 @@ contract ProtectionPool is
   function accruePremiumAndExpireProtections(address[] memory _lendingPools)
     external
     override
+    onlyRole(Constants.OPERATOR_ROLE)
   {
     /// When no lending pools are passed, accrue premium for all lending pools
     if (_lendingPools.length == 0) {
