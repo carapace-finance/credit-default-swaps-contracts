@@ -2784,7 +2784,7 @@ const testProtectionPool: Function = (
           ).to.be.revertedWith("ProtectionPurchaseNotAllowed");
         });
 
-        it("...should fail because of PoolLeverageRatioTooLow", async () => {
+        it("...should fail because of ProtectionPoolLeverageRatioTooLow", async () => {
           // lending pool protection purchase limit is 90 days
           await payToLendingPoolAddress(_lendingPool1, "1000000", USDC);
           const _expectedPremiumAmt = parseUSDC("10000");
@@ -2803,7 +2803,7 @@ const testProtectionPool: Function = (
               },
               _expectedPremiumAmt
             )
-          ).to.be.revertedWith("PoolLeverageRatioTooLow");
+          ).to.be.revertedWith("ProtectionPoolLeverageRatioTooLow");
         });
 
         it("...deposit should succeed in open phase after lock/unlock", async () => {

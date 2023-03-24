@@ -72,7 +72,6 @@ contract FuzzTestProtectionPool is Test {
       abi.encodeWithSelector(
         IProtectionPool(address(0)).initialize.selector,
         address(this),
-        OPERATOR_ADDRESS,
         poolInfo,
         premiumCalculator,
         protectionPoolCycleManager,
@@ -229,12 +228,23 @@ contract FuzzTestProtectionPool is Test {
     /// advance time
     skip(_protectionDurationInSeconds + 1);
 
+    /// mock lending status: defaultStateManager.isOperator,
+    /// which is required by accruePremiumAndExpireProtections
+    vm.mockCall(
+      address(defaultStateManager),
+      abi.encodeWithSelector(
+        IDefaultStateManager.isOperator.selector,
+        address(OPERATOR_ADDRESS)
+      ),
+      abi.encode(true)
+    );
+
     /// accrue premium and mark protection as expired
     address[] memory _lendingPools = new address[](1);
     _lendingPools[0] = _lendingPoolAddress;
     vm.prank(OPERATOR_ADDRESS);
     protectionPool.accruePremiumAndExpireProtections(_lendingPools);
-
+  
     /// renew protection
     vm.mockCall(
       address(protectionPoolCycleManager),
@@ -659,7 +669,7 @@ contract FuzzTestProtectionPool is Test {
       abi.encode(block.timestamp + 180 days)
     );
 
-    /// mock lending status: defaultStateManager.getLendingPoolStatus
+    /// mock lending status: defaultStateManager.assessLendingPoolStatus
     vm.mockCall(
       address(defaultStateManager),
       abi.encodeWithSelector(
