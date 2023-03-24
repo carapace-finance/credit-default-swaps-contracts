@@ -101,7 +101,7 @@ contract ContractFactory is
    * @notice Creates a new upgradable {IProtectionPool} instance using ERC1967 proxy.
    * @dev Needs to be called by the owner of the factory contract.
    * @dev This function is marked as payable for gas optimization.
-   * @param _operator An address of a protection pool operator.
+   * @param _operator An address of a protocol operator.
    * @param _poolImpl An address of a ProtectionPool implementation.
    * @param _poolParameters struct containing pool related parameters.
    * @param _underlyingToken an address of an underlying token

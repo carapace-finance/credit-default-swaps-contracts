@@ -102,12 +102,14 @@ abstract contract IDefaultStateManager {
   /**
    * @notice assess states of all registered protection pools and
    * initiate state changes & related actions as needed.
+   * Only operator can call this function.
    */
   function assessStates() external virtual;
 
   /**
    * @notice assess state of specified registered pools and
    * initiate state changes & related actions as needed.
+   * Only operator can call this function.
    * @notice This function is same as "assessStates" except that it only assesses the specified pools.
    * @param _pools the protection pools to assess
    */
@@ -117,6 +119,7 @@ abstract contract IDefaultStateManager {
    * @notice Assess and returns the current status of the specified lending pool of given protection pool.
    * If the protection pool is not registered or lending pool is not supported by specified protection,
    * then it returns "NotSupported" status.
+   * This function must be called by the protection pool contract.
    * @param _protectionPoolAddress address of the protection pool
    * @param _lendingPoolAddress address of the lending pool
    * @return the status of the lending pool

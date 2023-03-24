@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.17;
 
+import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {ERC20SnapshotUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20SnapshotUpgradeable.sol";
 
 import {UUPSUpgradeableBase} from "../UUPSUpgradeableBase.sol";
@@ -18,7 +19,7 @@ import "hardhat/console.sol";
  * @notice Contract to assess status updates and the resultant state transitions of all lending pools of all protection pools
  * @dev This contract is upgradeable using the UUPS pattern.
  */
-contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
+contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager, AccessControlUpgradeable {
   /////////////////////////////////////////////////////
   ///             STORAGE - START                   ///
   /////////////////////////////////////////////////////
@@ -54,14 +55,23 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
 
   /**
    * @notice Initializes the contract.
+   * @param _operator address of the protocol operator.
    */
-  function initialize() external initializer {
+  function initialize(address _operator) external initializer {
     __UUPSUpgradeableBase_init();
+    __AccessControl_init();
 
     /// create a dummy pool state to reserve index 0.
     /// this is to ensure that protectionPoolStateIndexes[pool] is always greater than 0,
     /// which is used to check if a pool is registered or not.
     protectionPoolStates.push();
+
+    /// grant owner the default admin role, 
+    /// so that owner can grant & revoke any roles
+    _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
+
+    /// grant an operator role to the specified operator address
+    _grantRole(Constants.OPERATOR_ROLE, _operator);
   }
 
   /*** state-changing functions ***/
@@ -116,7 +126,11 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
   }
 
   /// @inheritdoc IDefaultStateManager
-  function assessStates() external override {
+  function assessStates() 
+    external 
+    override 
+    onlyRole(Constants.OPERATOR_ROLE
+  ) {
     /// gas optimizations:
     /// 1. capture length in memory & don't read from storage for each iteration
     /// 2. uncheck incrementing pool index
@@ -134,7 +148,11 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
   }
 
   /// @inheritdoc IDefaultStateManager
-  function assessStateBatch(address[] calldata _pools) external override {
+  function assessStateBatch(address[] calldata _pools) 
+    external 
+    override 
+    onlyRole(Constants.OPERATOR_ROLE
+  ) {
     uint256 _length = _pools.length;
     for (uint256 _poolIndex; _poolIndex < _length; ) {
       /// Get the state of the pool by looking up the index in the mapping from the given pool address
@@ -161,6 +179,8 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
     ProtectionPoolState storage poolState = protectionPoolStates[
       protectionPoolStateIndexes[_protectionPoolAddress]
     ];
+    _onlyProtectionPool(poolState);
+
     LendingPoolStatusDetail storage lendingPoolStatusDetail = poolState
       .lendingPoolStateDetails[_lendingPoolAddress];
     
@@ -194,10 +214,7 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
       protectionPoolStateIndexes[msg.sender]
     ];
 
-    /// Only process the claim when function is called by the protection pool
-    if (poolState.updatedTimestamp == 0) {
-      revert ProtectionPoolNotRegistered(msg.sender);
-    }
+    _onlyProtectionPool(poolState);
 
     /// Get the list of all lending pools for the protection pool
     address[] memory _lendingPools = poolState
@@ -600,5 +617,14 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
         .referenceLendingPools
         .getPaymentPeriodInDays(_lendingPool) * 2) *
       Constants.SECONDS_IN_DAY_UINT;
+  }
+
+  /**
+   * @dev Verifies that caller is the protection pool
+   */
+  function _onlyProtectionPool(ProtectionPoolState storage poolState) internal view {
+    if (poolState.updatedTimestamp == 0) {
+      revert ProtectionPoolNotRegistered(msg.sender);
+    }
   }
 }

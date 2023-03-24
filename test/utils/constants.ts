@@ -1,4 +1,5 @@
 import { BigNumber } from "@ethersproject/bignumber";
+import { ethers } from "hardhat";
 
 const CIRCLE_ACCOUNT_ADDRESS: string =
   "0x55FE002aefF02F77364de339a1292923A15844B8";
@@ -692,3 +693,7 @@ export {
   SECONDS_PER_DAY,
   ZERO_ADDRESS
 };
+
+export const OPERATOR_ROLE = ethers.utils.keccak256(
+  ethers.utils.toUtf8Bytes("OPERATOR_ROLE")
+);

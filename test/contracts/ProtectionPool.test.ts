@@ -26,7 +26,7 @@ import {
 import { ITranchedPool } from "../../typechain-types/contracts/external/goldfinch/ITranchedPool";
 import { payToLendingPool, payToLendingPoolAddress } from "../utils/goldfinch";
 import { DefaultStateManager } from "../../typechain-types/contracts/core/DefaultStateManager";
-import { ZERO_ADDRESS } from "../utils/constants";
+import { ZERO_ADDRESS, OPERATOR_ROLE } from "../utils/constants";
 import { getGoldfinchLender1 } from "../utils/goldfinch";
 import { ProtectionPoolV2 } from "../../typechain-types/contracts/test/ProtectionPoolV2";
 import { impersonateSignerWithEth } from "../utils/utils";
@@ -51,9 +51,6 @@ const testProtectionPool: Function = (
 
     const _newFloor: BigNumber = parseEther("0.4");
     const _newCeiling: BigNumber = parseEther("1.1");
-    const OPERATOR_ROLE = ethers.utils.keccak256(
-      ethers.utils.toUtf8Bytes("OPERATOR_ROLE")
-    );
 
     let deployerAddress: string;
     let operatorAddress: string;
@@ -2334,7 +2331,8 @@ const testProtectionPool: Function = (
 
           // time has moved forward by more than 30 days, so lending pool 2 is late for payment
           // and state should be transitioned to "Late" and capital should be locked
-          await expect(defaultStateManager.assessStates())
+          await expect(defaultStateManager
+            .connect(operator).assessStates())
             .to.emit(defaultStateManager, "PoolStatesAssessed")
             .to.emit(defaultStateManager, "LendingPoolLocked");
         });
@@ -2406,7 +2404,7 @@ const testProtectionPool: Function = (
             await payToLendingPoolAddress(_lendingPool1, "300000", USDC);
 
             if (i === 0) {
-              await defaultStateManager.assessStateBatch([
+              await defaultStateManager.connect(operator).assessStateBatch([
                 protectionPool.address
               ]);
 
@@ -2420,7 +2418,9 @@ const testProtectionPool: Function = (
             } else {
               // after second payment, 2nd lending pool should move from Late to Active state
               await expect(
-                defaultStateManager.assessStateBatch([protectionPool.address])
+                defaultStateManager
+                  .connect(operator)
+                  .assessStateBatch([protectionPool.address])
               )
                 .to.emit(defaultStateManager, "PoolStatesAssessed")
                 .to.emit(defaultStateManager, "LendingPoolUnlocked");
@@ -2882,7 +2882,7 @@ const testProtectionPool: Function = (
             (await referenceLendingPools.getLendingPools()).length
           ).to.be.eq(3);
 
-          await defaultStateManager.assessStates();
+          await defaultStateManager.connect(operator).assessStates();
         });
 
         it("...buyProtection in new pool should succeed", async () => {
@@ -2929,7 +2929,7 @@ const testProtectionPool: Function = (
             lastPaymentTimestamp.add(getDaysInSeconds(30).add(60 * 60)) // late by 1 hour
           );
 
-          await defaultStateManager.assessStates();
+          await defaultStateManager.connect(operator).assessStates();
 
           const _expectedPremiumAmt = parseUSDC("1000");
           _protectionBuyer = await setupProtectionBuyer(
