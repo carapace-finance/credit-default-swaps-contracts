@@ -510,7 +510,7 @@ contract FuzzTestProtectionPool is Test {
     (
       uint256 _totalSTokenUnderlying,
       uint256 _totalProtection,
-      ,,
+      ,
     ) = protectionPool.getPoolDetails();
 
     vm.mockCall(
@@ -565,7 +565,7 @@ contract FuzzTestProtectionPool is Test {
       uint256 _totalSTokenUnderlying,
       uint256 _totalProtection,
       uint256 _totalPremium,
-      uint256 _totalPremiumAccrued,
+      uint256 _totalPremiumAccrued
     ) = protectionPool.getPoolDetails();
 
     assertApproxEqRel(
@@ -602,7 +602,7 @@ contract FuzzTestProtectionPool is Test {
   ) internal {
     (
       uint256 _totalPremiumPerLP,
-      uint256 _totalProtectionPerLP
+      uint256 _totalProtectionPerLP,
     ) = protectionPool.getLendingPoolDetail(_lendingPoolAddress);
 
     assertApproxEqRel(
