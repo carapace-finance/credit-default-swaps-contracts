@@ -144,6 +144,7 @@ abstract contract IProtectionPool {
     uint256 premiumAmount,
     uint256 maxPremiumAmount
   );
+  error CallerIsNotOperator(address msgSender);
 
   /*** events ***/
 
@@ -202,7 +203,6 @@ abstract contract IProtectionPool {
   /**
    * @notice Initializes the pool contract
    * @param _owner The owner of the pool
-   * @param _operator The operator of the pool who can execute certain functions required for pool operations
    * @param _poolInfo The information about this protection pool.
    * @param _premiumCalculator an address of a premium calculator contract
    * @param _poolCycleManager an address of a protection pool cycle manager contract
@@ -212,7 +212,6 @@ abstract contract IProtectionPool {
    */
   function initialize(
     address _owner,
-    address _operator,
     ProtectionPoolInfo calldata _poolInfo,
     IPremiumCalculator _premiumCalculator,
     IProtectionPoolCycleManager _poolCycleManager,

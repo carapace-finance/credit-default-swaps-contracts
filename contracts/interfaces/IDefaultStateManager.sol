@@ -165,4 +165,9 @@ abstract contract IDefaultStateManager {
     address _protectionPoolAddress,
     address _lendingPoolAddress
   ) external view virtual returns (LendingPoolStatus);
+
+  /**
+   * @notice Determines whether the specified account has been granted operator role or not.
+   */
+  function isOperator(address account) external view virtual returns (bool);
 }

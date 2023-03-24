@@ -36,6 +36,8 @@ const testDefaultStateManager: Function = (
   lendingPools: string[]
 ) => {
   describe("DefaultStateManager", () => {
+    let deployerAddress: string;
+    let operatorAddress: string;
     let usdcContract: Contract;
     let lendingPool2: ITranchedPool;
     let pool1: string;
@@ -76,11 +78,14 @@ const testDefaultStateManager: Function = (
     };
 
     before(async () => {
+      deployerAddress = await deployer.getAddress();
+      operatorAddress = await operator.getAddress();
+
       lendingPool2 = (await ethers.getContractAt(
         "ITranchedPool",
         lendingPools[1]
       )) as ITranchedPool;
-
+      
       usdcContract = getUsdcContract(deployer);
       pool1 = poolInstance.address;
       pool2 = (await contractFactory.getProtectionPools())[1];
@@ -140,6 +145,50 @@ const testDefaultStateManager: Function = (
         expect(
           await defaultStateManager.getPoolStateUpdateTimestamp(ZERO_ADDRESS)
         ).to.equal(0);
+      });
+    });
+
+    describe("access control", async () => {
+      it("...should grant DEFAULT_ADMIN role to the owner", async () => {
+        expect(
+          await defaultStateManager.hasRole(
+            await defaultStateManager.DEFAULT_ADMIN_ROLE(),
+            deployerAddress
+          )
+        ).to.be.true;
+      });
+
+      it("...should grant the operator role to the operator", async () => {
+        expect(await defaultStateManager.hasRole(OPERATOR_ROLE, operatorAddress)).to
+          .be.true;
+      });
+
+      it("...owner should be able to revoke the operator role", async () => {
+        await defaultStateManager.revokeRole(
+          OPERATOR_ROLE,
+          await operator.getAddress()
+        );
+        expect(await defaultStateManager.hasRole(OPERATOR_ROLE, operatorAddress)).to
+          .be.false;
+      });
+
+      it("...owner should be able to grant the operator role", async () => {
+        await defaultStateManager.grantRole(
+          OPERATOR_ROLE,
+          await operator.getAddress()
+        );
+        expect(await defaultStateManager.hasRole(OPERATOR_ROLE, operatorAddress)).to
+          .be.true;
+      });
+
+      describe("isOperator", async () => {
+        it("...should return false for non-operator", async () => {
+          expect(await defaultStateManager.isOperator(deployerAddress)).to.be.false;
+        });
+
+        it("...should return true for operator", async () => {
+          expect(await defaultStateManager.isOperator(operatorAddress)).to.be.true;
+        });
       });
     });
 

@@ -55,7 +55,8 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager, Acces
 
   /**
    * @notice Initializes the contract.
-   * @param _operator address of the protocol operator.
+   * @param _operator address of the protocol operator, 
+   * who can execute certain functions required for protocol operations.
    */
   function initialize(address _operator) external initializer {
     __UUPSUpgradeableBase_init();
@@ -326,6 +327,12 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager, Acces
       protectionPoolStates[protectionPoolStateIndexes[_protectionPoolAddress]]
         .lendingPoolStateDetails[_lendingPoolAddress]
         .currentStatus;
+  }
+
+  function isOperator(
+    address account
+  ) external view override returns (bool) {
+    return hasRole(Constants.OPERATOR_ROLE, account);
   }
 
   /** internal functions */

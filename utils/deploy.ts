@@ -298,7 +298,6 @@ const deployContracts: Function = async (
     // Create an instance of the ProtectionPool, which should be upgradable
     // Create a pool using PoolFactory instead of deploying new pool directly to mimic the prod behavior
     await cpContractFactoryInstance.createProtectionPool(
-      await operator.getAddress(),
       protectionPoolImplementation.address,
       _protectionPoolParams,
       _protectionPoolCycleParams,

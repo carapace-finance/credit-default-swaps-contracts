@@ -325,7 +325,6 @@ const testProtectionPool: Function = (
           await expect(
             protectionPoolImplementation.initialize(
               operatorAddress,
-              ZERO_ADDRESS,
               poolInfo,
               ZERO_ADDRESS,
               ZERO_ADDRESS,
@@ -366,7 +365,6 @@ const testProtectionPool: Function = (
         await expect(
           protectionPool.initialize(
             ZERO_ADDRESS,
-            operatorAddress,
             poolInfo,
             ZERO_ADDRESS,
             ZERO_ADDRESS,
@@ -441,39 +439,6 @@ const testProtectionPool: Function = (
 
       it("...getAllProtections should return empty array", async () => {
         expect((await protectionPool.getAllProtections()).length).to.eq(0);
-      });
-
-      it("...should grant DEFAULT_ADMIN role to the owner", async () => {
-        expect(await protectionPool.hasRole(await protectionPool.DEFAULT_ADMIN_ROLE(), deployerAddress)).to.be.true;
-      });
-
-      it("...should grant the operator role to the operator", async () => { 
-        expect(
-          await protectionPool.hasRole(
-            OPERATOR_ROLE,
-            operatorAddress
-          )
-        ).to.be.true;
-      });
-
-      it("...owner should be able to revoke the operator role", async () => { 
-        await protectionPool.revokeRole(OPERATOR_ROLE, await operator.getAddress());
-        expect(
-          await protectionPool.hasRole(
-            OPERATOR_ROLE,
-            operatorAddress
-          )
-        ).to.be.false;
-      });
-
-      it("...owner should be able to grant the operator role", async () => { 
-        await protectionPool.grantRole(OPERATOR_ROLE, await operator.getAddress());
-        expect(
-          await protectionPool.hasRole(
-            OPERATOR_ROLE,
-            operatorAddress
-          )
-        ).to.be.true;
       });
     });
 
@@ -1618,7 +1583,7 @@ const testProtectionPool: Function = (
           await expect(
             protectionPool.connect(seller).accruePremiumAndExpireProtections([])
           ).to.be.revertedWith(
-            `AccessControl: account ${sellerAddress.toLowerCase()} is missing role ${OPERATOR_ROLE}`
+            `CallerIsNotOperator("${sellerAddress}")`
           );
         });
 
