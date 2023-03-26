@@ -314,6 +314,56 @@ library ProtectionPoolHelper {
   }
 
   /**
+   * @notice Calculates the amount to be locked for the given lending pool.
+   */
+  function calculateAmountToBeLocked(
+    ProtectionPoolInfo storage poolInfo,
+    ProtectionInfo[] storage protectionInfos,
+    LendingPoolDetail storage lendingPoolDetail,
+    address _lendingPoolAddress
+  ) external view returns (uint256 _lockedAmount) {
+    /// Get indexes of active protection for a lending pool from the storage
+    EnumerableSetUpgradeable.UintSet
+      storage activeProtectionIndexes = lendingPoolDetail
+        .activeProtectionIndexes;
+
+    /// Iterate all active protections and calculate total locked amount for this lending pool
+    /// 1. calculate remaining principal amount for each loan protection in the lending pool.
+    /// 2. for each loan protection, lockedAmt = min(protectionAmt, remainingPrincipal)
+    /// 3. total locked amount = sum of lockedAmt for all loan protections
+    uint256 _length = activeProtectionIndexes.length();
+    for (uint256 i; i < _length; ) {
+      /// Get protection info from the storage
+      uint256 _protectionIndex = activeProtectionIndexes.at(i);
+      ProtectionInfo storage protectionInfo = protectionInfos[_protectionIndex];
+
+      /// Calculate remaining principal amount for a loan protection in the lending pool
+      uint256 _remainingPrincipal = poolInfo
+        .referenceLendingPools
+        .calculateRemainingPrincipal(
+          _lendingPoolAddress,
+          protectionInfo.buyer,
+          protectionInfo.purchaseParams.nftLpTokenId
+        );
+
+      /// Locked amount is minimum of protection amount and remaining principal
+      uint256 _protectionAmount = protectionInfo
+        .purchaseParams
+        .protectionAmount;
+      uint256 _lockedAmountPerProtection = _protectionAmount <
+        _remainingPrincipal
+        ? _protectionAmount
+        : _remainingPrincipal;
+
+      _lockedAmount += _lockedAmountPerProtection;
+
+      unchecked {
+        ++i;
+      }
+    }
+  }
+
+  /**
    * @notice Scales the given underlying token amount to the amount with 18 decimals.
    * @param _underlyingAmt The amount to scale.
    * @param _underlyingTokenDecimals The number of decimals of the underlying token.

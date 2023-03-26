@@ -2242,6 +2242,8 @@ const testProtectionPool: Function = (
         let _expectedLockedCapital: BigNumber;
         let _totalSTokenUnderlyingBefore: BigNumber;
         let _totalPremiumAccruedBefore: BigNumber;
+        let _totalProtectionBefore: BigNumber;
+        let _poolDetailsAfter: any;
 
         const getLatestLockedCapital = async (_lendingPool: string) => {
           return (
@@ -2283,6 +2285,7 @@ const testProtectionPool: Function = (
           
           const _poolDetailsBefore = await protectionPool.getPoolDetails();
           _totalSTokenUnderlyingBefore = _poolDetailsBefore[0];
+          _totalProtectionBefore = _poolDetailsBefore[1];
           _totalPremiumAccruedBefore = _poolDetailsBefore[3];
           _expectedLockedCapital = parseUSDC("50000");
 
@@ -2296,10 +2299,12 @@ const testProtectionPool: Function = (
 
           // time has moved forward by more than 30 days, so lending pool 2 is late for payment
           // and state should be transitioned to "Late" and capital should be locked
-          await expect(defaultStateManager
-            .connect(operator).assessStates())
+          await expect(defaultStateManager.connect(operator).assessStates())
             .to.emit(defaultStateManager, "PoolStatesAssessed")
-            .to.emit(defaultStateManager, "LendingPoolLocked");
+            .to.emit(defaultStateManager, "LendingPoolLocked")
+            .to.emit(protectionPool, "PremiumAccrued");
+          
+          _poolDetailsAfter = await protectionPool.getPoolDetails();
         });
 
         it("...buyProtection fails when lending pool is late for payment", async () => {
@@ -2334,7 +2339,6 @@ const testProtectionPool: Function = (
         });
 
         it("...should reduce total sToken underlying by locked capital", async () => {
-          const _poolDetailsAfter = await protectionPool.getPoolDetails();
           const _totalPremiumAccruedAfter = _poolDetailsAfter[3];
           const _premiumAccrued = _totalPremiumAccruedAfter.sub(
             _totalPremiumAccruedBefore);
@@ -2344,6 +2348,12 @@ const testProtectionPool: Function = (
               .add(_premiumAccrued)
               .sub(_poolDetailsAfter[0])
           ).to.eq(_expectedLockedCapital);
+        });
+
+        it("...should reduce total protection by locked capital", async () => { 
+          expect(_totalProtectionBefore.sub(_poolDetailsAfter[1])).to.eq(
+            _expectedLockedCapital
+          );
         });
 
         it("...should reduce sToken exchange rate", async () => {

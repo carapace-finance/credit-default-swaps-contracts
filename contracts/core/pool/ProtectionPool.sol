@@ -302,57 +302,24 @@ contract ProtectionPool is
     returns (uint256 _lockedAmount, uint256 _snapshotId)
   {
     /// step 1: accrue premium and expire protections for the specified lending pool
-    address[] memory _lendingPools = new address[](1);
-    _lendingPools[0] = _lendingPoolAddress;
-    _accruePremiumAndExpireProtections(_lendingPools);
+    _accruePremiumExpireProtections(_lendingPoolAddress);
 
     /// step 2: Capture protection pool's current investors by creating a snapshot of the token balance by using ERC20Snapshot in SToken
     _snapshotId = _snapshot();
 
-    /// step 3: calculate total capital to be locked
+    /// step 3: mark the lending pool as  locked
     LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
       _lendingPoolAddress
     ];
+    lendingPoolDetail.locked = true;
 
-    /// Get indexes of active protection for a lending pool from the storage
-    EnumerableSetUpgradeable.UintSet
-      storage activeProtectionIndexes = lendingPoolDetail
-        .activeProtectionIndexes;
-
-    /// Iterate all active protections and calculate total locked amount for this lending pool
-    /// 1. calculate remaining principal amount for each loan protection in the lending pool.
-    /// 2. for each loan protection, lockedAmt = min(protectionAmt, remainingPrincipal)
-    /// 3. total locked amount = sum of lockedAmt for all loan protections
-    uint256 _length = activeProtectionIndexes.length();
-    for (uint256 i; i < _length; ) {
-      /// Get protection info from the storage
-      uint256 _protectionIndex = activeProtectionIndexes.at(i);
-      ProtectionInfo storage protectionInfo = protectionInfos[_protectionIndex];
-
-      /// Calculate remaining principal amount for a loan protection in the lending pool
-      uint256 _remainingPrincipal = poolInfo
-        .referenceLendingPools
-        .calculateRemainingPrincipal(
-          _lendingPoolAddress,
-          protectionInfo.buyer,
-          protectionInfo.purchaseParams.nftLpTokenId
-        );
-
-      /// Locked amount is minimum of protection amount and remaining principal
-      uint256 _protectionAmount = protectionInfo
-        .purchaseParams
-        .protectionAmount;
-      uint256 _lockedAmountPerProtection = _protectionAmount <
-        _remainingPrincipal
-        ? _protectionAmount
-        : _remainingPrincipal;
-
-      _lockedAmount += _lockedAmountPerProtection;
-
-      unchecked {
-        ++i;
-      }
-    }
+    /// step 4: calculate total capital to be locked
+    _lockedAmount = ProtectionPoolHelper.calculateAmountToBeLocked(
+      poolInfo,
+      protectionInfos,
+      lendingPoolDetail,
+      _lendingPoolAddress
+    );
 
     unchecked {
       /// step 3: Update total locked & available capital in storage
@@ -365,6 +332,31 @@ contract ProtectionPool is
         totalSTokenUnderlying -= _lockedAmount;
       }
     }
+
+    /// step 4: reduce the totalProtection amount of the protection pool by the locked amount
+    totalProtection -= _lockedAmount;
+  }
+
+  /// @inheritdoc IProtectionPool
+  function unlockLendingPool(address _lendingPoolAddress)
+    external
+    payable
+    override
+    onlyDefaultStateManager
+    whenNotPaused
+  {
+    /// step 1: accrue premium and expire protections for the specified lending pool
+    _accruePremiumExpireProtections(_lendingPoolAddress);
+
+    /// step 2: mark the lending pool as unlocked
+    LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
+      _lendingPoolAddress
+    ];
+    lendingPoolDetail.locked = false;
+
+    /// step 3: increase totalProtection of the protection pool 
+    /// by the totalProtection amount of the lending pool being unlocked
+    totalProtection += lendingPoolDetail.totalProtection;
   }
 
   /// @inheritdoc IProtectionPool
@@ -604,7 +596,8 @@ contract ProtectionPool is
     returns (
       uint256 _totalPremium,
       uint256 _totalProtection,
-      uint256 _lastPremiumAccrualTimestamp
+      uint256 _lastPremiumAccrualTimestamp,
+      bool _locked
     )
   {
     LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
@@ -614,6 +607,7 @@ contract ProtectionPool is
     _totalProtection = lendingPoolDetail.totalProtection;
     _lastPremiumAccrualTimestamp = lendingPoolDetail
       .lastPremiumAccrualTimestamp;
+    _locked = lendingPoolDetail.locked;
   }
 
   /// @inheritdoc IProtectionPool
@@ -983,6 +977,7 @@ contract ProtectionPool is
     uint256[] memory _protectionIndexes = lendingPoolDetail
       .activeProtectionIndexes
       .values();
+    bool _locked = lendingPoolDetail.locked;
 
     /// Iterate through all active protection indexes for the lending pool
     uint256 _length = _protectionIndexes.length;
@@ -1003,10 +998,15 @@ contract ProtectionPool is
       _accruedPremiumForLendingPool += _accruedPremiumInUnderlying;
 
       if (_expired) {
-        /// Add removed protection amount to the total protection removed
-        _totalProtectionRemoved += protectionInfo
-          .purchaseParams
-          .protectionAmount;
+        /// Add removed protection amount to the total protection removed,
+        /// only if the lending pool is NOT locked.
+        /// totalProtection has already been reduced by the protection amount 
+        /// when the lending pool was locked.
+        if (!_locked) {
+          _totalProtectionRemoved += protectionInfo
+            .purchaseParams
+            .protectionAmount;
+        }
 
         ProtectionPoolHelper.expireProtection(
           protectionBuyerAccounts,
@@ -1014,6 +1014,7 @@ contract ProtectionPool is
           lendingPoolDetail,
           _protectionIndex
         );
+
         emit ProtectionExpired(
           protectionInfo.buyer,
           protectionInfo.purchaseParams.lendingPoolAddress,
@@ -1206,5 +1207,11 @@ contract ProtectionPool is
         ++i;
       }
     }
+  }
+
+  function _accruePremiumExpireProtections(address _lendingPoolAddress) internal {
+    address[] memory _lendingPools = new address[](1);
+    _lendingPools[0] = _lendingPoolAddress;
+    _accruePremiumAndExpireProtections(_lendingPools);
   }
 }
