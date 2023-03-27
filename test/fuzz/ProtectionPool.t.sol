@@ -37,6 +37,8 @@ contract FuzzTestProtectionPool is Test {
   uint256 private minRequiredCapital = 100_000e6; // 100k USDC
   uint256 private leverageRatioFloor = 0.5 ether;
   uint256 private leverageRatioCeiling = 1 ether;
+  uint256 private leverageRatioBuffer = 0.05 ether;
+  uint256 private leverageRatioWithoutProtection = leverageRatioCeiling - leverageRatioBuffer;
 
   function setUp() public {
     /// create mock contracts
@@ -50,7 +52,7 @@ contract FuzzTestProtectionPool is Test {
     ProtectionPoolParams memory poolParameters = ProtectionPoolParams({
       leverageRatioFloor: leverageRatioFloor,
       leverageRatioCeiling: leverageRatioCeiling,
-      leverageRatioBuffer: 0.05 ether,
+      leverageRatioBuffer: leverageRatioBuffer,
       minRequiredCapital: 100_000e6,
       curvature: 0.05 ether,
       minCarapaceRiskPremiumPercent: 0.03 ether,
@@ -64,7 +66,7 @@ contract FuzzTestProtectionPool is Test {
       params: poolParameters,
       underlyingToken: usdc,
       referenceLendingPools: referenceLendingPools,
-      currentPhase: ProtectionPoolPhase.Open
+      currentPhase: ProtectionPoolPhase.OpenToSellers
     });
 
     ERC1967Proxy _protectionPoolProxy = new ERC1967Proxy(
@@ -99,7 +101,7 @@ contract FuzzTestProtectionPool is Test {
 
     /// verification
     assertEq(protectionPool.getUnderlyingBalance(_receiver), _depositAmount);
-    _verifyProtectionPoolState(_depositAmount, 0, 0, 0, 0);
+    _verifyProtectionPoolState(_depositAmount, 0, 0, 0, leverageRatioWithoutProtection);
   }
 
   function testBuyProtection(
@@ -117,7 +119,7 @@ contract FuzzTestProtectionPool is Test {
     /// Check that the protection amount is within the bounds
     _protectionAmount = bound(
       _protectionAmount,
-      100e6, // 100 USDC
+      2 * minRequiredCapital, // at least 100K USDC
       10_000_000e6 // 10M USDC
     );
 
@@ -186,7 +188,7 @@ contract FuzzTestProtectionPool is Test {
     /// Check that the protection amount is within the bounds
     _protectionAmount = bound(
       _protectionAmount,
-      100e6, // 100 USDC
+      2 * minRequiredCapital, // at least 100K USDC
       10_000_000e6 // 10M USDC
     );
 
@@ -320,7 +322,7 @@ contract FuzzTestProtectionPool is Test {
 
     /// deposit verification
     assertEq(protectionPool.getUnderlyingBalance(_receiver), _withdrawalAmount);
-    _verifyProtectionPoolState(_withdrawalAmount, 0, 0, 0, 0);
+    _verifyProtectionPoolState(_withdrawalAmount, 0, 0, 0, leverageRatioWithoutProtection);
 
     /// withdrawal verification
     uint256 _withdrawalCycleIndex = _currentCycleIndex + 2;
@@ -374,7 +376,7 @@ contract FuzzTestProtectionPool is Test {
 
     /// deposit verification
     assertEq(protectionPool.getUnderlyingBalance(_receiver), _withdrawalAmount);
-    _verifyProtectionPoolState(_withdrawalAmount, 0, 0, 0, 0);
+    _verifyProtectionPoolState(_withdrawalAmount, 0, 0, 0, leverageRatioWithoutProtection);
 
     /// withdrawal verification
     uint256 _withdrawalCycleIndex = _currentCycleIndex + 2;
@@ -404,6 +406,17 @@ contract FuzzTestProtectionPool is Test {
     /// Ensure non-zero receiver address
     vm.assume(_receiver != address(0));
 
+    /// mock defaultStateManager.assessStateBatch
+    vm.mockCall(
+      address(defaultStateManager),
+      abi.encodeWithSelector(
+        IDefaultStateManager.assessStateBatch.selector,
+        address(protectionPool),
+        address(0)
+      ),
+      abi.encode()
+    );
+
     /// make deposit
     protectionPool.deposit(_withdrawalAmount, _receiver);
 
@@ -424,7 +437,7 @@ contract FuzzTestProtectionPool is Test {
 
     /// deposit verification
     assertEq(protectionPool.getUnderlyingBalance(_receiver), _withdrawalAmount);
-    _verifyProtectionPoolState(_withdrawalAmount, 0, 0, 0, 0);
+    _verifyProtectionPoolState(_withdrawalAmount, 0, 0, 0, leverageRatioWithoutProtection);
 
     /// mock protectionPoolCycleManager calls: calculateAndSetPoolCycleState to return Open pool cycle state
     vm.mockCall(
@@ -488,7 +501,7 @@ contract FuzzTestProtectionPool is Test {
       "RequestedWithdrawalAmount"
     );
 
-    _verifyProtectionPoolState(_postUnderlyingBalance, 0, 0, 0, 0);
+    _verifyProtectionPoolState(_postUnderlyingBalance, 0, 0, 0, leverageRatioWithoutProtection);
 
     vm.stopPrank();
   }
@@ -612,7 +625,7 @@ contract FuzzTestProtectionPool is Test {
   ) internal {
     (
       uint256 _totalPremiumPerLP,
-      uint256 _totalProtectionPerLP,
+      uint256 _totalProtectionPerLP,,
     ) = protectionPool.getLendingPoolDetail(_lendingPoolAddress);
 
     assertApproxEqRel(
@@ -658,6 +671,15 @@ contract FuzzTestProtectionPool is Test {
         address(protectionPool)
       ),
       abi.encode(0)
+    );
+
+    /// move pool phase, so protection can be bought
+    vm.prank(address(this));
+    protectionPool.movePoolPhase();
+    assertEq(
+      (uint256)(protectionPool.getPoolInfo().currentPhase),
+      1,
+      "Incorrect PoolPhase"
     );
 
     vm.mockCall(
