@@ -70,7 +70,8 @@ library ProtectionPoolHelper {
     _verifyLendingPoolIsActive(
       defaultStateManager,
       _protectionPool,
-      _protectionPurchaseParams.lendingPoolAddress
+      _protectionPurchaseParams.lendingPoolAddress,
+      _isRenewal
     );
 
     if (
@@ -455,11 +456,13 @@ library ProtectionPoolHelper {
    * @param defaultStateManager The default state manager contract.
    * @param _protectionPoolAddress The address of the protection pool.
    * @param _lendingPoolAddress The address of the lending pool.
+   * @param _isRenewal whether the protection is being renewed or not
    */
   function _verifyLendingPoolIsActive(
     IDefaultStateManager defaultStateManager,
     address _protectionPoolAddress,
-    address _lendingPoolAddress
+    address _lendingPoolAddress,
+    bool _isRenewal
   ) internal {
     LendingPoolStatus poolStatus = defaultStateManager.assessLendingPoolStatus(
       _protectionPoolAddress,
@@ -470,10 +473,13 @@ library ProtectionPoolHelper {
       revert IProtectionPool.LendingPoolNotSupported(_lendingPoolAddress);
     }
 
+    /// If the protection is being renewed, then we don't need to check for late payments
     if (
-      poolStatus == LendingPoolStatus.LateWithinGracePeriod ||
-      poolStatus == LendingPoolStatus.Late
+      !_isRenewal &&
+      (poolStatus == LendingPoolStatus.LateWithinGracePeriod ||
+      poolStatus == LendingPoolStatus.Late)
     ) {
+
       revert IProtectionPool.LendingPoolHasLatePayment(_lendingPoolAddress);
     }
 

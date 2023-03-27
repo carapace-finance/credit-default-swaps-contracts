@@ -1858,10 +1858,11 @@ const testProtectionPool: Function = (
           ).to.be.revertedWith("CanNotRenewProtectionWithHigherRenewalAmount");
         });
 
-        it("...should succeed for expired protection within grace period", async () => {
+        it("...should succeed for expired protection within renewal grace period", async () => {
+          const _expectedPremium = parseUSDC("2000");
           await transferAndApproveUsdcToPool(
             _protectionBuyer3,
-            parseUSDC("2000")
+            _expectedPremium
           );
           
           // Day 31: we are in day 1 of pool cycle 2, so next pool cycle's(cycle 3) end is at 90 days
@@ -1875,7 +1876,7 @@ const testProtectionPool: Function = (
               protectionAmount: _newProtectionAmt,
               protectionDurationInSeconds: _newProtectionDurationInSeconds
             },
-            parseUSDC("10000")
+            _expectedPremium
           );
 
           expect(await getActiveProtections()).to.have.lengthOf(4);
@@ -2798,6 +2799,7 @@ const testProtectionPool: Function = (
         });
 
         it("...should fail because of ProtectionPoolLeverageRatioTooLow", async () => {
+          // At day 62(46 + 20): 2nd day of cycle 3
           // lending pool protection purchase limit is 90 days
           await payToLendingPoolAddress(_lendingPool1, "3000000", USDC);
           const _expectedPremiumAmt = parseUSDC("10000");
