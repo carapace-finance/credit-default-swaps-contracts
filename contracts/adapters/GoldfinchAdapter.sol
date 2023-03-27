@@ -286,6 +286,24 @@ contract GoldfinchAdapter is UUPSUpgradeableBase, ILendingProtocolAdapter {
     view
     returns (bool)
   {
-    return _getCreditLine(_lendingPoolAddress).isLate();
+    try _getCreditLine(_lendingPoolAddress).isLate() returns (bool _isLate) {
+      return _isLate;
+    }
+    catch {
+      return _isLendingPoolLateV1(_lendingPoolAddress);
+    }
+  }
+
+  /**
+  * @dev Checks if the tranched pool(lending pool) with older version(v1) of CreditLine contract is late
+  */
+  function _isLendingPoolLateV1(address _lendingPool) internal view returns (bool) {
+    ICreditLine _creditLine = _getCreditLine(_lendingPool);
+    uint256 _lastFullPaymentTime = _creditLine.lastFullPaymentTime();
+    uint256 _balance = _creditLine.balance();
+    uint256 _paymentPeriodInDays = _creditLine.paymentPeriodInDays();
+
+    uint256 secondsElapsedSinceFullPayment = block.timestamp - _lastFullPaymentTime;
+    return _balance > 0 && secondsElapsedSinceFullPayment > (_paymentPeriodInDays * Constants.SECONDS_IN_DAY_UINT);
   }
 }
