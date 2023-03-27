@@ -29,6 +29,7 @@ import { DefaultStateManager } from "../../typechain-types/contracts/core/Defaul
 import { ZERO_ADDRESS } from "../utils/constants";
 import { getGoldfinchLender1 } from "../utils/goldfinch";
 import { ProtectionPoolV2 } from "../../typechain-types/contracts/test/ProtectionPoolV2";
+import { impersonateSignerWithEth } from "../utils/utils";
 
 const testProtectionPool: Function = (
   deployer: Signer,
@@ -241,6 +242,16 @@ const testProtectionPool: Function = (
           .add(currentPoolCycle.params.cycleDuration.mul(2))
           .sub(currentTimestamp)
       );
+    };
+    
+    const setupProtectionBuyer = async (
+      accountAddress: string,
+      usdcAmtToTransfer: BigNumber
+    ): Promise<Signer> => {
+      // Buyer buys protection of 10K USDC, so approve premium to be paid
+      const _protectionBuyer = await impersonateSignerWithEth(accountAddress);
+      await transferAndApproveUsdcToPool(_protectionBuyer, usdcAmtToTransfer);
+      return _protectionBuyer;
     };
 
     before("setup", async () => {
@@ -1646,20 +1657,22 @@ const testProtectionPool: Function = (
 
       describe("buyProtection after deposit", async () => {
         it("...succeeds when total protection is higher than min requirement and leverage ratio higher than floor", async () => {
-          // Buyer 1 buys protection of 10K USDC, so approve premium to be paid
-          await transferAndApproveUsdcToPool(
-            _protectionBuyer1,
-            parseUSDC("500")
+          // Buyer buys protection of 10K USDC, so approve premium to be paid
+          const _expectedPremiumAmt = parseUSDC("500");
+          const _protectionBuyer = await setupProtectionBuyer(
+            "0xBB34666407e47f87a44E4540ee765909506CB105",
+            _expectedPremiumAmt
           );
-          await protectionPool.connect(_protectionBuyer1).buyProtection(
+         
+          await protectionPool.connect(_protectionBuyer).buyProtection(
             {
               lendingPoolAddress: _lendingPool2,
-              // see: https://lark.market/tokenDetail?tokenId=590
-              nftLpTokenId: 590, // this token has 420K principal for buyer 1
+              // see: https://lark.market/tokenDetail?tokenId=606
+              nftLpTokenId: 606, // this token has 10K principal for buyer 1
               protectionAmount: parseUSDC("10000"),
               protectionDurationInSeconds: getDaysInSeconds(15)
             },
-            parseUSDC("10000")
+            _expectedPremiumAmt
           );
 
           expect(await getActiveProtections()).to.have.lengthOf(3);
@@ -2173,15 +2186,20 @@ const testProtectionPool: Function = (
 
         it("...buyProtection fails when lending pool is late for payment", async () => {
           // day 42: time has moved forward by more than 30 days, so lending pool is late for payment
+          const _expectedPremiumAmt = parseUSDC("50");
+          const _protectionBuyer = await setupProtectionBuyer(
+            "0x111B46bFAe308Be4570Cb9F17d051B58022D7c89",
+            _expectedPremiumAmt
+          );
           await expect(
-            protectionPool.connect(_protectionBuyer1).buyProtection(
+            protectionPool.connect(_protectionBuyer).buyProtection(
               {
                 lendingPoolAddress: _lendingPool2,
-                nftLpTokenId: 590,
+                nftLpTokenId: 583,
                 protectionAmount: parseUSDC("101"),
                 protectionDurationInSeconds: getDaysInSeconds(20)
               },
-              parseUSDC("10000")
+              _expectedPremiumAmt
             )
           ).to.be.revertedWith(
             `LendingPoolHasLatePayment("0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf")`
@@ -2354,14 +2372,14 @@ const testProtectionPool: Function = (
         it("...can buy protections", async () => {
           // Day 42: 12th day of Pool cycle 2
           // protection 4: buyer 4 has principal of 158K USDC with token id: 645 in pool
-          await USDC.connect(_protectionBuyer4).approve(
+          await USDC.connect(_protectionBuyer1).approve(
             protectionPool.address,
             parseUSDC("10000")
           );
-          await protectionPool.connect(_protectionBuyer4).buyProtection(
+          await protectionPool.connect(_protectionBuyer1).buyProtection(
             {
-              lendingPoolAddress: _lendingPool1,
-              nftLpTokenId: 645,
+              lendingPoolAddress: _lendingPool2,
+              nftLpTokenId: 590,
               protectionAmount: parseUSDC("70000"),
               protectionDurationInSeconds: getDaysInSeconds(35)
             },
@@ -2402,7 +2420,7 @@ const testProtectionPool: Function = (
                 await _protectionBuyer4.getAddress()
               )
             ).length
-          ).to.be.eq(1);
+          ).to.be.eq(0);
 
           await protectionPool.connect(_protectionBuyer4).renewProtection(
             {
@@ -2420,7 +2438,7 @@ const testProtectionPool: Function = (
                 await _protectionBuyer4.getAddress()
               )
             ).length
-          ).to.be.eq(2);
+          ).to.be.eq(1);
         });
       });
     });
@@ -2577,19 +2595,17 @@ const testProtectionPool: Function = (
         it("...should fail because of PoolLeverageRatioTooLow", async () => {
           // lending pool protection purchase limit is 90 days
           await payToLendingPoolAddress(_lendingPool1, "1000000", USDC);
-          expect(
-            (
-              await protectionPool.getActiveProtections(
-                await _protectionBuyer4.getAddress()
-              )
-            ).length
-          ).to.be.eq(2);
+          const _expectedPremiumAmt = parseUSDC("500");
+          const _protectionBuyer = await setupProtectionBuyer(
+            "0x008c84421dA5527F462886cEc43D2717B686A7e4",
+            _expectedPremiumAmt
+          );
 
           await expect(
-            protectionPool.connect(_protectionBuyer4).buyProtection(
+            protectionPool.connect(_protectionBuyer).buyProtection(
               {
                 lendingPoolAddress: _lendingPool1,
-                nftLpTokenId: 645,
+                nftLpTokenId: 642,
                 protectionAmount: parseUSDC("60000"),
                 protectionDurationInSeconds: getDaysInSeconds(11)
               },
@@ -2685,15 +2701,22 @@ const testProtectionPool: Function = (
           );
 
           await defaultStateManager.assessStates();
+
+          const _expectedPremiumAmt = parseUSDC("1000");
+          _protectionBuyer = await setupProtectionBuyer(
+            "0x008c84421dA5527F462886cEc43D2717B686A7e4",
+            _expectedPremiumAmt
+          );
+
           await expect(
             protectionPool.connect(_protectionBuyer).buyProtection(
               {
                 lendingPoolAddress: _lendingPool3,
-                nftLpTokenId: 717,
+                nftLpTokenId: 737,
                 protectionAmount: parseUSDC("30000"),
                 protectionDurationInSeconds: getDaysInSeconds(30)
               },
-              parseUSDC("10000")
+              _expectedPremiumAmt
             )
           ).to.be.revertedWith("LendingPoolHasLatePayment");
         });

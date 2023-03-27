@@ -83,6 +83,9 @@ struct LendingPoolDetail {
   EnumerableSetUpgradeable.UintSet activeProtectionIndexes;
   /// @notice Track the total amount of protection bought for each lending pool
   uint256 totalProtection;
+  /// @notice Mapping to track the active protection index by nft token id.
+  /// @dev NFT id to the active protection index
+  mapping(uint256 => uint256) activeProtectionIndexByTokenId;
 }
 
 /// @notice A struct to store the details of a withdrawal cycle.
@@ -131,6 +134,7 @@ abstract contract IProtectionPool {
   error OnlyDefaultStateManager(address msgSender);
   error ProtectionPoolInOpenToSellersPhase();
   error ProtectionPoolInOpenToBuyersPhase();
+  error ProtectionAlreadyExistsForLendingPoolPosition();
   error NoExpiredProtectionToRenew();
   error CanNotRenewProtectionAfterGracePeriod();
   error CanNotRenewProtectionWithHigherRenewalAmount();
