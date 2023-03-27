@@ -254,6 +254,29 @@ const testProtectionPool: Function = (
       return _protectionBuyer;
     };
 
+    const verifyTotalRequestedWithdrawal = async (
+      _expectedTotalWithdrawal: BigNumber,
+      _withdrawalCycleIndex: number
+    ) => {
+      expect(
+        await protectionPool.getTotalRequestedWithdrawalAmount(
+          _withdrawalCycleIndex
+        )
+      ).to.eq(_expectedTotalWithdrawal);
+    };
+
+    const verifyRequestedWithdrawal = async (
+      _account: Signer,
+      _expectedWithdrawal: BigNumber,
+      _withdrawalCycleIndex: number
+    ) => {
+      expect(
+        await protectionPool
+          .connect(_account)
+          .getRequestedWithdrawalAmount(_withdrawalCycleIndex)
+      ).to.eq(_expectedWithdrawal);
+    };
+
     before("setup", async () => {
       deployerAddress = await deployer.getAddress();
       operatorAddress = await operator.getAddress();
@@ -1187,33 +1210,11 @@ const testProtectionPool: Function = (
         });
       });
 
-      const verifyTotalRequestedWithdrawal = async (
-        _expectedTotalWithdrawal: BigNumber,
-        _withdrawalCycleIndex: number
-      ) => {
-        expect(
-          await protectionPool.getTotalRequestedWithdrawalAmount(
-            _withdrawalCycleIndex
-          )
-        ).to.eq(_expectedTotalWithdrawal);
-      };
-
-      const verifyRequestedWithdrawal = async (
-        _account: Signer,
-        _expectedWithdrawal: BigNumber,
-        _withdrawalCycleIndex: number
-      ) => {
-        expect(
-          await protectionPool
-            .connect(_account)
-            .getRequestedWithdrawalAmount(_withdrawalCycleIndex)
-        ).to.eq(_expectedWithdrawal);
-      };
-
       describe("...requestWithdrawal", async () => {
         const WITHDRAWAL_CYCLE_INDEX = 2; // current pool cycle index + 2
-        const _requestedTokenAmt1 = parseEther("11");
-        const _requestedTokenAmt2 = parseEther("5");
+        /// deposit amt is 40K
+        const _requestedTokenAmt1 = parseEther("40000");
+        const _requestedTokenAmt2 = parseEther("35000");
 
         it("...fail when pool is paused", async () => {
           await protectionPool.connect(deployer).pause();
@@ -1327,6 +1328,88 @@ const testProtectionPool: Function = (
             _requestedTokenAmt2.add(_tokenBalance),
             WITHDRAWAL_CYCLE_INDEX
           );
+        });
+
+        describe("...with sToken transfers", async () => {
+          let _newUserAddress: string;
+          let _otherRequestedAmt: BigNumber;
+
+          before(async () => {
+            _newUserAddress = await (await ethers.getSigners())[6].getAddress();
+
+            // account4 has requested 60K sToken for withdrawal out of 60K sToken balance
+            _otherRequestedAmt = await protectionPool.balanceOf(
+              account4Address
+            );
+          });
+
+          it("...should update withdrawal request on sToken transfer 1", async () => {
+            // Seller has requested 35K sToken for withdrawal out of 40K sToken balance
+            await verifyRequestedWithdrawal(
+              seller,
+              parseEther("35000"),
+              WITHDRAWAL_CYCLE_INDEX
+            );
+
+            // transfer 25K sToken to another user
+            await protectionPool
+              .connect(seller)
+              .transfer(_newUserAddress, parseEther("25000"));
+
+            // Seller's requested withdrawal amount should be updated to 40K - 25K = 15K
+            await verifyRequestedWithdrawal(
+              seller,
+              parseEther("15000"),
+              WITHDRAWAL_CYCLE_INDEX
+            );
+
+            // withdrawal cycle's total sToken requested amount should be decreased by the difference
+            // 35K + 60K = 90K => 15K + 60K = 75K
+            await verifyTotalRequestedWithdrawal(
+              _otherRequestedAmt.add(parseEther("15000")),
+              WITHDRAWAL_CYCLE_INDEX
+            );
+          });
+
+          it("...should revert on new withdrawal request when total requested amount > sToken balance", async () => {
+            // Seller already has 15K sToken requested for withdrawal, so new request should fail
+            await expect(
+              protectionPool
+                .connect(seller)
+                .requestWithdrawal(parseEther("15000").add(1))
+            ).to.be.revertedWith(`InsufficientSTokenBalance`);
+          });
+
+          it("...should be able to decrease withdrawal request amount when total requested amount <>> sToken balance", async () => {
+            await protectionPool
+              .connect(seller)
+              .requestWithdrawal(parseEther("10000"));
+            await verifyRequestedWithdrawal(
+              seller,
+              parseEther("10000"),
+              WITHDRAWAL_CYCLE_INDEX
+            );
+          });
+
+          it("...should update seller withdrawal request and total amount on sToken transfer 2", async () => {
+            // transfer remaining 15K sToken to another user
+            await protectionPool
+              .connect(seller)
+              .transfer(_newUserAddress, parseEther("15000"));
+
+            // Seller's requested withdrawal amount should be updated to 0
+            await verifyRequestedWithdrawal(
+              seller,
+              parseEther("0"),
+              WITHDRAWAL_CYCLE_INDEX
+            );
+
+            // 15K + 60K = 75K => 0K + 60K = 60K
+            await verifyTotalRequestedWithdrawal(
+              _otherRequestedAmt,
+              WITHDRAWAL_CYCLE_INDEX
+            );
+          });
         });
       });
 
@@ -2101,7 +2184,7 @@ const testProtectionPool: Function = (
 
       describe("...after 2nd pool cycle is locked", async () => {
         it("...can create withdrawal requests for cycle after", async () => {
-          // Seller1: deposited 20K USDC in 1st cycle & requested to withdraw 10K. Now request withdrawal of 1000 sTokens
+          // Seller1: deposited 20K+200 USDC in 1st cycle & requested to withdraw 10K. Now request withdrawal of 1000 sTokens
           await protectionPool
             .connect(seller)
             .requestWithdrawal(parseEther("1000"));
@@ -2114,6 +2197,16 @@ const testProtectionPool: Function = (
             .connect(account4)
             .requestWithdrawal(parseEther("1000"));
         });
+        
+        it("...should revert on seller's new withdrawal request when total requested amount > sToken balance", async () => {
+          // Seller already has 11K sToken requested for withdrawal across 2 cycles from balance of 20K
+          // so new request should fail, when total requested amount > sToken balance
+          await expect(
+            protectionPool
+              .connect(seller)
+              .requestWithdrawal(parseEther("10201")) // 20200 - 10000 = 10200 available to withdraw
+          ).to.be.revertedWith(`InsufficientSTokenBalance`);
+        });
 
         it("...has correct total requested withdrawal", async () => {
           const _withdrawalCycleIndex = currentPoolCycleIndex + 2;
@@ -2123,6 +2216,60 @@ const testProtectionPool: Function = (
               _withdrawalCycleIndex
             )
           ).to.eq(parseEther("4000"));
+        });
+      });
+
+      describe("...with sToken transfers", async () => {
+        let _newUserAddress: string;
+
+        before(async () => {
+          _newUserAddress = await (await ethers.getSigners())[5].getAddress();
+        });
+
+        it("...should update withdrawal request on sToken transfer 1", async () => {
+          // Account4 has requested 10K + 1K = 11K sToken for withdrawal out of 40K sToken balance
+          const _cycle3Index = 2;
+          const _cycle4Index = 3;
+          await verifyRequestedWithdrawal(
+            account4,
+            parseEther("10000"),
+            _cycle3Index
+          );
+
+          await verifyRequestedWithdrawal(
+            account4,
+            parseEther("1000"),
+            _cycle4Index
+          );
+
+          // transfer 29.5K sToken to another user
+          await protectionPool
+            .connect(account4)
+            .transfer(_newUserAddress, parseEther("29500"));
+
+          // Account4's 1st requested withdrawal should remain the same
+          await verifyRequestedWithdrawal(account4, parseEther("10000"), _cycle3Index);
+
+          // Account4's 2nd requested withdrawal should decrease by 500 sToken, 1000 - 500 = 500
+          await verifyRequestedWithdrawal(account4, parseEther("500"), _cycle4Index);
+
+          // 1st withdrawal cycle's total sToken requested amount remains the same
+          // 10K + 10K + 10K = 30K
+          await verifyTotalRequestedWithdrawal(parseEther("30000"), _cycle3Index);
+
+          // 2nd withdrawal cycle's total sToken requested amount should be decreased by the difference
+          // 1K + 2K + 1K = 4K => 1K + 2K + 0.5K = 3.5K
+          await verifyTotalRequestedWithdrawal(parseEther("3500"), _cycle4Index);
+        });
+
+        it("...should revert on account4's new withdrawal request when total requested amount > sToken balance", async () => {
+          // Account4 already has 10K + 500 sToken requested for withdrawal matching the balance of 10.5K
+          // so new request should fail, when total requested amount > sToken balance
+          await expect(
+            protectionPool
+              .connect(account4)
+              .requestWithdrawal(parseEther("501"))
+          ).to.be.revertedWith(`InsufficientSTokenBalance`);
         });
       });
 
@@ -2499,15 +2646,17 @@ const testProtectionPool: Function = (
           // Seller has requested 10K sTokens in previous cycle
           const withdrawalAmt = parseEther("10000");
           await verifyWithdrawal(seller, withdrawalAmt);
+
+          // Seller has withdrawn all requested tokens, so withdrawal request should be zero for current cycle
+          verifyRequestedWithdrawal(
+            seller,
+            parseEther("0"),
+            currentPoolCycleIndex
+          );
         });
 
         it("...fails for second withdrawal by 1st seller", async () => {
-          // Seller has withdrawn all requested tokens, so withdrawal request should be removed
-          expect(
-            await protectionPool
-              .connect(seller)
-              .getRequestedWithdrawalAmount(currentPoolCycleIndex)
-          ).to.eq(0);
+          // Seller has withdrawn all requested tokens, so withdraw should fail
           await expect(
             protectionPool
               .connect(seller)
@@ -2521,15 +2670,17 @@ const testProtectionPool: Function = (
           // 2nd seller (Owner account) has requested 10K sTokens in 1st cycle
           const withdrawalAmt = parseEther("10000");
           await verifyWithdrawal(owner, withdrawalAmt);
+
+          // Owner has withdrawn all requested tokens, so withdrawal request should be zero for current cycle
+          verifyRequestedWithdrawal(
+            owner,
+            parseEther("0"),
+            currentPoolCycleIndex
+          );
         });
 
         it("...fails for second withdrawal by 2nd seller", async () => {
-          // 2nd Seller(Owner account) has withdrawn all requested tokens, so withdrawal request should be removed
-          expect(
-            await protectionPool
-              .connect(owner)
-              .getRequestedWithdrawalAmount(currentPoolCycleIndex)
-          ).to.eq(0);
+          // 2nd Seller(Owner account) has withdrawn all requested tokens, so withdraw should fail
           await expect(
             protectionPool
               .connect(owner)
@@ -2544,19 +2695,78 @@ const testProtectionPool: Function = (
             account4Address
           );
           // 3rd seller (Account4) has requested total 10K sTokens in 1st cycle,
-          // so partial withdrawal should be possible
+          // so 2 partial withdrawals should be possible
           await verifyWithdrawal(account4, parseEther("6000"));
           await verifyWithdrawal(account4, parseEther("3000"));
+
+          const sTokenBalanceAfter = await protectionPool.balanceOf(
+            account4Address
+          );
+
+          expect(sTokenBalanceAfter).to.eq(
+            sTokenBalanceBefore.sub(parseEther("9000"))
+          );
+
+          // 3rd Seller(account4) has withdrawn 9000 out of 10K requested tokens,
+          // so withdrawal request should exist with 1000 sTokens remaining
+          verifyRequestedWithdrawal(
+            account4,
+            parseEther("1000"),
+            currentPoolCycleIndex
+          );
+
+          // 2nd Withdrawal request should remain same
+          verifyRequestedWithdrawal(
+            account4,
+            parseEther("500"),
+            currentPoolCycleIndex + 1
+          );
+        });
+
+        it("...should revert on a new withdrawal request for 3rd seller", async () => {
+          // Account4 already has 2 withdrawal requests for remaining balance of 1500 sTokens,
+          // so new withdrawal request should fail
+          await expect(
+            protectionPool.connect(account4).requestWithdrawal(parseEther("1"))
+          ).to.be.revertedWith(
+            `InsufficientSTokenBalance("${account4Address}", ${parseEther("1500")})`
+          );
+        });
+
+        it("...should be able to create a new withdrawal request for 3rd seller after new deposit", async () => {
+          // Make a new deposit by account4
+          const _sTokenBalanceBefore = await protectionPool.balanceOf(account4Address);
+          const _depositAmt = "1000";
+          const _underlyingAmount = parseUSDC(_depositAmt);
+          await transferAndApproveUsdcToPool(account4, _underlyingAmount);
+          await protectionPool
+            .connect(account4)
+            .deposit(_underlyingAmount, account4Address);
+
+          const _withdrawalAmt = (
+            await protectionPool.balanceOf(account4Address)
+          ).sub(_sTokenBalanceBefore);
+
+          // should not be able to request withdrawal for more than deposited sTokens,
+          // because account4 has 2 withdrawal requests totaling 1500 sTokens in previous cycles
+          await expect(
+            protectionPool.connect(account4).requestWithdrawal(_withdrawalAmt.add(1))
+          ).to.be.revertedWith(`InsufficientSTokenBalance`);
+          
+          
+          // should be able to request withdrawal for new deposit
+          await protectionPool
+            .connect(account4)
+            .requestWithdrawal(_withdrawalAmt);
+
+          verifyRequestedWithdrawal(
+            account4,
+            _withdrawalAmt,
+            currentPoolCycleIndex + 2
+          );
         });
 
         it("...fails for third withdrawal by 3rd seller", async () => {
-          // 3rd Seller(account4) has withdrawn 9000 out of 10K requested tokens,
-          // so withdrawal request should exist with 1000 sTokens remaining
-          expect(
-            await protectionPool
-              .connect(account4)
-              .getRequestedWithdrawalAmount(currentPoolCycleIndex)
-          ).to.eq(parseEther("1000"));
           // withdrawing more(1001) sTokens than remaining requested should fail
           await expect(
             protectionPool
@@ -2599,7 +2809,7 @@ const testProtectionPool: Function = (
         it("...should fail because of PoolLeverageRatioTooLow", async () => {
           // lending pool protection purchase limit is 90 days
           await payToLendingPoolAddress(_lendingPool1, "1000000", USDC);
-          const _expectedPremiumAmt = parseUSDC("500");
+          const _expectedPremiumAmt = parseUSDC("10000");
           const _protectionBuyer = await setupProtectionBuyer(
             "0x008c84421dA5527F462886cEc43D2717B686A7e4",
             _expectedPremiumAmt
@@ -2613,7 +2823,7 @@ const testProtectionPool: Function = (
                 protectionAmount: parseUSDC("60000"),
                 protectionDurationInSeconds: getDaysInSeconds(11)
               },
-              parseUSDC("10000")
+              _expectedPremiumAmt
             )
           ).to.be.revertedWith("PoolLeverageRatioTooLow");
         });

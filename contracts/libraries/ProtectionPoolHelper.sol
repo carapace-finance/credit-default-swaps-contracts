@@ -4,7 +4,7 @@ pragma solidity 0.8.17;
 import {EnumerableSetUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
 
 import {ProtectionPurchaseParams, LendingPoolStatus, IReferenceLendingPools} from "../interfaces/IReferenceLendingPools.sol";
-import {ProtectionPoolInfo, ProtectionInfo, ProtectionBuyerAccount, IProtectionPool, LendingPoolDetail, ProtectionPoolPhase} from "../interfaces/IProtectionPool.sol";
+import {ProtectionPoolInfo, ProtectionInfo, ProtectionBuyerAccount, IProtectionPool, LendingPoolDetail, ProtectionPoolPhase, WithdrawalCycleDetail} from "../interfaces/IProtectionPool.sol";
 import {IProtectionPoolCycleManager} from "../interfaces/IProtectionPoolCycleManager.sol";
 import {IDefaultStateManager} from "../interfaces/IDefaultStateManager.sol";
 import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
