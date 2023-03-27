@@ -125,7 +125,7 @@ const testProtectionPool: Function = (
       )
         .to.emit(protectionPool, "WithdrawalMade")
         .withArgs(accountAddress, _sTokenWithdrawalAmt, accountAddress);
-
+      
       const sTokenBalanceAfter = await protectionPool.balanceOf(accountAddress);
       expect(sTokenBalanceBefore.sub(sTokenBalanceAfter)).to.eq(
         _sTokenWithdrawalAmt
@@ -2591,6 +2591,7 @@ const testProtectionPool: Function = (
         // Move pool cycle(10 days open period, 30 days total duration) to open state (next pool cycle)
         // day 62(46 + 20): 2nd day of cycle 3
         await moveForwardTimeByDays(20);
+        await payToLendingPoolAddress(_lendingPool1, "1000000", USDC);
       });
 
       describe("calculateMaxAllowedProtectionDuration", () => {
@@ -2798,7 +2799,7 @@ const testProtectionPool: Function = (
 
         it("...should fail because of ProtectionPoolLeverageRatioTooLow", async () => {
           // lending pool protection purchase limit is 90 days
-          await payToLendingPoolAddress(_lendingPool1, "1000000", USDC);
+          await payToLendingPoolAddress(_lendingPool1, "3000000", USDC);
           const _expectedPremiumAmt = parseUSDC("10000");
           const _protectionBuyer = await setupProtectionBuyer(
             "0x008c84421dA5527F462886cEc43D2717B686A7e4",
