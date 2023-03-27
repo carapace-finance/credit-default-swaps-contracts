@@ -443,8 +443,8 @@ const testProtectionPool: Function = (
     });
 
     describe("calculateLeverageRatio without any protection buyers or sellers", () => {
-      it("...should return 0 when pool has no protection sold", async () => {
-        expect(await protectionPool.calculateLeverageRatio()).to.equal(0);
+      it("...should return min leverage ratio when pool has no protection sold", async () => {
+        expect(await protectionPool.calculateLeverageRatio()).to.equal(poolInfo.params.leverageRatioFloor.sub(poolInfo.params.leverageRatioBuffer));
       });
     });
 
@@ -637,8 +637,10 @@ const testProtectionPool: Function = (
       });
 
       describe("calculateLeverageRatio after deposits", () => {
-        it("...should return 0 when pool has no protection sellers", async () => {
-          expect(await protectionPool.calculateLeverageRatio()).to.equal(0);
+        it("...should return max leverage ratio when pool has no protection buyers", async () => {
+          expect(await protectionPool.calculateLeverageRatio()).to.equal(
+            poolInfo.params.leverageRatioCeiling.add(poolInfo.params.leverageRatioBuffer)
+          );
         });
       });
 

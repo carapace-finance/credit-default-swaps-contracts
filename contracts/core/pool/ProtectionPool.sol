@@ -890,8 +890,21 @@ contract ProtectionPool is
     view
     returns (uint256)
   {
+    if (_totalCapital == 0) {
+      /// If there is no capital, it means that we want to encourage sellers to deposit capital,
+      /// so we return the minimum leverage ratio.
+      /// This will prohibit the buyers from buying protections.
+      return poolInfo.params.leverageRatioFloor - poolInfo.params.leverageRatioBuffer;
+    }
+
     if (totalProtection == 0) {
-      return 0;
+      /// When pool is is not in OpenToSellers phase,
+      /// If there is no protection, it means that we want to encourage buyers to buy protections,
+      /// so we return the maximum leverage ratio.
+      /// This will prohibit the sellers from depositing more capital.
+      return poolInfo.currentPhase == ProtectionPoolPhase.OpenToSellers 
+        ? poolInfo.params.leverageRatioCeiling - poolInfo.params.leverageRatioBuffer
+        : poolInfo.params.leverageRatioCeiling + poolInfo.params.leverageRatioBuffer;
     }
 
     return (_totalCapital * Constants.SCALE_18_DECIMALS) / totalProtection;
