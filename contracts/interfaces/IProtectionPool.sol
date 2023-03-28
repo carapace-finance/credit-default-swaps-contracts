@@ -81,10 +81,12 @@ struct LendingPoolDetail {
   uint256 totalPremium;
   /// @notice The timestamp of the last premium accrual for this lending pool
   uint256 lastPremiumAccrualTimestamp;
-  /// @notice Set to track all protections bought for specific lending pool, which are active/not expired
-  EnumerableSetUpgradeable.UintSet activeProtectionIndexes;
   /// @notice Track the total amount of protection bought for this lending pool
   uint256 totalProtection;
+  /// @notice Flag to indicate whether the lending pool is locked or not
+  bool locked;
+  /// @notice Set to track all protections bought for specific lending pool, which are active/not expired
+  EnumerableSetUpgradeable.UintSet activeProtectionIndexes;
   /// @notice Mapping to track the active protection index by nft token id.
   /// @dev NFT id to the active protection index
   mapping(uint256 => uint256) activeProtectionIndexByTokenId;
@@ -342,6 +344,14 @@ abstract contract IProtectionPool {
     returns (uint256 _lockedAmount, uint256 _snapshotId);
 
   /**
+   * @notice Unlocks the locked lending pool with specified address.
+   * This function increases the total protection amount of the protection pool by 
+   * the unexpired protection amount of the lending pool.
+   * This method can only be called by the default state manager.
+   */
+  function unlockLendingPool(address _lendingPoolAddress) external payable virtual;
+
+  /**
    * @notice Claims the total unlocked capital from this protection pool for a msg.sender.
    * this function claims the capital from all the lending pools supported by this protection pool.
    * @param _receiver The address to receive the underlying token amount.
@@ -441,6 +451,7 @@ abstract contract IProtectionPool {
    * @return _totalPremium The total premium paid for the lending pool.
    * @return _totalProtection The total protection bought for the lending pool.
    * @return _lastPremiumAccrualTimestamp The timestamp of the last premium accrual for the lending pool.
+   * @return _locked Whether the capital is locked for the lending pool or not.
    */
   function getLendingPoolDetail(address _lendingPoolAddress)
     external
@@ -449,7 +460,8 @@ abstract contract IProtectionPool {
     returns (
       uint256 _totalPremium,
       uint256 _totalProtection,
-      uint256 _lastPremiumAccrualTimestamp
+      uint256 _lastPremiumAccrualTimestamp,
+      bool _locked
     );
 
   /**

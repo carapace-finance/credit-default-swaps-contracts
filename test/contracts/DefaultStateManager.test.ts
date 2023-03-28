@@ -450,11 +450,18 @@ const testDefaultStateManager: Function = (
       before(async () => {
         // Make 2 payments to 2nd lending pool and no payment to 1st lending pool
         for (let i = 0; i < 2; i++) {
+          // lending pool 1 & 2 should be marked as locked
+          const _lendingPoolDetails =
+            await protectionPoolInstance.getLendingPoolDetail(lendingPools[i]);
+          expect(_lendingPoolDetails[3]).to.be.true;
+
           await moveForwardTimeByDays(30);
           await payToLendingPool(lendingPool2, "300000", usdcContract);
 
           if (i === 0) {
-            await defaultStateManager.connect(operator).assessStateBatch([pool1]);
+            await defaultStateManager
+              .connect(operator)
+              .assessStateBatch([pool1]);
           } else {
             // after second payment, 2nd lending pool should move from Late to Active state
             await expect(
@@ -480,11 +487,36 @@ const testDefaultStateManager: Function = (
         expect(lockedCapitalsLendingPool1[0].locked).to.eq(true);
       });
 
+      it("... should keep 1st lending pool locked in Protection Pool 1", async () => {
+        const _lendingPoolDetails =
+          await protectionPoolInstance.getLendingPoolDetail(lendingPools[0]);
+        expect(_lendingPoolDetails[3]).to.be.true;
+      });
+
       const calculateClaimableAmt = async (accountAddress: string, lockedAmount: string) => { 
         return (await protectionPoolInstance.balanceOf(accountAddress))
           .mul(parseUSDC(lockedAmount))
           .div(await protectionPoolInstance.totalSupply());
       };
+
+      it("...2nd lending pool in protection pool 1 should be in active state with unlocked capital", async () => {
+        // 2nd lending pool should move from Late to Active state with unlocked capital instance
+        expect(
+          await defaultStateManager.getLendingPoolStatus(pool1, lendingPools[1])
+        ).to.eq(1); // Active
+
+        const lockedCapitalsLendingPool2 =
+          await defaultStateManager.getLockedCapitals(pool1, lendingPools[1]);
+        expect(lockedCapitalsLendingPool2.length).to.eq(1);
+        expect(lockedCapitalsLendingPool2[0].snapshotId).to.eq(2);
+        expect(lockedCapitalsLendingPool2[0].amount).to.eq(parseUSDC("50000"));
+        expect(lockedCapitalsLendingPool2[0].locked).to.eq(false);
+      });
+
+      it("...should mark 2nd lending pool unlocked in Protection Pool 1", async () => {
+        const _lendingPoolDetails = await protectionPoolInstance.getLendingPoolDetail(lendingPools[1]);
+        expect(_lendingPoolDetails[3]).to.be.false;
+      });
 
       describe("calculateClaimableUnlockedAmount", async () => {
         it("...should return 0 claimable amount for deployer from pool 1", async () => {
@@ -654,11 +686,6 @@ const testDefaultStateManager: Function = (
 
         // Move time forward by 30 days
         await moveForwardTimeByDays(31);
-
-        console.log(
-          "Assessing states at time: ",
-          await getLatestBlockTimestamp()
-        );
 
         await expect(
           defaultStateManager.connect(operator).assessStateBatch([pool1])

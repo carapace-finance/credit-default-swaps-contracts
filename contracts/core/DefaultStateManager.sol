@@ -504,9 +504,13 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager, Acces
     );
     lockedCapital.locked = false;
 
+    /// Unlock the lending pool in the protection pool
+    IProtectionPool _protectionPool = poolState.protectionPool;
+    _protectionPool.unlockLendingPool(_lendingPool);
+
     emit LendingPoolUnlocked(
       _lendingPool,
-      address(poolState.protectionPool),
+      address(_protectionPool),
       lockedCapital.amount
     );
   }
