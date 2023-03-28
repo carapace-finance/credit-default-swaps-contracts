@@ -23,6 +23,7 @@ import { BigNumber } from "@ethersproject/bignumber";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { DefaultStateManagerV2 } from "../../typechain-types/contracts/test/DefaultStateManagerV2";
 import { cpContractFactoryInstance, protectionPoolInstance } from "../../utils/deploy";
+import { LATE_PAYMENT_GRACE_PERIOD_IN_DAYS } from "../../scripts/local-mainnet/data";
 
 const testDefaultStateManager: Function = (
   deployer: Signer,
@@ -305,6 +306,37 @@ const testDefaultStateManager: Function = (
         await defaultStateManager.assessStateBatch([pool1]);
       });
 
+      it("...should NOT lock capital for 1st & 2nd lending pools in protection pool 1", async () => {
+        // iterate 1st two lending pools
+        for (let i = 0; i < 2; i++) {
+          expect(
+            await defaultStateManager.getLendingPoolStatus(
+              pool1,
+              lendingPools[i]
+            )
+          ).to.eq(2); // LateWithinGracePeriod
+
+          // Verify that 1st & 2nd lending pools have NO locked capital instance because it is in LateWithinGracePeriod state
+          const lockedCapitalsLendingPool =
+            await defaultStateManager.getLockedCapitals(pool1, lendingPools[i]);
+          expect(lockedCapitalsLendingPool.length).to.eq(0);
+        }
+      });
+
+      it("...should mark 1st & 2nd lending pools as Late in protection pool 1", async () => {
+        // Move time forward by LATE_PAYMENT_GRACE_PERIOD_IN_DAYS day + 1 second last payment timestamp
+        await moveForwardTimeByDays(LATE_PAYMENT_GRACE_PERIOD_IN_DAYS);
+        await defaultStateManager.assessStateBatch([pool1]);
+
+        // 1st & 2nd lending pool should move from LateWithinGracePeriod to Late state
+        expect(
+          await defaultStateManager.getLendingPoolStatus(pool1, lendingPools[0])
+        ).to.eq(3); // Late
+        expect(
+          await defaultStateManager.getLendingPoolStatus(pool1, lendingPools[1])
+        ).to.eq(3); // Late
+      });
+
       it("...should lock capital for 1st lending pool in protection pool 1", async () => {
         expect(
           await defaultStateManager.getLendingPoolStatus(pool1, lendingPools[0])
@@ -319,22 +351,10 @@ const testDefaultStateManager: Function = (
         expect(lockedCapitalsLendingPool1[0].amount).to.eq(parseUSDC("70000"));
         expect(lockedCapitalsLendingPool1[0].locked).to.eq(true);
       });
-
-      it("...should NOT lock capital for 2nd lending pool in protection pool 1", async () => {
-        expect(
-          await defaultStateManager.getLendingPoolStatus(pool1, lendingPools[1])
-        ).to.eq(2); // LateWithinGracePeriod
-
-        // Verify that 2nd lending pool has NO locked capital instance because it is in LateWithinGracePeriod state
-        const lockedCapitalsLendingPool2 =
-          await defaultStateManager.getLockedCapitals(pool1, lendingPools[1]);
-
-        expect(lockedCapitalsLendingPool2.length).to.eq(0);
-      });
-
+      
       it("...should lock capital for 2nd lending pool in protection pool 1", async () => {
-        // Move time forward by 1 day + 1 second last payment timestamp
-        await moveForwardTimeByDays(1);
+        // Move time forward by LATE_PAYMENT_GRACE_PERIOD_IN_DAYS day + 1 second last payment timestamp
+        await moveForwardTimeByDays(LATE_PAYMENT_GRACE_PERIOD_IN_DAYS);
         await defaultStateManager.assessStateBatch([pool1]);
 
         // 2nd lending pool should move from LateWithinGracePeriod to Late state with a locked capital instance
