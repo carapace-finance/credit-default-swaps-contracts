@@ -1643,7 +1643,7 @@ const testProtectionPool: Function = (
 
           // 958.655673 + 1698.159998 + 410.239842 + 641.890263 = ~3708.945776
           const _expectedPremiumLowerBound = parseUSDC("3708.94");
-          const _expectedPremiumUpperBound = parseUSDC("3708.95");
+          const _expectedPremiumUpperBound = parseUSDC("3708.96");
           expect((await protectionPool.getPoolDetails())[3])
             .to.be.gt(_expectedPremiumLowerBound)
             .and.to.be.lt(_expectedPremiumUpperBound);

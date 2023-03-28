@@ -447,56 +447,6 @@ const testReferenceLendingPools: Function = (
         });
       });
 
-      // This test spec should be last as it sets exact block timestamp and then moves time forward
-      describe("getLendingPoolStatus", async () => {
-        const _lendingPool = "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf";
-
-        it("...should return no status for non-existing pool", async () => {
-          expect(await getLendingPoolStatus(ZERO_ADDRESS)).to.be.eq(undefined);
-        });
-
-        it("...should return no status for not supported pool", async () => {
-          expect(await getLendingPoolStatus(LENDING_POOL_3)).to.be.eq(
-            undefined
-          );
-        });
-
-        it("...should return correct status for active pool", async () => {
-          expect(await getLendingPoolStatus(_lendingPool)).to.be.eq(1); // Active
-        });
-
-        it("...should return active when payment is not late", async () => {
-          // Move time forward by 30 days from last payment timestamp
-          const lastPaymentTimestamp =
-            await referenceLendingPoolsInstance.getLatestPaymentTimestamp(
-              _lendingPool
-            );
-          await setNextBlockTimestamp(
-            lastPaymentTimestamp.add(getDaysInSeconds(30))
-          );
-
-          // This means, payment is still not late and should return false
-          expect(await getLendingPoolStatus(_lendingPool)).to.eq(1); // Active
-        });
-
-        it("...should return LateWithinGracePeriod when payment is late but within grace period", async () => {
-          // Move time forward by 1 second
-          await moveForwardTime(BigNumber.from(1));
-
-          // Lending pool is late but within grace period, so should return LateWithinGracePeriod status
-          expect(await getLendingPoolStatus(_lendingPool)).to.eq(2); // LateWithinGracePeriod
-        });
-
-        it("...should return false when payment is late and after grace period", async () => {
-          // Move time forward by one more day
-          await moveForwardTime(getDaysInSeconds(1));
-
-          // Lending pool is late and after grace period, so should return Late status
-          // Total time elapsed since last payment = 30 days + 1 day + 1 second
-          expect(await getLendingPoolStatus(_lendingPool)).to.eq(3); // Late
-        });
-      });
-
       describe("getPaymentPeriodInDays", () => {
         it("...should return the correct payment period", async () => {
           expect(
@@ -632,6 +582,64 @@ const testReferenceLendingPools: Function = (
         expect(await upgradedReferenceLendingPools.getTestVariable()).to.eq(0);
         await upgradedReferenceLendingPools.setTestVariable(42);
         expect(await upgradedReferenceLendingPools.getTestVariable()).to.eq(42);
+      });
+    });
+
+    // This test spec should be last as it sets exact block timestamp and then moves time forward
+    describe("Proxy - getLendingPoolStatus", async () => {
+      const _lendingPool = "0xd09a57127BC40D680Be7cb061C2a6629Fe71AbEf";
+
+      it("...should return no status for non-existing pool", async () => {
+        expect(await getLendingPoolStatus(ZERO_ADDRESS)).to.be.eq(undefined);
+      });
+
+      it("...should return no status for not supported pool", async () => {
+        expect(await getLendingPoolStatus(LENDING_POOL_3)).to.be.eq(undefined);
+      });
+
+      it("...should return correct status for active pool", async () => {
+        expect(await getLendingPoolStatus(_lendingPool)).to.be.eq(1); // Active
+      });
+
+      it("...should return active when payment is not late", async () => {
+        // Move time forward by 30 days from last payment timestamp
+        const lastPaymentTimestamp =
+          await referenceLendingPoolsInstance.getLatestPaymentTimestamp(
+            _lendingPool
+          );
+        await setNextBlockTimestamp(
+          lastPaymentTimestamp.add(getDaysInSeconds(30))
+        );
+
+        // This means, payment is still not late and should return false
+        expect(await getLendingPoolStatus(_lendingPool)).to.eq(1); // Active
+      });
+
+      it("...should return LateWithinGracePeriod when payment is late but within grace period", async () => {
+        // Move time forward by 1 second
+        await moveForwardTime(BigNumber.from(1));
+
+        // Lending pool is late but within grace period, so should return LateWithinGracePeriod status
+        expect(await getLendingPoolStatus(_lendingPool)).to.eq(2); // LateWithinGracePeriod
+      });
+
+      it("...should return false when payment is late and after grace period", async () => {
+        // Move time forward by one more day
+        await moveForwardTime(getDaysInSeconds(1));
+
+        // Lending pool is late and after grace period, so should return Late status
+        // Total time elapsed since last payment = 30 days + 1 day + 1 second
+        expect(await getLendingPoolStatus(_lendingPool)).to.eq(3); // Late
+      });
+
+      it("...should return late when payment is late and lending pool term has ended", async () => {
+        // Move time forward to the term end timestamp
+        // https://etherscan.io/address/0x1D13E6ED75b28902325ab50fdD99dBD0a47aFeD3#readContract
+        const termEndTimestamp = BigNumber.from(1740449896);
+        await setNextBlockTimestamp(termEndTimestamp.add(1));
+
+        // Lending pool is late and has expired, so should return Late status
+        expect(await getLendingPoolStatus(_lendingPool)).to.eq(3); // Late
       });
     });
   });
