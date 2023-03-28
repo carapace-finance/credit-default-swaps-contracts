@@ -434,6 +434,17 @@ const testReferenceLendingPools: Function = (
             )
           ).to.be.eq(0);
         });
+
+        it("...should return the 0 remaining principal for non-existing token", async () => {
+          // NFT doesn't exist
+          expect(
+            await referenceLendingPoolsInstance.calculateRemainingPrincipal(
+              LENDING_POOL_3,
+              BUYER2,
+              1051
+            )
+          ).to.eq(0);
+        });
       });
 
       // This test spec should be last as it sets exact block timestamp and then moves time forward

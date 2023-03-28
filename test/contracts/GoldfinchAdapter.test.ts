@@ -215,6 +215,17 @@ const testGoldfinchAdapter: Function = (
           )
         ).to.eq(0);
       });
+
+      it("...should return the 0 remaining principal for non-existing token", async () => {
+        // NFT doesn't exist
+        expect(
+          await goldfinchAdapter.calculateRemainingPrincipal(
+            LENDING_POOL,
+            LENDER,
+            1001
+          )
+        ).to.eq(0);
+      });
     });
 
     describe("isLendingPoolLateWithinGracePeriod", () => {
