@@ -436,18 +436,19 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager, Acces
         }
         /// State transition 3: Late -> Defaulted
         else if (_currentStatus == LendingPoolStatus.Late) {
-          /// Update the current status of the lending pool to Active
-          lendingPoolStateDetail.currentStatus = LendingPoolStatus.Defaulted;
+          /// Update the current status of the lending pool to UnderReview
+          lendingPoolStateDetail.currentStatus = LendingPoolStatus.UnderReview;
 
-          // Default state transition will be implemented in the next version of the protocol
+          // UnderReview/Default state transition will be implemented in the next version of the protocol
           // _moveFromLockedToDefaultedState(poolState, _lendingPool);
         }
       }
     } else if (
+      _previousStatus == LendingPoolStatus.UnderReview ||
       _previousStatus == LendingPoolStatus.Defaulted ||
       _previousStatus == LendingPoolStatus.Expired
     ) {
-      /// no state transition for Defaulted or Expired state
+      /// no state transition for UnderReview, Defaulted or Expired state
     } else {
       /// Only update the status in storage if it is changed
       if (_previousStatus != _currentStatus) {
