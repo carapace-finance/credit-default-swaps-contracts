@@ -147,7 +147,8 @@ const deployContracts: Function = async (
       "DefaultStateManager"
     );
     defaultStateManagerInstance = (await upgrades.deployProxy(
-      defaultStateManagerFactory
+      defaultStateManagerFactory,
+      [await operator.getAddress()]
     )) as DefaultStateManager;
     await defaultStateManagerInstance.deployed();
     console.log(
@@ -188,7 +189,7 @@ const deployContracts: Function = async (
 
     /// Sets pool factory address into the ProtectionPoolCycleManager & DefaultStateManager
     /// This is required to enable the ProtectionPoolCycleManager & DefaultStateManager to register a new pool when it is created
-    /// "setPoolFactory" must be called by the owner
+    /// "setContractFactory" must be called by the owner
     await protectionPoolCycleManagerInstance
       .connect(deployer)
       .setContractFactory(cpContractFactoryInstance.address);
@@ -297,7 +298,6 @@ const deployContracts: Function = async (
     // Create an instance of the ProtectionPool, which should be upgradable
     // Create a pool using PoolFactory instead of deploying new pool directly to mimic the prod behavior
     await cpContractFactoryInstance.createProtectionPool(
-      await operator.getAddress(),
       protectionPoolImplementation.address,
       _protectionPoolParams,
       _protectionPoolCycleParams,

@@ -26,7 +26,7 @@ import {
 import { ITranchedPool } from "../../typechain-types/contracts/external/goldfinch/ITranchedPool";
 import { payToLendingPool, payToLendingPoolAddress } from "../utils/goldfinch";
 import { DefaultStateManager } from "../../typechain-types/contracts/core/DefaultStateManager";
-import { ZERO_ADDRESS } from "../utils/constants";
+import { ZERO_ADDRESS, OPERATOR_ROLE } from "../utils/constants";
 import { getGoldfinchLender1 } from "../utils/goldfinch";
 import { ProtectionPoolV2 } from "../../typechain-types/contracts/test/ProtectionPoolV2";
 import { impersonateSignerWithEth } from "../utils/utils";
@@ -51,9 +51,6 @@ const testProtectionPool: Function = (
 
     const _newFloor: BigNumber = parseEther("0.4");
     const _newCeiling: BigNumber = parseEther("1.1");
-    const OPERATOR_ROLE = ethers.utils.keccak256(
-      ethers.utils.toUtf8Bytes("OPERATOR_ROLE")
-    );
 
     let deployerAddress: string;
     let operatorAddress: string;
@@ -328,7 +325,6 @@ const testProtectionPool: Function = (
           await expect(
             protectionPoolImplementation.initialize(
               operatorAddress,
-              ZERO_ADDRESS,
               poolInfo,
               ZERO_ADDRESS,
               ZERO_ADDRESS,
@@ -369,7 +365,6 @@ const testProtectionPool: Function = (
         await expect(
           protectionPool.initialize(
             ZERO_ADDRESS,
-            operatorAddress,
             poolInfo,
             ZERO_ADDRESS,
             ZERO_ADDRESS,
@@ -444,39 +439,6 @@ const testProtectionPool: Function = (
 
       it("...getAllProtections should return empty array", async () => {
         expect((await protectionPool.getAllProtections()).length).to.eq(0);
-      });
-
-      it("...should grant DEFAULT_ADMIN role to the owner", async () => {
-        expect(await protectionPool.hasRole(await protectionPool.DEFAULT_ADMIN_ROLE(), deployerAddress)).to.be.true;
-      });
-
-      it("...should grant the operator role to the operator", async () => { 
-        expect(
-          await protectionPool.hasRole(
-            OPERATOR_ROLE,
-            operatorAddress
-          )
-        ).to.be.true;
-      });
-
-      it("...owner should be able to revoke the operator role", async () => { 
-        await protectionPool.revokeRole(OPERATOR_ROLE, await operator.getAddress());
-        expect(
-          await protectionPool.hasRole(
-            OPERATOR_ROLE,
-            operatorAddress
-          )
-        ).to.be.false;
-      });
-
-      it("...owner should be able to grant the operator role", async () => { 
-        await protectionPool.grantRole(OPERATOR_ROLE, await operator.getAddress());
-        expect(
-          await protectionPool.hasRole(
-            OPERATOR_ROLE,
-            operatorAddress
-          )
-        ).to.be.true;
       });
     });
 
@@ -1621,7 +1583,7 @@ const testProtectionPool: Function = (
           await expect(
             protectionPool.connect(seller).accruePremiumAndExpireProtections([])
           ).to.be.revertedWith(
-            `AccessControl: account ${sellerAddress.toLowerCase()} is missing role ${OPERATOR_ROLE}`
+            `CallerIsNotOperator("${sellerAddress}")`
           );
         });
 
@@ -2334,7 +2296,8 @@ const testProtectionPool: Function = (
 
           // time has moved forward by more than 30 days, so lending pool 2 is late for payment
           // and state should be transitioned to "Late" and capital should be locked
-          await expect(defaultStateManager.assessStates())
+          await expect(defaultStateManager
+            .connect(operator).assessStates())
             .to.emit(defaultStateManager, "PoolStatesAssessed")
             .to.emit(defaultStateManager, "LendingPoolLocked");
         });
@@ -2406,7 +2369,7 @@ const testProtectionPool: Function = (
             await payToLendingPoolAddress(_lendingPool1, "300000", USDC);
 
             if (i === 0) {
-              await defaultStateManager.assessStateBatch([
+              await defaultStateManager.connect(operator).assessStateBatch([
                 protectionPool.address
               ]);
 
@@ -2420,7 +2383,9 @@ const testProtectionPool: Function = (
             } else {
               // after second payment, 2nd lending pool should move from Late to Active state
               await expect(
-                defaultStateManager.assessStateBatch([protectionPool.address])
+                defaultStateManager
+                  .connect(operator)
+                  .assessStateBatch([protectionPool.address])
               )
                 .to.emit(defaultStateManager, "PoolStatesAssessed")
                 .to.emit(defaultStateManager, "LendingPoolUnlocked");
@@ -2819,7 +2784,7 @@ const testProtectionPool: Function = (
           ).to.be.revertedWith("ProtectionPurchaseNotAllowed");
         });
 
-        it("...should fail because of PoolLeverageRatioTooLow", async () => {
+        it("...should fail because of ProtectionPoolLeverageRatioTooLow", async () => {
           // lending pool protection purchase limit is 90 days
           await payToLendingPoolAddress(_lendingPool1, "1000000", USDC);
           const _expectedPremiumAmt = parseUSDC("10000");
@@ -2838,7 +2803,7 @@ const testProtectionPool: Function = (
               },
               _expectedPremiumAmt
             )
-          ).to.be.revertedWith("PoolLeverageRatioTooLow");
+          ).to.be.revertedWith("ProtectionPoolLeverageRatioTooLow");
         });
 
         it("...deposit should succeed in open phase after lock/unlock", async () => {
@@ -2882,7 +2847,7 @@ const testProtectionPool: Function = (
             (await referenceLendingPools.getLendingPools()).length
           ).to.be.eq(3);
 
-          await defaultStateManager.assessStates();
+          await defaultStateManager.connect(operator).assessStates();
         });
 
         it("...buyProtection in new pool should succeed", async () => {
@@ -2929,7 +2894,7 @@ const testProtectionPool: Function = (
             lastPaymentTimestamp.add(getDaysInSeconds(30).add(60 * 60)) // late by 1 hour
           );
 
-          await defaultStateManager.assessStates();
+          await defaultStateManager.connect(operator).assessStates();
 
           const _expectedPremiumAmt = parseUSDC("1000");
           _protectionBuyer = await setupProtectionBuyer(

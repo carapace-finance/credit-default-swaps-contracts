@@ -106,7 +106,6 @@ const testContractFactory: Function = (
           cpContractFactory
             .connect(account1)
             .createProtectionPool(
-              await operator.getAddress(),
               poolImplementation.address,
               _poolParams,
               _poolCycleParams,
@@ -138,7 +137,6 @@ const testContractFactory: Function = (
           cpContractFactory
             .connect(deployer)
             .createProtectionPool(
-              await operator.getAddress(),
               ZERO_ADDRESS,
               _poolParams,
               _poolCycleParams,
@@ -158,7 +156,6 @@ const testContractFactory: Function = (
 
         await expect(
           cpContractFactory.createProtectionPool(
-            await operator.getAddress(),
             poolImplementation.address,
             _poolParams,
             _poolCycleParams,

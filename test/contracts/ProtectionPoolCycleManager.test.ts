@@ -31,7 +31,7 @@ const testProtectionPoolCycleManager: Function = (
 
       before(async () => {
         poolCycleManagerImplementation = (await ethers.getContractAt(
-          "DefaultStateManager",
+          "ProtectionPoolCycleManager",
           await upgrades.erc1967.getImplementationAddress(
             protectionPoolCycleManager.address
           )
