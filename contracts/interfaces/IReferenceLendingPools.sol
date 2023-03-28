@@ -168,4 +168,13 @@ abstract contract IReferenceLendingPools {
     view
     virtual
     returns (uint256);
+
+  /**
+   * @notice Returns the current status of the specified lending pool
+   */
+  function getLendingPoolStatus(address _lendingPoolAddress)
+    external
+    view
+    virtual
+    returns (LendingPoolStatus);
 }

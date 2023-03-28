@@ -114,6 +114,19 @@ abstract contract IDefaultStateManager {
   function assessStateBatch(address[] calldata _pools) external virtual;
 
   /**
+   * @notice Assess and returns the current status of the specified lending pool of given protection pool.
+   * If the protection pool is not registered or lending pool is not supported by specified protection,
+   * then it returns "NotSupported" status.
+   * @param _protectionPoolAddress address of the protection pool
+   * @param _lendingPoolAddress address of the lending pool
+   * @return the status of the lending pool
+   */
+  function assessLendingPoolStatus(
+    address _protectionPoolAddress,
+    address _lendingPoolAddress
+  ) external virtual returns (LendingPoolStatus);
+
+  /**
    * @notice Calculates and returns the total claimable amount from all locked capital instances
    * in a given protection pool for a user address and marks the unlocked capital as claimed.
    * This function must be called by the protection pool contract.
@@ -138,7 +151,7 @@ abstract contract IDefaultStateManager {
   ) external view virtual returns (uint256 _claimableUnlockedCapital);
 
   /**
-   * @notice Provides the current status of the specified lending pool of given protection pool.
+   * @notice Provides the current stored/cached status of the specified lending pool of given protection pool.
    * If the protection pool is not registered or lending pool is not supported by specified protection,
    * then it returns "NotSupported" status.
    * @param _protectionPoolAddress address of the protection pool

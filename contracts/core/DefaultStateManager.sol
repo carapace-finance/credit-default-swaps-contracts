@@ -110,7 +110,7 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
     protectionPoolStateIndexes[_protectionPoolAddress] = newIndex;
 
     /// Assess the state of the newly registered protection pool
-    _assessState(poolState);
+    _assessProtectionPoolState(poolState);
 
     emit ProtectionPoolRegistered(_protectionPoolAddress);
   }
@@ -124,7 +124,7 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
 
     /// assess the state of all registered protection pools except the dummy pool at index 0
     for (uint256 _poolIndex = 1; _poolIndex < _length; ) {
-      _assessState(protectionPoolStates[_poolIndex]);
+      _assessProtectionPoolState(protectionPoolStates[_poolIndex]);
       unchecked {
         ++_poolIndex;
       }
@@ -144,13 +144,42 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
 
       /// Only assess the state if the protection pool is registered
       if (poolState.updatedTimestamp > 0) {
-        _assessState(poolState);
+        _assessProtectionPoolState(poolState);
       }
 
       unchecked {
         ++_poolIndex;
       }
     }
+  }
+
+  /// @inheritdoc IDefaultStateManager
+  function assessLendingPoolStatus(
+    address _protectionPoolAddress,
+    address _lendingPoolAddress
+  ) external override returns (LendingPoolStatus) {
+    ProtectionPoolState storage poolState = protectionPoolStates[
+      protectionPoolStateIndexes[_protectionPoolAddress]
+    ];
+    LendingPoolStatusDetail storage lendingPoolStatusDetail = poolState
+      .lendingPoolStateDetails[_lendingPoolAddress];
+    
+    /// Retrieve the current/latest status of the lending pool
+    LendingPoolStatus _currentStatus = poolState
+      .protectionPool
+      .getPoolInfo()
+      .referenceLendingPools
+      .getLendingPoolStatus(_lendingPoolAddress);
+
+    /// assess lending pool status before returning the status
+    _assessLendingPool(
+      poolState,
+      lendingPoolStatusDetail,
+      _lendingPoolAddress,
+      _currentStatus
+    );
+
+    return lendingPoolStatusDetail.currentStatus;
   }
 
   /// @inheritdoc IDefaultStateManager
@@ -288,7 +317,7 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
    * @dev assess the state of a given protection pool and
    * update state changes & initiate related actions as needed.
    */
-  function _assessState(ProtectionPoolState storage poolState) internal {
+  function _assessProtectionPoolState(ProtectionPoolState storage poolState) internal {
     poolState.updatedTimestamp = block.timestamp;
 
     /// assess the state of all reference lending pools of this protection pool
@@ -304,81 +333,96 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager {
     /// Compare previous and current status of each lending pool and perform the required state transition
     uint256 _length = _lendingPools.length;
     for (uint256 _lendingPoolIndex; _lendingPoolIndex < _length; ) {
-      /// Get the lending pool state details
+      /// Retrieve stored details, current/latest status of the lending pool
+      /// and then assess the state
       address _lendingPool = _lendingPools[_lendingPoolIndex];
-      LendingPoolStatusDetail storage lendingPoolStateDetail = poolState
-        .lendingPoolStateDetails[_lendingPool];
-
-      /// Get the previous and current status of the lending pool
-      LendingPoolStatus _previousStatus = lendingPoolStateDetail.currentStatus;
-      LendingPoolStatus _currentStatus = _currentStatuses[_lendingPoolIndex];
-
-      if (_previousStatus != _currentStatus) {
-        console.log(
-          "DefaultStateManager: Lending pool %s status is changed from %s to  %s",
-          _lendingPool,
-          uint256(_previousStatus),
-          uint256(_currentStatus)
-        );
-      }
-
-      /// State transition 1: Active or LateWithinGracePeriod -> Late
-      if (
-        (_previousStatus == LendingPoolStatus.Active ||
-          _previousStatus == LendingPoolStatus.LateWithinGracePeriod) &&
-        _currentStatus == LendingPoolStatus.Late
-      ) {
-        /// Update the current status of the lending pool to Late
-        /// and move the lending pool to the locked state
-        lendingPoolStateDetail.currentStatus = LendingPoolStatus.Late;
-        _moveFromActiveToLockedState(poolState, _lendingPool);
-
-        /// Capture the timestamp when the lending pool became late
-        lendingPoolStateDetail.lateTimestamp = block.timestamp;
-      } else if (_previousStatus == LendingPoolStatus.Late) {
-        /// Once there is a late payment, we wait for 2 payment periods.
-        /// After 2 payment periods are elapsed, either full payment is going to be made or not.
-        /// If all missed payments(full payment) are made, then a pool goes back to active.
-        /// If full payment is not made, then this lending pool is in the default state.
-        if (
-          block.timestamp >
-          (lendingPoolStateDetail.lateTimestamp +
-            _getTwoPaymentPeriodsInSeconds(poolState, _lendingPool))
-        ) {
-          /// State transition 2: Late -> Active
-          if (_currentStatus == LendingPoolStatus.Active) {
-            /// Update the current status of the lending pool to Active
-            /// and move the lending pool to the active state
-            lendingPoolStateDetail.currentStatus = LendingPoolStatus.Active;
-            _moveFromLockedToActiveState(poolState, _lendingPool);
-
-            /// Clear the late timestamp
-            lendingPoolStateDetail.lateTimestamp = 0;
-          }
-          /// State transition 3: Late -> Defaulted
-          else if (_currentStatus == LendingPoolStatus.Late) {
-            /// Update the current status of the lending pool to Active
-            lendingPoolStateDetail.currentStatus = LendingPoolStatus.Defaulted;
-
-            // Default state transition will be implemented in the next version of the protocol
-            // _moveFromLockedToDefaultedState(poolState, _lendingPool);
-          }
-        }
-      } else if (
-        _previousStatus == LendingPoolStatus.Defaulted ||
-        _previousStatus == LendingPoolStatus.Expired
-      ) {
-        /// no state transition for Defaulted or Expired state
-      } else {
-        /// Only update the status in storage if it is changed
-        if (_previousStatus != _currentStatus) {
-          lendingPoolStateDetail.currentStatus = _currentStatus;
-          /// No action required for any other state transition
-        }
-      }
+      _assessLendingPool(
+        poolState,
+        poolState.lendingPoolStateDetails[_lendingPool],
+        _lendingPool,
+        _currentStatuses[_lendingPoolIndex]
+      );
 
       unchecked {
         ++_lendingPoolIndex;
+      }
+    }
+  }
+
+  /**
+   * @dev assess the status of a given lending pool and
+   * update stored status & initiate related actions as needed.
+   */
+  function _assessLendingPool(
+    ProtectionPoolState storage poolState,
+    LendingPoolStatusDetail storage lendingPoolStateDetail,
+    address _lendingPool,
+    LendingPoolStatus _currentStatus
+  ) internal {
+    /// Compare previous and current status of each lending pool and perform the required state transition
+    LendingPoolStatus _previousStatus = lendingPoolStateDetail.currentStatus;
+
+    if (_previousStatus != _currentStatus) {
+      console.log(
+        "DefaultStateManager: Lending pool %s status is changed from %s to  %s",
+        _lendingPool,
+        uint256(_previousStatus),
+        uint256(_currentStatus)
+      );
+    }
+
+    /// State transition 1: Active or LateWithinGracePeriod -> Late
+    if (
+      (_previousStatus == LendingPoolStatus.Active ||
+        _previousStatus == LendingPoolStatus.LateWithinGracePeriod) &&
+      _currentStatus == LendingPoolStatus.Late
+    ) {
+      /// Update the current status of the lending pool to Late
+      /// and move the lending pool to the locked state
+      lendingPoolStateDetail.currentStatus = LendingPoolStatus.Late;
+      _moveFromActiveToLockedState(poolState, _lendingPool);
+
+      /// Capture the timestamp when the lending pool became late
+      lendingPoolStateDetail.lateTimestamp = block.timestamp;
+    } else if (_previousStatus == LendingPoolStatus.Late) {
+      /// Once there is a late payment, we wait for 2 payment periods.
+      /// After 2 payment periods are elapsed, either full payment is going to be made or not.
+      /// If all missed payments(full payment) are made, then a pool goes back to active.
+      /// If full payment is not made, then this lending pool is in the default state.
+      if (
+        block.timestamp >
+        (lendingPoolStateDetail.lateTimestamp +
+          _getTwoPaymentPeriodsInSeconds(poolState, _lendingPool))
+      ) {
+        /// State transition 2: Late -> Active
+        if (_currentStatus == LendingPoolStatus.Active) {
+          /// Update the current status of the lending pool to Active
+          /// and move the lending pool to the active state
+          lendingPoolStateDetail.currentStatus = LendingPoolStatus.Active;
+          _moveFromLockedToActiveState(poolState, _lendingPool);
+
+          /// Clear the late timestamp
+          lendingPoolStateDetail.lateTimestamp = 0;
+        }
+        /// State transition 3: Late -> Defaulted
+        else if (_currentStatus == LendingPoolStatus.Late) {
+          /// Update the current status of the lending pool to Active
+          lendingPoolStateDetail.currentStatus = LendingPoolStatus.Defaulted;
+
+          // Default state transition will be implemented in the next version of the protocol
+          // _moveFromLockedToDefaultedState(poolState, _lendingPool);
+        }
+      }
+    } else if (
+      _previousStatus == LendingPoolStatus.Defaulted ||
+      _previousStatus == LendingPoolStatus.Expired
+    ) {
+      /// no state transition for Defaulted or Expired state
+    } else {
+      /// Only update the status in storage if it is changed
+      if (_previousStatus != _currentStatus) {
+        lendingPoolStateDetail.currentStatus = _currentStatus;
+        /// No action required for any other state transition
       }
     }
   }
