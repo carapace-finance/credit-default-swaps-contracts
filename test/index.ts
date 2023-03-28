@@ -104,6 +104,8 @@ describe("start testing", () => {
         referenceLendingPoolsImplementation,
         referenceLendingPoolsInstance,
         cpContractFactoryInstance,
+        defaultStateManagerInstance,
+        protectionPoolInstance,
         GOLDFINCH_LENDING_POOLS
       );
     });

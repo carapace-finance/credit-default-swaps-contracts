@@ -261,7 +261,8 @@ const deployContracts: Function = async (
       _lendingPoolProtocols,
       _lendingPoolPurchaseLimitsInDays,
       cpContractFactoryInstance.address,
-      _latePaymentGracePeriodInDays
+      _latePaymentGracePeriodInDays,
+      defaultStateManagerInstance.address
     );
     referenceLendingPoolsInstance =
       await getLatestReferenceLendingPoolsInstance(cpContractFactoryInstance);

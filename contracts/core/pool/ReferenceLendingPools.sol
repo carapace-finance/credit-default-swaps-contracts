@@ -31,6 +31,9 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
   /// @notice the lending protocol adapter factory
   ILendingProtocolAdapterFactory private lendingProtocolAdapterFactory;
 
+  /// @notice the default state manager
+  address private defaultStateManagerAddress;
+
   /// @notice the mapping of the lending pool address to the lending pool info
   mapping(address => ReferenceLendingPoolInfo) public referenceLendingPools;
 
@@ -59,7 +62,8 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
     LendingProtocol[] calldata _lendingPoolProtocols,
     uint256[] calldata _protectionPurchaseLimitsInDays,
     address _lendingProtocolAdapterFactory,
-    uint256 _latePaymentGracePeriodInDays
+    uint256 _latePaymentGracePeriodInDays,
+    address _defaultStateManagerAddress
   ) external override initializer {
     if (
       _lendingPools.length != _lendingPoolProtocols.length ||
@@ -83,6 +87,7 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
     lendingProtocolAdapterFactory = ILendingProtocolAdapterFactory(
       _lendingProtocolAdapterFactory
     );
+    defaultStateManagerAddress = _defaultStateManagerAddress;
 
     /// Transfer ownership of this contract to the specified owner address
     _transferOwnership(_owner);
@@ -106,20 +111,25 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
 
   /**
    * @notice Adds a new reference lending pool to the basket.
-   * @dev This function can only be called by the owner of this contract.
+   * @dev This function can only be called by the DefaultStateManager contract.
    * @dev This function is marked as payable for gas optimization.
    * @param _lendingPoolAddress address of the lending pool
    * @param _lendingPoolProtocol the protocol of underlying lending pool
    * @param _protectionPurchaseLimitInDays the protection purchase limit in days.
    * i.e. 90 days means the protection can be purchased within {_protectionPurchaseLimitInDays} days of
    * lending pool being added to this contract.
+   * @return the status of the lending pool
    */
   function addReferenceLendingPool(
     address _lendingPoolAddress,
     LendingProtocol _lendingPoolProtocol,
     uint256 _protectionPurchaseLimitInDays
-  ) external payable onlyOwner {
-    _addReferenceLendingPool(
+  ) external override payable returns (LendingPoolStatus) {
+    if (msg.sender != defaultStateManagerAddress) {
+      revert OnlyDefaultStateManagerCanAddLendingPool();
+    }
+
+    return _addReferenceLendingPool(
       _lendingPoolAddress,
       _lendingPoolProtocol,
       _protectionPurchaseLimitInDays
@@ -286,7 +296,7 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
     address _lendingPoolAddress,
     LendingProtocol _lendingPoolProtocol,
     uint256 _protectionPurchaseLimitInDays
-  ) internal {
+  ) internal returns (LendingPoolStatus _poolStatus) {
     if (_lendingPoolAddress == Constants.ZERO_ADDRESS) {
       revert ReferenceLendingPoolIsZeroAddress();
     }
@@ -306,7 +316,7 @@ contract ReferenceLendingPools is UUPSUpgradeableBase, IReferenceLendingPools {
     });
     lendingPools.push(_lendingPoolAddress);
 
-    LendingPoolStatus _poolStatus = _getLendingPoolStatus(_lendingPoolAddress);
+    _poolStatus = _getLendingPoolStatus(_lendingPoolAddress);
     if (_poolStatus != LendingPoolStatus.Active) {
       revert ReferenceLendingPoolIsNotActive(_lendingPoolAddress);
     }

@@ -67,6 +67,7 @@ abstract contract IReferenceLendingPools {
   error ReferenceLendingPoolAlreadyAdded(address lendingPoolAddress);
   error ReferenceLendingPoolIsNotActive(address lendingPoolAddress);
   error ReferenceLendingPoolIsZeroAddress();
+  error OnlyDefaultStateManagerCanAddLendingPool();
 
   /**
    * @notice the initialization function for the reference lending pools contract.
@@ -79,6 +80,7 @@ abstract contract IReferenceLendingPools {
    * @param _lendingProtocolAdapterFactory the address of the contract which implements interface {LendingProtocolAdapterFactory}
    * @param _latePaymentGracePeriodInDays the grace period in days after which a lending pool will be considered late for payment in
    * unscaled value, i.e. 1 day = 1
+   * @param _defaultStateManagerAddress the address of the DefaultStateManager contract
    */
   function initialize(
     address _owner,
@@ -86,8 +88,26 @@ abstract contract IReferenceLendingPools {
     LendingProtocol[] calldata _lendingPoolProtocols,
     uint256[] calldata _protectionPurchaseLimitsInDays,
     address _lendingProtocolAdapterFactory,
-    uint256 _latePaymentGracePeriodInDays
+    uint256 _latePaymentGracePeriodInDays,
+    address _defaultStateManagerAddress
   ) external virtual;
+
+  /**
+   * @notice Adds a new reference lending pool to the basket.
+   * @dev This function can only be called by the DefaultStateManager contract.
+   * @dev This function is marked as payable for gas optimization.
+   * @param _lendingPoolAddress address of the lending pool
+   * @param _lendingPoolProtocol the protocol of underlying lending pool
+   * @param _protectionPurchaseLimitInDays the protection purchase limit in days.
+   * i.e. 90 days means the protection can be purchased within {_protectionPurchaseLimitInDays} days of
+   * lending pool being added to this contract.
+   * @return the status of the lending pool
+   */
+  function addReferenceLendingPool(
+    address _lendingPoolAddress,
+    LendingProtocol _lendingPoolProtocol,
+    uint256 _protectionPurchaseLimitInDays
+  ) external virtual payable returns (LendingPoolStatus);
 
   /**
    * @notice returns all lending pools which are added/available in this basket
