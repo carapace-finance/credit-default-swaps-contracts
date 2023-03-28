@@ -79,9 +79,6 @@ contract ProtectionPool is
    */
   uint256 private totalSTokenUnderlying;
 
-  /// @notice The timestamp of the last premium accrual
-  uint256 private lastPremiumAccrualTimestamp;
-
   /// @notice The array to track all protections bought from this pool
   /// @dev This array has dummy element at index 0 to validate the index of the protection
   ProtectionInfo[] private protectionInfos;
@@ -300,56 +297,7 @@ contract ProtectionPool is
       _lendingPools = poolInfo.referenceLendingPools.getLendingPools();
     }
 
-    /// Track total premium accrued and protection removed for all lending pools
-    uint256 _totalPremiumAccrued;
-    uint256 _totalProtectionRemoved;
-
-    /// Cache the last premium accrual timestamp from the storage
-    uint256 _lastPremiumAccrualTimestamp = lastPremiumAccrualTimestamp;
-    console.log("lastPremiumAccrualTimestamp: %s", _lastPremiumAccrualTimestamp);
-
-    /// Iterate all lending pools of this protection pool to check if there is new payment after last premium accrual
-    uint256 length = _lendingPools.length;
-    for (uint256 _lendingPoolIndex; _lendingPoolIndex < length; ) {
-      /// Retrieve lending pool detail from the storage
-      address _lendingPool = _lendingPools[_lendingPoolIndex];
-      LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
-        _lendingPool
-      ];
-
-      /// Iterate all active protections for this lending pool and
-      /// accrue premium since last premium accrual timestamp
-      (
-        uint256 _accruedPremiumForLendingPool,
-        uint256 _totalProtectionRemovedForLendingPool
-      ) = _accruePremiumAndExpireProtections(
-          lendingPoolDetail,
-          _lastPremiumAccrualTimestamp
-        );
-      _totalPremiumAccrued += _accruedPremiumForLendingPool;
-      _totalProtectionRemoved += _totalProtectionRemovedForLendingPool;
-
-      unchecked {
-        ++_lendingPoolIndex;
-      }
-    }
-
-    /// Gas optimization: only update storage vars if there was premium accrued
-    if (_totalPremiumAccrued > 0) {
-      totalPremiumAccrued += _totalPremiumAccrued;
-      totalSTokenUnderlying += _totalPremiumAccrued;
-
-      /// Persist the last premium accrual timestamp in the storage,
-      /// only if there was premium accrued
-      lastPremiumAccrualTimestamp = block.timestamp;
-      emit PremiumAccrued(_totalPremiumAccrued);
-    }
-
-    /// Reduce the total protection amount of this protection pool
-    /// by the total protection amount of the expired protections
-    if (_totalProtectionRemoved > 0) {
-      totalProtection -= _totalProtectionRemoved;
-    }
+    _accruePremiumAndExpireProtections(_lendingPools);
   }
 
   /// @inheritdoc IProtectionPool
@@ -361,10 +309,15 @@ contract ProtectionPool is
     whenNotPaused
     returns (uint256 _lockedAmount, uint256 _snapshotId)
   {
-    /// step 1: Capture protection pool's current investors by creating a snapshot of the token balance by using ERC20Snapshot in SToken
+    /// step 1: accrue premium and expire protections for the specified lending pool
+    address[] memory _lendingPools = new address[](1);
+    _lendingPools[0] = _lendingPoolAddress;
+    _accruePremiumAndExpireProtections(_lendingPools);
+
+    /// step 2: Capture protection pool's current investors by creating a snapshot of the token balance by using ERC20Snapshot in SToken
     _snapshotId = _snapshot();
 
-    /// step 2: calculate total capital to be locked
+    /// step 3: calculate total capital to be locked
     LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
       _lendingPoolAddress
     ];
@@ -658,7 +611,8 @@ contract ProtectionPool is
     override
     returns (
       uint256 _totalPremium,
-      uint256 _totalProtection
+      uint256 _totalProtection,
+      uint256 _lastPremiumAccrualTimestamp
     )
   {
     LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
@@ -666,6 +620,8 @@ contract ProtectionPool is
     ];
     _totalPremium = lendingPoolDetail.totalPremium;
     _totalProtection = lendingPoolDetail.totalProtection;
+    _lastPremiumAccrualTimestamp = lendingPoolDetail
+      .lastPremiumAccrualTimestamp;
   }
 
   /// @inheritdoc IProtectionPool
@@ -760,15 +716,13 @@ contract ProtectionPool is
       uint256 _totalSTokenUnderlying,
       uint256 _totalProtection,
       uint256 _totalPremium,
-      uint256 _totalPremiumAccrued,
-      uint256 _lastPremiumAccrualTimestamp
+      uint256 _totalPremiumAccrued
     )
   {
     _totalSTokenUnderlying = totalSTokenUnderlying;
     _totalProtection = totalProtection;
     _totalPremium = totalPremium;
     _totalPremiumAccrued = totalPremiumAccrued;
-    _lastPremiumAccrualTimestamp = lastPremiumAccrualTimestamp;
   }
 
   /// @inheritdoc IProtectionPool
@@ -957,6 +911,66 @@ contract ProtectionPool is
     return (_totalCapital * Constants.SCALE_18_DECIMALS) / totalProtection;
   }
 
+  /**
+   * @dev Accrue premium and expire protections for all specified lending pools
+   */
+  function _accruePremiumAndExpireProtections(
+    address[] memory _lendingPools
+  ) internal {
+    /// Track total premium accrued and protection removed for all lending pools
+    uint256 _totalPremiumAccrued;
+    uint256 _totalProtectionRemoved;
+
+    /// Iterate all lending pools of this protection pool to check if there is new payment after last premium accrual
+    uint256 length = _lendingPools.length;
+    for (uint256 _lendingPoolIndex; _lendingPoolIndex < length; ) {
+      /// Retrieve lending pool detail from the storage
+      address _lendingPool = _lendingPools[_lendingPoolIndex];
+      LendingPoolDetail storage lendingPoolDetail = lendingPoolDetails[
+        _lendingPool
+      ];
+
+      /// Cache the last premium accrual timestamp from the storage
+      uint256 _lastPremiumAccrualTimestamp = lendingPoolDetail.lastPremiumAccrualTimestamp;
+      console.log("lastPremiumAccrualTimestamp: %s for lending pool: %s", _lastPremiumAccrualTimestamp, _lendingPool);
+
+      /// Iterate all active protections for this lending pool and
+      /// accrue premium since last premium accrual timestamp
+      (
+        uint256 _accruedPremiumForLendingPool,
+        uint256 _totalProtectionRemovedForLendingPool
+      ) = _accruePremiumAndExpireProtections(
+          lendingPoolDetail,
+          _lastPremiumAccrualTimestamp
+        );
+      _totalPremiumAccrued += _accruedPremiumForLendingPool;
+      _totalProtectionRemoved += _totalProtectionRemovedForLendingPool;
+
+      /// Persist the last premium accrual timestamp in the storage,
+      /// only if there was premium accrued
+      if (_accruedPremiumForLendingPool > 0) {
+        lendingPoolDetail.lastPremiumAccrualTimestamp = block.timestamp;
+        emit PremiumAccrued(_lendingPool, _accruedPremiumForLendingPool);
+      }
+
+      unchecked {
+        ++_lendingPoolIndex;
+      }
+    }
+
+    /// Gas optimization: only update storage vars if there was premium accrued
+    if (_totalPremiumAccrued > 0) {
+      totalPremiumAccrued += _totalPremiumAccrued;
+      totalSTokenUnderlying += _totalPremiumAccrued;
+    }
+
+    /// Reduce the total protection amount of this protection pool
+    /// by the total protection amount of the expired protections
+    if (_totalProtectionRemoved > 0) {
+      totalProtection -= _totalProtectionRemoved;
+    }
+  }
+  
   /**
    * @dev Accrue premium for all active protections and mark expired protections for the specified lending pool.
    * Premium is only accrued when the lending pool has a new payment.

@@ -77,11 +77,13 @@ struct ProtectionInfo {
 /// @notice A struct to store the details of a lending pool such as
 /// total premium, total protection, active protection indexes etc.
 struct LendingPoolDetail {
-  /// @notice Track the total amount of premium for each lending pool
+  /// @notice Track the total amount of premium for this lending pool
   uint256 totalPremium;
+  /// @notice The timestamp of the last premium accrual for this lending pool
+  uint256 lastPremiumAccrualTimestamp;
   /// @notice Set to track all protections bought for specific lending pool, which are active/not expired
   EnumerableSetUpgradeable.UintSet activeProtectionIndexes;
-  /// @notice Track the total amount of protection bought for each lending pool
+  /// @notice Track the total amount of protection bought for this lending pool
   uint256 totalProtection;
   /// @notice Mapping to track the active protection index by nft token id.
   /// @dev NFT id to the active protection index
@@ -174,9 +176,10 @@ abstract contract IProtectionPool {
     uint256 protectionAmount
   );
 
-  /// @notice Emitted when premium is accrued from all active protections for all lending pools.
+  /// @notice Emitted when premium is accrued from all active protections for given lending pool.
   event PremiumAccrued(
-    uint256 totalPremiumAccrued
+    address indexed lendingPool,
+    uint256 premiumAccrued
   );
 
   /// @notice Emitted when a withdrawal request is made by a seller/investor.
@@ -438,6 +441,7 @@ abstract contract IProtectionPool {
    * @param _lendingPoolAddress The address of the lending pool.
    * @return _totalPremium The total premium paid for the lending pool.
    * @return _totalProtection The total protection bought for the lending pool.
+   * @return _lastPremiumAccrualTimestamp The timestamp of the last premium accrual for the lending pool.
    */
   function getLendingPoolDetail(address _lendingPoolAddress)
     external
@@ -445,7 +449,8 @@ abstract contract IProtectionPool {
     virtual
     returns (
       uint256 _totalPremium,
-      uint256 _totalProtection
+      uint256 _totalProtection,
+      uint256 _lastPremiumAccrualTimestamp
     );
 
   /**
@@ -484,7 +489,6 @@ abstract contract IProtectionPool {
    * @return _totalProtection The total protection bought in the pool, in underlying token.
    * @return _totalPremium The total premium paid in the pool, in underlying token.
    * @return _totalPremiumAccrued The total premium accrued from the protections, in underlying token.
-   * @return _lastPremiumAccrualTimestamp The timestamp of the last premium accrual.
    */
   function getPoolDetails()
     external
@@ -494,8 +498,7 @@ abstract contract IProtectionPool {
       uint256 _totalSTokenUnderlying,
       uint256 _totalProtection,
       uint256 _totalPremium,
-      uint256 _totalPremiumAccrued,
-      uint256 _lastPremiumAccrualTimestamp
+      uint256 _totalPremiumAccrued
     );
 
   /**

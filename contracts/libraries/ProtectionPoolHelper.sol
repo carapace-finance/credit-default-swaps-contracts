@@ -230,37 +230,37 @@ library ProtectionPoolHelper {
       /**
        * <-Protection Bought(second: 0) --- last accrual --- now --- Expiration->
        * The time line starts when protection is bought and ends when protection is expired.
-       * secondsUntilLastPremiumAccrual is the second elapsed since the last accrual timestamp.
-       * _secondsUntilNow is the second elapsed until now after the protection is bought.
+       * _secondsFromStartToLatestAccrual is the seconds elapsed from the start to last accrual timestamp.
+       * _secondsFromStartToNow is the seconds elapsed from the start to min(now, expiration).
        */
 
-      // When premium is accrued for the first time, the _secondsUntilLastPremiumAccrual is 0.
-      uint256 _secondsUntilLastPremiumAccrual;
+      // When premium is accrued for the first time, start from 0.
+      uint256 _secondsFromStartToLatestAccrual;
       if (_lastPremiumAccrualTimestamp > _startTimestamp) {
-        _secondsUntilLastPremiumAccrual = _lastPremiumAccrualTimestamp - _startTimestamp;
+        _secondsFromStartToLatestAccrual = _lastPremiumAccrualTimestamp - _startTimestamp;
       }
 
       /// if loan protection is expired, then accrue premium till expiration timestamp.
-      uint256 _secondsUntilNow;
+      uint256 _secondsFromStartToNow;
       if (_protectionExpired) {
-        _secondsUntilNow = _expirationTimestamp - _startTimestamp;
+        _secondsFromStartToNow = _expirationTimestamp - _startTimestamp;
       } else {
-        _secondsUntilNow = block.timestamp - _startTimestamp;
+        _secondsFromStartToNow = block.timestamp - _startTimestamp;
       }
 
       /// Calculate the accrued premium amount scaled to 18 decimals
       uint256 _accruedPremiumIn18Decimals = AccruedPremiumCalculator
         .calculateAccruedPremium(
-          _secondsUntilLastPremiumAccrual,
-          _secondsUntilNow,
+          _secondsFromStartToLatestAccrual,
+          _secondsFromStartToNow,
           protectionInfo.K,
           protectionInfo.lambda
         );
 
       console.log(
         "accruedPremium from second %s to %s: ",
-        _secondsUntilLastPremiumAccrual,
-        _secondsUntilNow,
+        _secondsFromStartToLatestAccrual,
+        _secondsFromStartToNow,
         _accruedPremiumIn18Decimals
       );
 
@@ -285,8 +285,6 @@ library ProtectionPoolHelper {
     LendingPoolDetail storage lendingPoolDetail,
     uint256 _protectionIndex
   ) public {
-    console.log("Protection expired for amt: %s", protectionInfo.purchaseParams.protectionAmount);
-
     /// Update protection info to mark it as expired
     protectionInfo.expired = true;
 
@@ -311,6 +309,8 @@ library ProtectionPoolHelper {
     lendingPoolDetail.totalProtection -= protectionInfo
       .purchaseParams
       .protectionAmount;
+
+    console.log("Protection(%s) expired for amt: %s", purchaseParams.nftLpTokenId, protectionInfo.purchaseParams.protectionAmount);
   }
 
   /**

@@ -1658,9 +1658,9 @@ const testProtectionPool: Function = (
             .and.to.be.lt(_expectedPremiumUpperBound);
 
           // last accrual timestamp should be updated
-          expect((await protectionPool.getPoolDetails())[4]).to.be.eq(
-            await getLatestBlockTimestamp()
-          );
+          expect(
+            (await protectionPool.getLendingPoolDetail(_lendingPool2))[2]
+          ).to.be.eq(await getLatestBlockTimestamp());
         });
 
         it("...should mark protections 2 & 3 expired", async () => {
@@ -1698,9 +1698,9 @@ const testProtectionPool: Function = (
             .connect(operator)
             .accruePremiumAndExpireProtections([]);
           // last accrual timestamp should be updated
-          expect((await protectionPool.getPoolDetails())[4]).to.be.eq(
-            await getLatestBlockTimestamp()
-          );
+           expect(
+             (await protectionPool.getLendingPoolDetail(_lendingPool1))[2]
+           ).to.be.eq(await getLatestBlockTimestamp());
         });
       });
 
@@ -2048,7 +2048,7 @@ const testProtectionPool: Function = (
               lendingPoolAddress: _lendingPool2,
               nftLpTokenId: 590,
               protectionAmount: parseUSDC("50000"),
-              protectionDurationInSeconds: getDaysInSeconds(20)
+              protectionDurationInSeconds: getDaysInSeconds(45)
             },
             parseUSDC("10000")
           );
@@ -2279,6 +2279,7 @@ const testProtectionPool: Function = (
         let lendingPool2: ITranchedPool;
         let _expectedLockedCapital: BigNumber;
         let _totalSTokenUnderlyingBefore: BigNumber;
+        let _totalPremiumAccruedBefore: BigNumber;
 
         const getLatestLockedCapital = async (_lendingPool: string) => {
           return (
@@ -2317,9 +2318,10 @@ const testProtectionPool: Function = (
             "ITranchedPool",
             _lendingPool2
           )) as ITranchedPool;
-          _totalSTokenUnderlyingBefore = (
-            await protectionPool.getPoolDetails()
-          )[0];
+          
+          const _poolDetailsBefore = await protectionPool.getPoolDetails();
+          _totalSTokenUnderlyingBefore = _poolDetailsBefore[0];
+          _totalPremiumAccruedBefore = _poolDetailsBefore[3];
           _expectedLockedCapital = parseUSDC("50000");
 
           // pay lending pool 1
@@ -2369,10 +2371,15 @@ const testProtectionPool: Function = (
         });
 
         it("...should reduce total sToken underlying by locked capital", async () => {
+          const _poolDetailsAfter = await protectionPool.getPoolDetails();
+          const _totalPremiumAccruedAfter = _poolDetailsAfter[3];
+          const _premiumAccrued = _totalPremiumAccruedAfter.sub(
+            _totalPremiumAccruedBefore);
+          
           expect(
-            _totalSTokenUnderlyingBefore.sub(
-              (await protectionPool.getPoolDetails())[0]
-            )
+            _totalSTokenUnderlyingBefore
+              .add(_premiumAccrued)
+              .sub(_poolDetailsAfter[0])
           ).to.eq(_expectedLockedCapital);
         });
 
@@ -2486,8 +2493,8 @@ const testProtectionPool: Function = (
         });
 
         it("...has correct total underlying amount", async () => {
-          // 5 deposits = 20K + 40K + 40K + 100 + 100 - 50K of locked capital
-          expect((await protectionPool.getPoolDetails())[0]).to.eq(
+          // deposits + accrued premium - locked capital
+          expect((await protectionPool.getPoolDetails())[0]).to.be.gt(
             parseUSDC("50200")
           );
         });
@@ -2514,17 +2521,21 @@ const testProtectionPool: Function = (
         });
 
         it("...accrue premium and expire protections", async () => {
-          // should expire 2 protections
+          // should expire 1 protection
           expect((await getActiveProtections()).length).to.eq(2);
           await protectionPool
             .connect(operator)
             .accruePremiumAndExpireProtections([]);
-          expect((await getActiveProtections()).length).to.eq(0);
+          expect((await getActiveProtections()).length).to.eq(1);
         });
 
         it("...can buy protections", async () => {
-          // Day 42: 12th day of Pool cycle 2
-          // protection 4: buyer 4 has principal of 158K USDC with token id: 645 in pool
+          // Day 46: 16th day of Pool cycle 2
+          await moveForwardTimeByDays(4);
+          await protectionPool.connect(operator).accruePremiumAndExpireProtections([
+            _lendingPool2
+          ]);
+
           await USDC.connect(_protectionBuyer1).approve(
             protectionPool.address,
             parseUSDC("10000")
@@ -2549,10 +2560,10 @@ const testProtectionPool: Function = (
 
       describe("renewProtection after purchase limit", async () => {
         it("...renewProtection should fail when protection renewal's duration is longer than 3rd pool cycle's end", async () => {
-          // we are in day 42: 12th day of pool cycle 2, so next(3rd) pool cycle's end is after 48 days at 90 days
+          // we are in day 46: 16th day of pool cycle 2, so next(3rd) pool cycle's end is after 44 days at 90 days
           // expired protection's(protection after revert) duration is 35 days,
-          // so protection renewal with > 13 days duration should fail
-          const _newProtectionDurationInSeconds = getDaysInSeconds(13) + 1;
+          // so protection renewal with > 9 days duration should fail
+          const _newProtectionDurationInSeconds = getDaysInSeconds(9) + 1;
           await expect(
             protectionPool.connect(_protectionBuyer4).renewProtection(
               {
@@ -2580,7 +2591,7 @@ const testProtectionPool: Function = (
               lendingPoolAddress: _lendingPool1,
               nftLpTokenId: 645,
               protectionAmount: parseUSDC("20000"),
-              protectionDurationInSeconds: getDaysInSeconds(13)
+              protectionDurationInSeconds: getDaysInSeconds(11)
             },
             parseUSDC("10000")
           );
@@ -2601,7 +2612,7 @@ const testProtectionPool: Function = (
 
       before(async () => {
         // Move pool cycle(10 days open period, 30 days total duration) to open state (next pool cycle)
-        // day 62(42 + 20): 2nd day of cycle 3
+        // day 62(46 + 20): 2nd day of cycle 3
         await moveForwardTimeByDays(20);
       });
 
@@ -2885,18 +2896,20 @@ const testProtectionPool: Function = (
             value: ethers.utils.parseEther("10")
           });
 
+          const _expectedPremium = parseUSDC("10000");
           await transferAndApproveUsdcToPool(
             _protectionBuyer,
-            parseUSDC("1000")
+            _expectedPremium
           );
+          
           await protectionPool.connect(_protectionBuyer).buyProtection(
             {
               lendingPoolAddress: _lendingPool3,
               nftLpTokenId: 717,
-              protectionAmount: parseUSDC("30000"),
+              protectionAmount: parseUSDC("50000"),
               protectionDurationInSeconds: getDaysInSeconds(30)
             },
-            parseUSDC("10000")
+            _expectedPremium
           );
 
           expect(
@@ -3115,6 +3128,9 @@ const testProtectionPool: Function = (
       expect(await network.provider.send("evm_revert", [snapshotId2])).to.be.eq(
         true
       );
+      
+      // // accrue premium and expire protections
+      await protectionPool.connect(operator).accruePremiumAndExpireProtections([]);
     });
   });
 };
