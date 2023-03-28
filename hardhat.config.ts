@@ -15,6 +15,7 @@ import "hardhat-storage-layout";
 import "@openzeppelin/hardhat-upgrades";
 import "@nomicfoundation/hardhat-foundry";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
+import "hardhat-log-remover";
 
 const {
   ALCHEMY_API_KEY,

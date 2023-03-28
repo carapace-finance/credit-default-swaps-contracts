@@ -12,8 +12,6 @@ import {IPremiumCalculator} from "../interfaces/IPremiumCalculator.sol";
 import "./AccruedPremiumCalculator.sol";
 import "./Constants.sol";
 
-import "hardhat/console.sol";
-
 /**
  * @title ProtectionPoolHelper
  * @author Carapace Finance
@@ -258,13 +256,6 @@ library ProtectionPoolHelper {
           protectionInfo.lambda
         );
 
-      console.log(
-        "accruedPremium from second %s to %s: ",
-        _secondsFromStartToLatestAccrual,
-        _secondsFromStartToNow,
-        _accruedPremiumIn18Decimals
-      );
-
       /// Scale the premium amount to underlying decimals
       _accruedPremiumInUnderlying = scale18DecimalsAmtToUnderlyingDecimals(
         _accruedPremiumIn18Decimals,
@@ -310,8 +301,6 @@ library ProtectionPoolHelper {
     lendingPoolDetail.totalProtection -= protectionInfo
       .purchaseParams
       .protectionAmount;
-
-    console.log("Protection(%s) expired for amt: %s", purchaseParams.nftLpTokenId, protectionInfo.purchaseParams.protectionAmount);
   }
 
   /**

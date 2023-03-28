@@ -11,8 +11,6 @@ import {IProtectionPool} from "../interfaces/IProtectionPool.sol";
 import {IDefaultStateManager, ProtectionPoolState, LockedCapital, LendingPoolStatusDetail} from "../interfaces/IDefaultStateManager.sol";
 import "../libraries/Constants.sol";
 
-import "hardhat/console.sol";
-
 /**
  * @title DefaultStateManager
  * @author Carapace Finance
@@ -435,15 +433,6 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager, Acces
     /// Compare previous and current status of each lending pool and perform the required state transition
     LendingPoolStatus _previousStatus = lendingPoolStateDetail.currentStatus;
 
-    if (_previousStatus != _currentStatus) {
-      console.log(
-        "DefaultStateManager: Lending pool %s status is changed from %s to  %s",
-        _lendingPool,
-        uint256(_previousStatus),
-        uint256(_currentStatus)
-      );
-    }
-
     /// State transition 1: Active or LateWithinGracePeriod -> Late
     if (
       (_previousStatus == LendingPoolStatus.Active ||
@@ -602,23 +591,10 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager, Acces
       LockedCapital storage lockedCapital = lockedCapitals[_index];
       uint256 _snapshotId = lockedCapital.snapshotId;
 
-      console.log(
-        "lockedCapital.locked: %s, amt: %s",
-        lockedCapital.locked,
-        lockedCapital.amount
-      );
-
       /// Verify that the seller does not claim the same snapshot twice
       if (!lockedCapital.locked && _snapshotId > _latestClaimedSnapshotId) {
         ERC20SnapshotUpgradeable _poolSToken = ERC20SnapshotUpgradeable(
           address(poolState.protectionPool)
-        );
-
-        console.log(
-          "balance of seller: %s, total supply: %s at snapshot: %s",
-          _poolSToken.balanceOfAt(_seller, _snapshotId),
-          _poolSToken.totalSupplyAt(_snapshotId),
-          _snapshotId
         );
 
         /// The claimable amount for the given seller is proportional to the seller's share of the total supply at the snapshot
@@ -630,12 +606,6 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager, Acces
 
         /// Update the last claimed snapshot id for the seller
         _latestClaimedSnapshotId = _snapshotId;
-
-        console.log(
-          "Claimable amount for seller %s is %s",
-          _seller,
-          _claimableUnlockedCapital
-        );
       }
 
       unchecked {
