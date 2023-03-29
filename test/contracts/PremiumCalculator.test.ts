@@ -68,7 +68,6 @@ const testPremiumCalculator: Function = (
             _protectionAmt,
             _protectionBuyerApy,
             _currentLeverageRatio,
-            _totalCapital,
             _poolParams
           );
 
@@ -86,7 +85,6 @@ const testPremiumCalculator: Function = (
             _protectionAmt,
             _protectionBuyerApy,
             _currentLeverageRatio,
-            _totalCapital,
             _poolParams
           );
 
@@ -107,7 +105,6 @@ const testPremiumCalculator: Function = (
             protectionAmount,
             protectionBuyerApy,
             leverageRatio,
-            _totalCapital,
             _poolParams
           );
           leverageRatio = leverageRatio.add(parseEther("0.005"));
@@ -128,7 +125,6 @@ const testPremiumCalculator: Function = (
             _protectionAmt,
             _protectionBuyerApy,
             _leverageRatioFloor.sub(parseEther("0.05")), // leverage ratio(0.05) is less than floor
-            _totalCapital,
             _poolParams
           );
 
@@ -147,7 +143,6 @@ const testPremiumCalculator: Function = (
             _protectionAmt,
             _protectionBuyerApy,
             _leverageRatioCeiling.add(parseEther("0.05")), // leverage ratio(0.25) is higher than ceiling
-            _totalCapital,
             _poolParams
           );
 
@@ -166,7 +161,6 @@ const testPremiumCalculator: Function = (
             _protectionAmt,
             _protectionBuyerApy,
             0,
-            _totalCapital,
             _poolParams
           );
 
@@ -185,7 +179,6 @@ const testPremiumCalculator: Function = (
             _protectionAmt,
             _protectionBuyerApy,
             0,
-            _totalCapital,
             _poolParams
           );
 
@@ -246,7 +239,6 @@ const testPremiumCalculator: Function = (
             _protectionAmt,
             _protectionBuyerApy,
             _currentLeverageRatio,
-            parseUSDC("15000"),
             _poolParams
           );
 

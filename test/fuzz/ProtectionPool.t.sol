@@ -732,7 +732,6 @@ contract FuzzTestProtectionPool is Test {
       _protectionAmount,
       _protectionBuyerAPR,
       _leverageRatio,
-      _depositAmount,
       protectionPool.getPoolInfo().params
     );
     uint256 _maxPremiumAmount = _premiumAmount + 100e6;

@@ -659,7 +659,6 @@ contract ProtectionPool is
         premiumCalculator,
         poolInfo,
         _protectionPurchaseParams,
-        totalSTokenUnderlying,
         _leverageRatio
       );
   }
@@ -776,7 +775,6 @@ contract ProtectionPool is
         lendingPoolDetail,
         _protectionPurchaseParams,
         _maxPremiumAmount,
-        totalSTokenUnderlying,
         _leverageRatio
       );
     totalPremium += _premiumAmount;
