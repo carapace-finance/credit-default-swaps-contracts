@@ -93,7 +93,6 @@ library RiskFactorCalculator {
     uint256 _minRequiredCapital
   ) external pure returns (bool _canCalculate) {
     if (
-      _totalCapital < _minRequiredCapital ||
       _leverageRatio < _leverageRatioFloor ||
       _leverageRatio > _leverageRatioCeiling
     ) {
