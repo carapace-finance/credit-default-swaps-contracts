@@ -130,8 +130,7 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager, Acces
   function assessStates() 
     external 
     override 
-    onlyRole(Constants.OPERATOR_ROLE
-  ) {
+    onlyRole(Constants.OPERATOR_ROLE) {
     /// gas optimizations:
     /// 1. capture length in memory & don't read from storage for each iteration
     /// 2. uncheck incrementing pool index
@@ -150,10 +149,17 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager, Acces
 
   /// @inheritdoc IDefaultStateManager
   function assessStateBatch(address[] calldata _pools) 
-    external 
+    external
     override 
-    onlyRole(Constants.OPERATOR_ROLE
-  ) {
+  {
+    /// This function is only callable by ProtectionPool or Operator
+    ProtectionPoolState storage msgSenderPoolState = protectionPoolStates[
+      protectionPoolStateIndexes[msg.sender]
+    ];
+    if (msgSenderPoolState.updatedTimestamp == 0) {
+      _checkRole(Constants.OPERATOR_ROLE, msg.sender);
+    }
+
     uint256 _length = _pools.length;
     for (uint256 _poolIndex; _poolIndex < _length; ) {
       /// Get the state of the pool by looking up the index in the mapping from the given pool address

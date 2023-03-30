@@ -230,7 +230,12 @@ contract ProtectionPool is
     whenNotPaused
     nonReentrant
   {
-    /// Step 1: Retrieve withdrawal details for current pool cycle index
+    /// step 1: verify that all lending pool statuses are up to date for this protection pool
+    address[] memory _protectionPools = new address[](1);
+    _protectionPools[0] = address(this);
+    defaultStateManager.assessStateBatch(_protectionPools);
+
+    /// Step 2: Retrieve withdrawal details for current pool cycle index
     uint256 _currentCycleIndex = poolCycleManager.getCurrentCycleIndex(
       address(this)
     );
@@ -238,30 +243,30 @@ contract ProtectionPool is
       _currentCycleIndex
     ];
 
-    /// Step 2: Verify withdrawal request exists in this withdrawal cycle for the user
+    /// Step 3: Verify withdrawal request exists in this withdrawal cycle for the user
     uint256 _sTokenRequested = withdrawalCycle.withdrawalRequests[msg.sender];
     if (_sTokenRequested == 0) {
       revert NoWithdrawalRequested(msg.sender, _currentCycleIndex);
     }
 
-    /// Step 3: Verify that withdrawal amount is not more than the requested amount.
+    /// Step 4: Verify that withdrawal amount is not more than the requested amount.
     if (_sTokenWithdrawalAmount > _sTokenRequested) {
       revert WithdrawalHigherThanRequested(msg.sender, _sTokenRequested);
     }
 
-    /// Step 4: calculate underlying amount to transfer based on sToken withdrawal amount
+    /// Step 5: calculate underlying amount to transfer based on sToken withdrawal amount
     uint256 _underlyingAmountToTransfer = convertToUnderlying(
       _sTokenWithdrawalAmount
     );
 
-    /// Step 5: burn sTokens shares.
+    /// Step 6: burn sTokens shares.
     /// This step must be done after calculating underlying amount to be transferred
     _burn(msg.sender, _sTokenWithdrawalAmount);
 
-    /// Step 6: Update total sToken underlying amount
+    /// Step 7: Update total sToken underlying amount
     totalSTokenUnderlying -= _underlyingAmountToTransfer;
 
-    /// Step 7: update seller's withdrawal amount and total requested withdrawal amount
+    /// Step 8: update seller's withdrawal amount and total requested withdrawal amount
     withdrawalCycle.withdrawalRequests[msg.sender] -= _sTokenWithdrawalAmount;
     withdrawalCycle.totalSTokenRequested -= _sTokenWithdrawalAmount;
 
