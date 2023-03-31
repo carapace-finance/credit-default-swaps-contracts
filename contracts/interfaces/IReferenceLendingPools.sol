@@ -14,6 +14,8 @@ enum LendingPoolStatus {
   LateWithinGracePeriod,
   /// @notice This means the lending pool is late for payment and beyond the grace period and the protection can NOT be purchased
   Late,
+  /// @notice This means the lending pool is under review to determine status and the protection can NOT be purchased
+  UnderReview,
   /// @notice This means the lending pool is defaulted and the protection can NOT be purchased
   Defaulted,
   /// @notice This means the lending pool is either fully repaid or full term has been completed and the protection can NOT be purchased

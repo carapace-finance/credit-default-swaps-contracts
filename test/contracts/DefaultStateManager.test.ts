@@ -44,6 +44,7 @@ const testDefaultStateManager: Function = (
     let pool2: string;
     let sellerAddress: string;
     let referenceLendingPoolsInstance: ReferenceLendingPools;
+    let protectionBuyer: Signer;
 
     const verifyLendingPoolHasLockedCapital = async (
       protectionPool: string,
@@ -295,7 +296,7 @@ const testDefaultStateManager: Function = (
         await payToLendingPoolAddress(lendingPools[0], "300000", usdcContract);
         await payToLendingPoolAddress(lendingPools[1], "300000", usdcContract);
 
-        let protectionBuyer = await ethers.getImpersonatedSigner(
+        protectionBuyer = await ethers.getImpersonatedSigner(
           "0x5CD8C821C080b7340df6969252a979Ed416a4e3F"
         );
         let _expectedPremiumAmt = parseUSDC("10000");
@@ -473,11 +474,11 @@ const testDefaultStateManager: Function = (
         }
       });
 
-      it("...1st lending pool in protection pool 1 should be in default state with locked capital", async () => {
-        // 1st lending pool should move from Late to Default state with locked capital instances
+      it("...1st lending pool in protection pool 1 should be in UnderReview state with locked capital", async () => {
+        // 1st lending pool should move from Late to UnderReview state with locked capital instances
         expect(
           await defaultStateManager.getLendingPoolStatus(pool1, lendingPools[0])
-        ).to.eq(4); // Default
+        ).to.eq(4); // UnderReview
 
         const lockedCapitalsLendingPool1 =
           await defaultStateManager.getLockedCapitals(pool1, lendingPools[0]);
@@ -485,6 +486,21 @@ const testDefaultStateManager: Function = (
         expect(lockedCapitalsLendingPool1[0].snapshotId).to.eq(1);
         expect(lockedCapitalsLendingPool1[0].amount).to.eq(parseUSDC("0"));
         expect(lockedCapitalsLendingPool1[0].locked).to.eq(true);
+      });
+
+      it("...should not be able to buy protection from UnderReview lending pool", async () => {
+        let _expectedPremiumAmt = parseUSDC("10000");
+        await expect(
+          protectionPoolInstance.connect(protectionBuyer).buyProtection(
+            {
+              lendingPoolAddress: lendingPools[0],
+              nftLpTokenId: 645,
+              protectionAmount: parseUSDC("50000"),
+              protectionDurationInSeconds: getDaysInSeconds(35)
+            },
+            _expectedPremiumAmt
+          )
+        ).to.be.revertedWith("LendingPoolHasLatePayment");
       });
 
       it("... should keep 1st lending pool locked in Protection Pool 1", async () => {

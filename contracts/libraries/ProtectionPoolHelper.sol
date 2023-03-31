@@ -477,9 +477,9 @@ library ProtectionPoolHelper {
     if (
       !_isRenewal &&
       (poolStatus == LendingPoolStatus.LateWithinGracePeriod ||
-      poolStatus == LendingPoolStatus.Late)
+      poolStatus == LendingPoolStatus.Late ||
+      poolStatus == LendingPoolStatus.UnderReview)
     ) {
-
       revert IProtectionPool.LendingPoolHasLatePayment(_lendingPoolAddress);
     }
 
