@@ -18,8 +18,6 @@ import "../../libraries/AccruedPremiumCalculator.sol";
 import "../../libraries/Constants.sol";
 import "../../libraries/ProtectionPoolHelper.sol";
 
-import "hardhat/console.sol";
-
 /**
  * @title ProtectionPool
  * @author Carapace Finance
@@ -375,11 +373,6 @@ contract ProtectionPool is
       .calculateAndClaimUnlockedCapital(msg.sender);
 
     if (_claimableAmount > 0) {
-      console.log(
-        "Total sToken underlying: %s, claimableAmount: %s",
-        totalSTokenUnderlying,
-        _claimableAmount
-      );
       /// transfer the share of unlocked capital to the receiver
       poolInfo.underlyingToken.safeTransfer(_receiver, _claimableAmount);
     }
@@ -793,13 +786,6 @@ contract ProtectionPool is
       _protectionPurchaseParams.protectionDurationInSeconds
     ) * Constants.SCALE_18_DECIMALS) / uint256(Constants.SECONDS_IN_DAY);
 
-    console.log(
-      "protectionDurationInDays: %s, protectionPremium: %s, leverageRatio: ",
-      _protectionDurationInDaysScaled,
-      _premiumAmount,
-      _leverageRatio
-    );
-
     /// Step 4: Capture loan protection data for premium accrual calculation
     // solhint-disable-next-line
     (int256 _k, int256 _lambda) = AccruedPremiumCalculator.calculateKAndLambda(
@@ -868,13 +854,6 @@ contract ProtectionPool is
     uint256 _exchangeRate = (_totalScaledCapital *
       Constants.SCALE_18_DECIMALS) / _totalSTokenSupply;
 
-    console.log(
-      "Total capital: %s, Total SToken Supply: %s, exchange rate: %s",
-      _totalScaledCapital,
-      _totalSTokenSupply,
-      _exchangeRate
-    );
-
     return _exchangeRate;
   }
 
@@ -936,7 +915,6 @@ contract ProtectionPool is
 
       /// Cache the last premium accrual timestamp from the storage
       uint256 _lastPremiumAccrualTimestamp = lendingPoolDetail.lastPremiumAccrualTimestamp;
-      console.log("lastPremiumAccrualTimestamp: %s for lending pool: %s", _lastPremiumAccrualTimestamp, _lendingPool);
 
       /// Iterate all active protections for this lending pool and
       /// accrue premium since last premium accrual timestamp
@@ -1209,9 +1187,6 @@ contract ProtectionPool is
         
         /// update total requested withdrawal amount for remaining cycles by current cycle's requested amount
         _totalWithdrawalAllowed -= _newRequestAmount;
-
-        console.log("Withdrawal cycle: %s", i);
-        console.log("totalWithdrawalAllowed: %s, old request amount: %s new request amount: %s", _totalWithdrawalAllowed, _oldRequestAmount, _newRequestAmount);
 
         /// update current cycle's total requested withdrawal by the difference between old and new request amount
         _updateTotalSTokenRequested(

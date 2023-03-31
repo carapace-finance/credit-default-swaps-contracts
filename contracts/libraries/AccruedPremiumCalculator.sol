@@ -5,8 +5,6 @@ import "@prb/math/contracts/PRBMathSD59x18.sol";
 import "./Constants.sol";
 import "./RiskFactorCalculator.sol";
 
-import "hardhat/console.sol";
-
 /**
  * @title AccruedPremiumCalculator
  * @author Carapace Finance
@@ -42,7 +40,7 @@ library AccruedPremiumCalculator {
     uint256 _minCarapaceRiskPremiumPercent
   )
     external
-    view
+    pure
     returns (
       // solhint-disable-next-line var-name-mixedcase
       int256 K,
@@ -68,22 +66,17 @@ library AccruedPremiumCalculator {
 
     /// lambda: Risk Factor / 365.24
     _lambda = (_riskFactor * 100) / Constants.SCALED_DAYS_IN_YEAR;
-    console.logInt(_lambda);
 
     /// exp1 = (-1 * _protectionDurationInDays * lambda)
     /// Need to scale down once because _protectionDurationInDays and lambda both are in 18 decimals
     int256 _power1 = (-1 * int256(_protectionDurationInDays) * _lambda) /
       Constants.SCALE_18_DECIMALS_INT;
-    console.logInt(_power1);
 
     /// exp1 = e^(-1 * _protectionDurationInDays * lambda)
     int256 _exp1 = _power1.exp();
-    console.logInt(_exp1);
 
     /// K = _protectionPremium / (1 - e^(-1 * _protectionDurationInDays * lambda))
-    console.log("Calculating K");
     K = int256(_protectionPremium).div(Constants.SCALE_18_DECIMALS_INT - _exp1);
-    console.logInt(K);
   }
 
   /**
@@ -104,34 +97,17 @@ library AccruedPremiumCalculator {
     uint256 _toSecond,
     int256 _k,
     int256 _lambda
-  ) external view returns (uint256) {
-    console.log(
-      "Calculating accrued premium from: %s to %s",
-      _fromSecond,
-      _toSecond
-    );
-
+  ) external pure returns (uint256) {
     /// power1 = -1 * _fromSecond * lambda
     int256 _power1 = -1 *
       ((int256(_fromSecond) * _lambda) / Constants.SECONDS_IN_DAY);
-    console.logInt(_power1);
-
-    /// _exp1 = e^(-t * L)
-    int256 _exp1 = _power1.exp();
-    console.logInt(_exp1);
 
     /// power2 = -1 * _toSecond * lambda
     int256 _power2 = -1 *
       ((int256(_toSecond) * _lambda) / Constants.SECONDS_IN_DAY);
-    console.logInt(_power2);
-
-    /// _exp2 = e^(-T * L)
-    int256 _exp2 = _power2.exp();
-    console.logInt(_exp2);
 
     /// _accruedPremium = K * (e^(-t * L) -  e^(-T * L))
-    int256 _accruedPremium = _k.mul(_exp1 - _exp2);
-    console.logInt(_accruedPremium);
+    int256 _accruedPremium = _k.mul(_power1.exp() - _power2.exp());
 
     assert(_accruedPremium >= 0);
     return uint256(_accruedPremium);

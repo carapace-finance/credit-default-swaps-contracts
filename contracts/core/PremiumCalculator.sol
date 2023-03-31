@@ -10,8 +10,6 @@ import {ProtectionPoolParams} from "../interfaces/IProtectionPool.sol";
 import "../libraries/Constants.sol";
 import "../libraries/RiskFactorCalculator.sol";
 
-import "hardhat/console.sol";
-
 /**
  * @title PremiumCalculator
  * @author Carapace Finance
@@ -45,13 +43,6 @@ contract PremiumCalculator is UUPSUpgradeableBase, IPremiumCalculator {
     override
     returns (uint256 _premiumAmount, bool _isMinPremium)
   {
-    console.log(
-      "Calculating premium... protection duration in seconds: %s, protection amount: %s, leverage ratio: %s",
-      _protectionDurationInSeconds,
-      _protectionAmount,
-      _leverageRatio
-    );
-
     int256 _carapacePremiumRate;
 
     /// Calculate the duration in years
@@ -82,7 +73,6 @@ contract PremiumCalculator is UUPSUpgradeableBase, IPremiumCalculator {
         _durationInYears,
         _riskFactor
       );
-      console.logInt(_carapacePremiumRate);
     } else {
       /// This means that the risk factor cannot be calculated because of either
       /// min capital not met or leverage ratio out of range.
@@ -99,7 +89,6 @@ contract PremiumCalculator is UUPSUpgradeableBase, IPremiumCalculator {
       _minCarapaceRiskPremiumPercent
       ? _carapacePremiumRate
       : _minCarapaceRiskPremiumPercent;
-    console.logInt(_carapacePremiumRateToUse);
 
     /// Calculate the underlying premium rate based on the protection buyer APY
     uint256 _underlyingPremiumRate = _calculateUnderlyingPremiumRate(
@@ -107,12 +96,10 @@ contract PremiumCalculator is UUPSUpgradeableBase, IPremiumCalculator {
       _protectionBuyerApy,
       _poolParameters.underlyingRiskPremiumPercent
     );
-    console.log("Underlying premium rate: %s", _underlyingPremiumRate);
 
     assert(_carapacePremiumRateToUse > 0);
     uint256 _premiumRate = uint256(_carapacePremiumRateToUse) +
       _underlyingPremiumRate;
-    console.log("Premium rate: %s", _premiumRate);
 
     // need to scale down once because protectionAmount & premiumRate both are in 18 decimals
     _premiumAmount =

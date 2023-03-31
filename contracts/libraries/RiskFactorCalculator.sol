@@ -5,8 +5,6 @@ import "@prb/math/contracts/PRBMathSD59x18.sol";
 
 import "./Constants.sol";
 
-import "hardhat/console.sol";
-
 /**
  * @title RiskFactorCalculator
  * @author Carapace Finance
@@ -36,13 +34,7 @@ library RiskFactorCalculator {
     uint256 _leverageRatioCeiling,
     uint256 _leverageRatioBuffer,
     uint256 _curvature
-  ) external view returns (int256 _riskFactor) {
-    console.log(
-      "Calculating risk factor... leverage ratio: %s, floor: %s, ceiling: %s",
-      _currentLeverageRatio,
-      _leverageRatioFloor,
-      _leverageRatioCeiling
-    );
+  ) external pure returns (int256 _riskFactor) {
 
     int256 _numerator = int256(
       (_leverageRatioCeiling + _leverageRatioBuffer) - _currentLeverageRatio
@@ -52,7 +44,6 @@ library RiskFactorCalculator {
       int256(_leverageRatioFloor - _leverageRatioBuffer);
 
     _riskFactor = (int256(_curvature) * _numerator) / _denominator;
-    console.logInt(_riskFactor);
   }
 
   /**
@@ -66,15 +57,9 @@ library RiskFactorCalculator {
   function calculateRiskFactorUsingMinPremium(
     uint256 _minCarapaceRiskPremiumPercent,
     uint256 _durationInDays
-  ) external view returns (int256 _riskFactor) {
-    console.log(
-      "Calculating risk factor using minCarapaceRiskPremiumPercent... minCarapaceRiskPremiumPercent: %s, durationInDays: %s",
-      _minCarapaceRiskPremiumPercent,
-      _durationInDays
-    );
+  ) external pure returns (int256 _riskFactor) {
     int256 _logValue = (Constants.SCALE_18_DECIMALS_INT -
       int256(_minCarapaceRiskPremiumPercent)).ln();
-    console.logInt(_logValue);
 
     /**
      * min premium = 1 - e ^ (-1 * lambda * duration in days)
@@ -84,10 +69,8 @@ library RiskFactorCalculator {
      */
     int256 _lambda = (-1 * _logValue * Constants.SCALE_18_DECIMALS_INT) /
       int256(_durationInDays);
-    console.logInt(_lambda);
 
     _riskFactor = (_lambda * Constants.SCALED_DAYS_IN_YEAR) / 100;
-    console.logInt(_riskFactor);
   }
 
   /**
