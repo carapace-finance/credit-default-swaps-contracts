@@ -237,7 +237,8 @@ const testContractFactory: Function = (
               [0],
               [0],
               ZERO_ADDRESS,
-              1
+              1,
+              defaultStateManager.address
             )
         ).to.be.revertedWith("Ownable: caller is not the owner");
       });
@@ -252,7 +253,8 @@ const testContractFactory: Function = (
               [0],
               [0],
               ZERO_ADDRESS,
-              1
+              1,
+              defaultStateManager.address
             )
         ).to.be.revertedWith("ERC1967: new implementation is not a contract");
       });
@@ -265,7 +267,8 @@ const testContractFactory: Function = (
             [],
             [],
             ZERO_ADDRESS,
-            1
+            1,
+            defaultStateManager.address
           )
         ).to.be.revertedWith;
       });
@@ -278,7 +281,8 @@ const testContractFactory: Function = (
             [0],
             [10, 11],
             ZERO_ADDRESS,
-            1
+            1,
+            defaultStateManager.address
           )
         ).to.be.revertedWith;
       });
@@ -293,7 +297,8 @@ const testContractFactory: Function = (
             [0],
             [_purchaseLimitInDays],
             cpContractFactory.address,
-            1
+            1,
+            defaultStateManager.address
           );
         const referenceLendingPoolsInstance =
           await getLatestReferenceLendingPoolsInstance(cpContractFactory);

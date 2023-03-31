@@ -5,8 +5,8 @@ import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/acce
 import {ERC20SnapshotUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20SnapshotUpgradeable.sol";
 
 import {UUPSUpgradeableBase} from "../UUPSUpgradeableBase.sol";
-import {IReferenceLendingPools, LendingPoolStatus} from "../interfaces/IReferenceLendingPools.sol";
-import {ILendingProtocolAdapter} from "../interfaces/ILendingProtocolAdapter.sol";
+import {IReferenceLendingPools, LendingPoolStatus, IReferenceLendingPools} from "../interfaces/IReferenceLendingPools.sol";
+import {ILendingProtocolAdapter, LendingProtocol} from "../interfaces/ILendingProtocolAdapter.sol";
 import {IProtectionPool} from "../interfaces/IProtectionPool.sol";
 import {IDefaultStateManager, ProtectionPoolState, LockedCapital, LendingPoolStatusDetail} from "../interfaces/IDefaultStateManager.sol";
 import "../libraries/Constants.sol";
@@ -253,6 +253,49 @@ contract DefaultStateManager is UUPSUpgradeableBase, IDefaultStateManager, Acces
         ++_lendingPoolIndex;
       }
     }
+  }
+
+  /**
+   * @notice Adds a new reference lending pool to the ReferenceLendingPools.
+   * @dev This function can only be called by the owner of this contract.
+   * @dev This function is marked as payable for gas optimization.
+   * @param _protectionPoolAddress address of the protection pool
+   * @param _lendingPoolAddress address of the lending pool
+   * @param _lendingPoolProtocol the protocol of underlying lending pool
+   * @param _protectionPurchaseLimitInDays the protection purchase limit in days.
+   * i.e. 90 days means the protection can be purchased within {_protectionPurchaseLimitInDays} days of
+   * lending pool being added to this contract.
+   */
+  function addReferenceLendingPool(
+    address _protectionPoolAddress,
+    address _lendingPoolAddress,
+    LendingProtocol _lendingPoolProtocol,
+    uint256 _protectionPurchaseLimitInDays
+  ) external payable onlyOwner {
+     ProtectionPoolState storage poolState = protectionPoolStates[
+      protectionPoolStateIndexes[_protectionPoolAddress]
+    ];
+
+    IReferenceLendingPools _referenceLendingPool = poolState
+      .protectionPool
+      .getPoolInfo()
+      .referenceLendingPools;
+
+    /// Add the lending pool to the reference lending pool
+    LendingPoolStatus _currentStatus = _referenceLendingPool
+      .addReferenceLendingPool(
+        _lendingPoolAddress,
+        _lendingPoolProtocol,
+        _protectionPurchaseLimitInDays
+      );
+
+    /// assess lending pool status before returning the status
+    _assessLendingPool(
+      poolState,
+      poolState.lendingPoolStateDetails[_lendingPoolAddress],
+      _lendingPoolAddress,
+      _currentStatus
+    );
   }
 
   /** view functions */

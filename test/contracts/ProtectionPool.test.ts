@@ -2854,9 +2854,9 @@ const testProtectionPool: Function = (
 
           // Ensure lending pool is current on payment
           await payToLendingPoolAddress(_lendingPool3, "3000000", USDC);
-          await referenceLendingPools
+          await defaultStateManager
             .connect(deployer)
-            .addReferenceLendingPool(_lendingPool3, 0, 30);
+            .addReferenceLendingPool(protectionPool.address, _lendingPool3, 0, 30);
 
           expect(
             (await referenceLendingPools.getLendingPools()).length

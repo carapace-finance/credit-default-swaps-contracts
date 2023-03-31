@@ -13,7 +13,6 @@ import {
 } from "../utils/usdc";
 import {
   getDaysInSeconds,
-  getLatestBlockTimestamp,
   moveForwardTimeByDays,
   setNextBlockTimestamp
 } from "../utils/time";
@@ -22,7 +21,6 @@ import { payToLendingPool, payToLendingPoolAddress } from "../utils/goldfinch";
 import { BigNumber } from "@ethersproject/bignumber";
 import { ReferenceLendingPools } from "../../typechain-types/contracts/core/pool/ReferenceLendingPools";
 import { DefaultStateManagerV2 } from "../../typechain-types/contracts/test/DefaultStateManagerV2";
-import { cpContractFactoryInstance, protectionPoolInstance } from "../../utils/deploy";
 import { LATE_PAYMENT_GRACE_PERIOD_IN_DAYS } from "../../scripts/local-mainnet/data";
 
 const testDefaultStateManager: Function = (
@@ -32,7 +30,7 @@ const testDefaultStateManager: Function = (
   operator: Signer,
   defaultStateManager: DefaultStateManager,
   contractFactory: CPContractFactory,
-  poolInstance: ProtectionPool,
+  protectionPoolInstance: ProtectionPool,
   lendingPools: string[]
 ) => {
   describe("DefaultStateManager", () => {
@@ -40,8 +38,8 @@ const testDefaultStateManager: Function = (
     let operatorAddress: string;
     let usdcContract: Contract;
     let lendingPool2: ITranchedPool;
-    let pool1: string;
-    let pool2: string;
+    let protectionPoolAddress1: string;
+    let protectionPoolAddress2: string;
     let sellerAddress: string;
     let referenceLendingPoolsInstance: ReferenceLendingPools;
     let protectionBuyer: Signer;
@@ -88,14 +86,14 @@ const testDefaultStateManager: Function = (
       )) as ITranchedPool;
       
       usdcContract = getUsdcContract(deployer);
-      pool1 = poolInstance.address;
-      pool2 = (await contractFactory.getProtectionPools())[1];
+      protectionPoolAddress1 = protectionPoolInstance.address;
+      protectionPoolAddress2 = (await contractFactory.getProtectionPools())[1];
       sellerAddress = await seller.getAddress();
 
       referenceLendingPoolsInstance = (await ethers.getContractAt(
         "ReferenceLendingPools",
         (
-          await poolInstance.getPoolInfo()
+          await protectionPoolInstance.getPoolInfo()
         ).referenceLendingPools
       )) as ReferenceLendingPools;
     });
@@ -212,25 +210,25 @@ const testDefaultStateManager: Function = (
         await expect(
           defaultStateManager
             .connect(account1)
-            .registerProtectionPool(poolInstance.address)
+            .registerProtectionPool(protectionPoolInstance.address)
         ).to.be.revertedWith(
-          `PoolAlreadyRegistered("${await poolInstance.address}")`
+          `PoolAlreadyRegistered("${await protectionPoolInstance.address}")`
         );
       });
 
       it("...sets contractFactory address back to contract factory address", async () => {
         await defaultStateManager
           .connect(deployer)
-          .setContractFactory(cpContractFactoryInstance.address);
+          .setContractFactory(contractFactory.address);
       });
 
       it("...should have update timestamp for registered pool", async () => {
         expect(
-          await defaultStateManager.getPoolStateUpdateTimestamp(pool1)
+          await defaultStateManager.getPoolStateUpdateTimestamp(protectionPoolAddress1)
         ).to.be.gt(0);
 
         expect(
-          await defaultStateManager.getPoolStateUpdateTimestamp(pool2)
+          await defaultStateManager.getPoolStateUpdateTimestamp(protectionPoolAddress2)
         ).to.be.gt(0);
       });
     });
@@ -250,7 +248,7 @@ const testDefaultStateManager: Function = (
 
       it("...should work correctly by owner", async () => {
         expect(await defaultStateManager.contractFactoryAddress()).to.equal(
-          cpContractFactoryInstance.address
+          contractFactory.address
         );
 
         await expect(
@@ -268,7 +266,7 @@ const testDefaultStateManager: Function = (
     describe("getLendingPoolStatus", async () => {
       it("...should return NotSupported status for non-registered pool", async () => {
         expect(
-          await defaultStateManager.getLendingPoolStatus(lendingPools[0], pool1)
+          await defaultStateManager.getLendingPoolStatus(lendingPools[0], protectionPoolAddress1)
         ).to.equal(0);
       });
     });
@@ -282,9 +280,9 @@ const testDefaultStateManager: Function = (
         await transferAndApproveUsdc(
           _account,
           _depositAmount,
-          poolInstance.address
+          protectionPoolInstance.address
         );
-        await poolInstance
+        await protectionPoolInstance
           .connect(_account)
           .deposit(_depositAmount, _accountAddress);
       };
@@ -319,7 +317,7 @@ const testDefaultStateManager: Function = (
         // total sToken underlying = 100,200
         // total protection: 100,000
         const [_totalSTokenUnderlying, _totalProtection] =
-          await poolInstance.getPoolDetails();
+          await protectionPoolInstance.getPoolDetails();
         
         // total sToken underlying should be > 100,200 because of accrued premium
         expect(_totalSTokenUnderlying).to.be.gt(parseUSDC("100200"));
@@ -334,20 +332,20 @@ const testDefaultStateManager: Function = (
         await depositToPool(seller, parseUSDC("59800"));
         
         // totalSTokenUnderlying = 100,200 + 59,800 + accrued premium should be > 160,000
-        expect((await poolInstance.getPoolDetails())[0]).to.be.gt(
+        expect((await protectionPoolInstance.getPoolDetails())[0]).to.be.gt(
           parseUSDC("160000")
         );
 
         // Pool should be in Open phase
-        expect((await poolInstance.getPoolInfo()).currentPhase).to.eq(2);
+        expect((await protectionPoolInstance.getPoolInfo()).currentPhase).to.eq(2);
 
-        await defaultStateManager.connect(operator).assessStateBatch([pool1]);
+        await defaultStateManager.connect(operator).assessStateBatch([protectionPoolAddress1]);
 
         // verify that both lending pools are active
         for (let i = 0; i < 2; i++) {
           expect(
             await defaultStateManager.getLendingPoolStatus(
-              pool1,
+              protectionPoolAddress1,
               lendingPools[i]
             )
           ).to.eq(1);
@@ -374,7 +372,7 @@ const testDefaultStateManager: Function = (
           lastPaymentTimestamp.add(getDaysInSeconds(30).add(1)) // late by 1 second
         );
 
-        await defaultStateManager.connect(operator).assessStateBatch([pool1]);
+        await defaultStateManager.connect(operator).assessStateBatch([protectionPoolAddress1]);
 
         // accrue premium and expire protections
         await protectionPoolInstance
@@ -387,14 +385,14 @@ const testDefaultStateManager: Function = (
         for (let i = 0; i < 2; i++) {
           expect(
             await defaultStateManager.getLendingPoolStatus(
-              pool1,
+              protectionPoolAddress1,
               lendingPools[i]
             )
           ).to.eq(2); // LateWithinGracePeriod
 
           // Verify that 1st & 2nd lending pools have NO locked capital instance because it is in LateWithinGracePeriod state
           const lockedCapitalsLendingPool =
-            await defaultStateManager.getLockedCapitals(pool1, lendingPools[i]);
+            await defaultStateManager.getLockedCapitals(protectionPoolAddress1, lendingPools[i]);
           expect(lockedCapitalsLendingPool.length).to.eq(0);
         }
       });
@@ -403,12 +401,12 @@ const testDefaultStateManager: Function = (
         // Move time forward by LATE_PAYMENT_GRACE_PERIOD_IN_DAYS day + 1 second last payment timestamp
         await moveForwardTimeByDays(LATE_PAYMENT_GRACE_PERIOD_IN_DAYS);
         for (let i = 0; i < 2; i++) {
-          await defaultStateManager.connect(operator).assessStateBatch([pool1]);
+          await defaultStateManager.connect(operator).assessStateBatch([protectionPoolAddress1]);
 
           // both lending pools should move from LateWithinGracePeriod to Late state
           expect(
             await defaultStateManager.getLendingPoolStatus(
-              pool1,
+              protectionPoolAddress1,
               lendingPools[i]
             )
           ).to.eq(3); // Late
@@ -417,12 +415,12 @@ const testDefaultStateManager: Function = (
 
       it("...should lock capital for 1st lending pool in protection pool 1", async () => {
         expect(
-          await defaultStateManager.getLendingPoolStatus(pool1, lendingPools[0])
+          await defaultStateManager.getLendingPoolStatus(protectionPoolAddress1, lendingPools[0])
         ).to.eq(3);
 
         // Verify that 1st lending pool has locked capital instance because it is in Late state
         const lockedCapitalsLendingPool1 =
-          await defaultStateManager.getLockedCapitals(pool1, lendingPools[0]);
+          await defaultStateManager.getLockedCapitals(protectionPoolAddress1, lendingPools[0]);
 
         expect(lockedCapitalsLendingPool1.length).to.eq(1);
         expect(lockedCapitalsLendingPool1[0].snapshotId).to.eq(1);
@@ -433,11 +431,11 @@ const testDefaultStateManager: Function = (
       it("...should lock capital for 2nd lending pool in protection pool 1", async () => {
         // 2nd lending pool should move from LateWithinGracePeriod to Late state with a locked capital instance
         expect(
-          await defaultStateManager.getLendingPoolStatus(pool1, lendingPools[1])
+          await defaultStateManager.getLendingPoolStatus(protectionPoolAddress1, lendingPools[1])
         ).to.eq(3); // Late
 
         const lockedCapitalsLendingPool2 =
-          await defaultStateManager.getLockedCapitals(pool1, lendingPools[1]);
+          await defaultStateManager.getLockedCapitals(protectionPoolAddress1, lendingPools[1]);
         expect(lockedCapitalsLendingPool2.length).to.eq(1);
         expect(lockedCapitalsLendingPool2[0].snapshotId).to.eq(2);
 
@@ -462,11 +460,11 @@ const testDefaultStateManager: Function = (
           if (i === 0) {
             await defaultStateManager
               .connect(operator)
-              .assessStateBatch([pool1]);
+              .assessStateBatch([protectionPoolAddress1]);
           } else {
             // after second payment, 2nd lending pool should move from Late to Active state
             await expect(
-              defaultStateManager.connect(operator).assessStateBatch([pool1])
+              defaultStateManager.connect(operator).assessStateBatch([protectionPoolAddress1])
             )
               .to.emit(defaultStateManager, "ProtectionPoolStatesAssessed")
               .to.emit(defaultStateManager, "LendingPoolUnlocked");
@@ -477,11 +475,11 @@ const testDefaultStateManager: Function = (
       it("...1st lending pool in protection pool 1 should be in UnderReview state with locked capital", async () => {
         // 1st lending pool should move from Late to UnderReview state with locked capital instances
         expect(
-          await defaultStateManager.getLendingPoolStatus(pool1, lendingPools[0])
+          await defaultStateManager.getLendingPoolStatus(protectionPoolAddress1, lendingPools[0])
         ).to.eq(4); // UnderReview
 
         const lockedCapitalsLendingPool1 =
-          await defaultStateManager.getLockedCapitals(pool1, lendingPools[0]);
+          await defaultStateManager.getLockedCapitals(protectionPoolAddress1, lendingPools[0]);
         expect(lockedCapitalsLendingPool1.length).to.eq(1);
         expect(lockedCapitalsLendingPool1[0].snapshotId).to.eq(1);
         expect(lockedCapitalsLendingPool1[0].amount).to.eq(parseUSDC("0"));
@@ -518,11 +516,11 @@ const testDefaultStateManager: Function = (
       it("...2nd lending pool in protection pool 1 should be in active state with unlocked capital", async () => {
         // 2nd lending pool should move from Late to Active state with unlocked capital instance
         expect(
-          await defaultStateManager.getLendingPoolStatus(pool1, lendingPools[1])
+          await defaultStateManager.getLendingPoolStatus(protectionPoolAddress1, lendingPools[1])
         ).to.eq(1); // Active
 
         const lockedCapitalsLendingPool2 =
-          await defaultStateManager.getLockedCapitals(pool1, lendingPools[1]);
+          await defaultStateManager.getLockedCapitals(protectionPoolAddress1, lendingPools[1]);
         expect(lockedCapitalsLendingPool2.length).to.eq(1);
         expect(lockedCapitalsLendingPool2[0].snapshotId).to.eq(2);
         expect(lockedCapitalsLendingPool2[0].amount).to.eq(parseUSDC("50000"));
@@ -538,7 +536,7 @@ const testDefaultStateManager: Function = (
         it("...should return 0 claimable amount for deployer from pool 1", async () => {
           expect(
             await defaultStateManager.calculateClaimableUnlockedAmount(
-              pool1,
+              protectionPoolAddress1,
               await deployer.getAddress()
             )
           ).to.eq(0);
@@ -549,7 +547,7 @@ const testDefaultStateManager: Function = (
           // so seller should be able claim ~1/2 of the locked capital = ~25K (50% of 50K)
           expect(
             await defaultStateManager.calculateClaimableUnlockedAmount(
-              pool1,
+              protectionPoolAddress1,
               sellerAddress
             )
           ).to.be.eq(await calculateClaimableAmt(sellerAddress, "50000"));
@@ -562,7 +560,7 @@ const testDefaultStateManager: Function = (
           
           expect(
             await defaultStateManager.calculateClaimableUnlockedAmount(
-              pool1,
+              protectionPoolAddress1,
               account1Address
             )
           ).to.be.eq(await calculateClaimableAmt(account1Address, "50000"));
@@ -582,7 +580,7 @@ const testDefaultStateManager: Function = (
 
             expect(
               await defaultStateManager.getLendingPoolStatus(
-                pool1,
+                protectionPoolAddress1,
                 lendingPools[1]
               )
             ).to.eq(1); // Active
@@ -596,7 +594,7 @@ const testDefaultStateManager: Function = (
 
             // 2nd lending pool should move from Active to Late state
             await expect(
-              defaultStateManager.connect(operator).assessStateBatch([pool1])
+              defaultStateManager.connect(operator).assessStateBatch([protectionPoolAddress1])
             )
               .to.emit(defaultStateManager, "ProtectionPoolStatesAssessed")
               .to.emit(defaultStateManager, "LendingPoolLocked");
@@ -606,14 +604,14 @@ const testDefaultStateManager: Function = (
             // 2nd lending pool should move from LateWithinGracePeriod to Late state with a locked capital instance
             expect(
               await defaultStateManager.getLendingPoolStatus(
-                pool1,
+                protectionPoolAddress1,
                 lendingPools[1]
               )
             ).to.eq(3); // Late
 
             const lockedCapitalsLendingPool2 =
               await defaultStateManager.getLockedCapitals(
-                pool1,
+                protectionPoolAddress1,
                 lendingPools[1]
               );
             expect(lockedCapitalsLendingPool2.length).to.eq(2);
@@ -632,7 +630,7 @@ const testDefaultStateManager: Function = (
             // 2nd locked capital is not unlocked yet
             expect(
               await defaultStateManager.calculateClaimableUnlockedAmount(
-                pool1,
+                protectionPoolAddress1,
                 sellerAddress
               )
             ).to.be.eq(await calculateClaimableAmt(sellerAddress, "50000"));
@@ -647,10 +645,10 @@ const testDefaultStateManager: Function = (
               if (i === 0) {
                 await defaultStateManager
                   .connect(operator)
-                  .assessStateBatch([pool1]);
+                  .assessStateBatch([protectionPoolAddress1]);
               } else {
                 // after second payment, 2nd lending pool should move from Late to Active state
-                await expect(defaultStateManager.assessStateBatch([pool1]))
+                await expect(defaultStateManager.assessStateBatch([protectionPoolAddress1]))
                   .to.emit(defaultStateManager, "ProtectionPoolStatesAssessed")
                   .to.emit(defaultStateManager, "LendingPoolUnlocked");
               }
@@ -658,7 +656,7 @@ const testDefaultStateManager: Function = (
 
             expect(
               await defaultStateManager.getLendingPoolStatus(
-                pool1,
+                protectionPoolAddress1,
                 lendingPools[1]
               )
             ).to.eq(1); // Active
@@ -669,7 +667,7 @@ const testDefaultStateManager: Function = (
             // so seller should be able claim 1/2 of the 2nd unlocked capital = 20K (50% of 40K)
             expect(
               await defaultStateManager.calculateClaimableUnlockedAmount(
-                pool1,
+                protectionPoolAddress1,
                 sellerAddress
               )
             ).to.be.eq(parseUSDC("45000")); // 25K + 20K
@@ -694,17 +692,17 @@ const testDefaultStateManager: Function = (
       before(async () => {
         // verify the current status of both lending pools
         expect(
-          await defaultStateManager.getLendingPoolStatus(pool1, lendingPools[0])
+          await defaultStateManager.getLendingPoolStatus(protectionPoolAddress1, lendingPools[0])
         ).to.eq(4); // default
         expect(
-          await defaultStateManager.getLendingPoolStatus(pool1, lendingPools[1])
+          await defaultStateManager.getLendingPoolStatus(protectionPoolAddress1, lendingPools[1])
         ).to.eq(1); // active
 
         // Move time forward by 30 days
         await moveForwardTimeByDays(31);
 
         await expect(
-          defaultStateManager.connect(operator).assessStateBatch([pool1])
+          defaultStateManager.connect(operator).assessStateBatch([protectionPoolAddress1])
         )
           .to.emit(defaultStateManager, "ProtectionPoolStatesAssessed")
           .to.not.emit(defaultStateManager, "LendingPoolUnlocked");
@@ -712,11 +710,11 @@ const testDefaultStateManager: Function = (
 
       it("...1st lending pool in protection pool 1 should still be in default state with locked capital", async () => {
         expect(
-          await defaultStateManager.getLendingPoolStatus(pool1, lendingPools[0])
+          await defaultStateManager.getLendingPoolStatus(protectionPoolAddress1, lendingPools[0])
         ).to.eq(4); // Default
 
         const lockedCapitalsLendingPool1 =
-          await defaultStateManager.getLockedCapitals(pool1, lendingPools[0]);
+          await defaultStateManager.getLockedCapitals(protectionPoolAddress1, lendingPools[0]);
         expect(lockedCapitalsLendingPool1.length).to.eq(1);
         expect(lockedCapitalsLendingPool1[0].snapshotId).to.eq(1);
         expect(lockedCapitalsLendingPool1[0].amount).to.eq(parseUSDC("0"));
@@ -726,12 +724,12 @@ const testDefaultStateManager: Function = (
       it("...2nd lending pool in protection pool 1 should be in late state with locked capital", async () => {
         // after 1 missed payment, 2nd lending pool should move from Active to Late state
         expect(
-          await defaultStateManager.getLendingPoolStatus(pool1, lendingPools[1])
+          await defaultStateManager.getLendingPoolStatus(protectionPoolAddress1, lendingPools[1])
         ).to.eq(3); // Late
 
         // 2nd lending pool should have 2 locked capital instances at this point
         const lockedCapitalsLendingPool2 =
-          await defaultStateManager.getLockedCapitals(pool1, lendingPools[1]);
+          await defaultStateManager.getLockedCapitals(protectionPoolAddress1, lendingPools[1]);
         expect(lockedCapitalsLendingPool2.length).to.eq(2);
         expect(lockedCapitalsLendingPool2[1].snapshotId).to.eq(3);
 
@@ -746,14 +744,14 @@ const testDefaultStateManager: Function = (
 
         // after 2 missed payments, 2nd lending pool should move from Late to Default state
         await expect(
-          defaultStateManager.connect(operator).assessStateBatch([pool1])
+          defaultStateManager.connect(operator).assessStateBatch([protectionPoolAddress1])
         )
           .to.emit(defaultStateManager, "ProtectionPoolStatesAssessed")
           .to.not.emit(defaultStateManager, "LendingPoolUnlocked");
 
         // after 2 missed payments, 2nd lending pool should move from Late to Defaulted state
         expect(
-          await defaultStateManager.getLendingPoolStatus(pool1, lendingPools[1])
+          await defaultStateManager.getLendingPoolStatus(protectionPoolAddress1, lendingPools[1])
         ).to.eq(4); // Default
       });
     });
@@ -766,13 +764,13 @@ const testDefaultStateManager: Function = (
         await moveForwardTimeByDays(30);
         await payToLendingPoolAddress(lendingPools[1], "3000000", usdcContract);
 
-        await defaultStateManager.connect(operator).assessStateBatch([pool1]);
+        await defaultStateManager.connect(operator).assessStateBatch([protectionPoolAddress1]);
       });
 
       it("...lending pool 2 should be in Expired state", async () => {
         expect(
           await defaultStateManager.getLendingPoolStatus(
-            pool1,
+            protectionPoolAddress1,
             lendingPool2.address
           )
         ).to.eq(5);
@@ -790,9 +788,9 @@ const testDefaultStateManager: Function = (
 
       it("...should update states for registered pools", async () => {
         const pool1UpdateTimestamp =
-          await defaultStateManager.getPoolStateUpdateTimestamp(pool1);
+          await defaultStateManager.getPoolStateUpdateTimestamp(protectionPoolAddress1);
         const pool2UpdateTimestamp =
-          await defaultStateManager.getPoolStateUpdateTimestamp(pool2);
+          await defaultStateManager.getPoolStateUpdateTimestamp(protectionPoolAddress2);
 
         await expect(defaultStateManager.connect(operator).assessStates()).to.emit(
           defaultStateManager,
@@ -800,11 +798,11 @@ const testDefaultStateManager: Function = (
         );
 
         expect(
-          await defaultStateManager.getPoolStateUpdateTimestamp(pool1)
+          await defaultStateManager.getPoolStateUpdateTimestamp(protectionPoolAddress1)
         ).to.be.gt(pool1UpdateTimestamp);
 
         expect(
-          await defaultStateManager.getPoolStateUpdateTimestamp(pool2)
+          await defaultStateManager.getPoolStateUpdateTimestamp(protectionPoolAddress2)
         ).to.be.gt(pool2UpdateTimestamp);
       });
     });
@@ -812,31 +810,152 @@ const testDefaultStateManager: Function = (
     describe("assessStateBatch", async () => {
       it("...should fail when called by non-operator", async () => {
         await expect(
-          defaultStateManager.connect(seller).assessStateBatch([pool1])
+          defaultStateManager.connect(seller).assessStateBatch([protectionPoolAddress1])
         ).to.be.revertedWith(
           `AccessControl: account ${sellerAddress.toLowerCase()} is missing role ${OPERATOR_ROLE}`
         );
       });
       it("...should update state for specified registered pool", async () => {
         const pool1UpdateTimestamp =
-          await defaultStateManager.getPoolStateUpdateTimestamp(pool1);
+          await defaultStateManager.getPoolStateUpdateTimestamp(protectionPoolAddress1);
         const pool2UpdateTimestamp =
-          await defaultStateManager.getPoolStateUpdateTimestamp(pool2);
+          await defaultStateManager.getPoolStateUpdateTimestamp(protectionPoolAddress2);
 
-        await defaultStateManager.connect(operator).assessStateBatch([pool1]);
-        await defaultStateManager.connect(operator).assessStateBatch([pool2]);
+        await defaultStateManager.connect(operator).assessStateBatch([protectionPoolAddress1]);
+        await defaultStateManager.connect(operator).assessStateBatch([protectionPoolAddress2]);
 
         expect(
-          await defaultStateManager.getPoolStateUpdateTimestamp(pool1)
+          await defaultStateManager.getPoolStateUpdateTimestamp(protectionPoolAddress1)
         ).to.be.gt(pool1UpdateTimestamp);
 
         expect(
-          await defaultStateManager.getPoolStateUpdateTimestamp(pool2)
+          await defaultStateManager.getPoolStateUpdateTimestamp(protectionPoolAddress2)
         ).to.be.gt(pool2UpdateTimestamp);
       });
     });
 
+    describe("addReferenceLendingPool", async () => {
+      const LENDING_POOL_3 = "0x1d596d28a7923a22aa013b0e7082bba23daa656b";
+
+      it("...should revert when not called by owner", async () => {
+        await expect(
+          defaultStateManager
+            .connect(account1)
+            .addReferenceLendingPool(protectionPoolAddress1, ZERO_ADDRESS, 0, 0)
+        ).to.be.revertedWith("Ownable: caller is not the owner");
+      });
+
+      it("...should revert when new pool is added with zero address by owner", async () => {
+        await expect(
+          defaultStateManager
+            .connect(deployer)
+            .addReferenceLendingPool(protectionPoolAddress1, ZERO_ADDRESS, [0], [10])
+        ).to.be.revertedWith("ReferenceLendingPoolIsZeroAddress");
+      });
+
+      it("...should revert when existing pool is added again by owner", async () => {
+        const lendingPool = lendingPools[0];
+        await expect(
+          defaultStateManager
+            .connect(deployer)
+            .addReferenceLendingPool(
+              protectionPoolAddress1,
+              lendingPool,
+              [0],
+              [10]
+            )
+        ).to.be.revertedWith("ReferenceLendingPoolAlreadyAdded");
+      });
+
+      it("...should revert when new pool is added with unsupported protocol by owner", async () => {
+        await expect(
+          defaultStateManager
+            .connect(deployer)
+            .addReferenceLendingPool(
+              protectionPoolAddress1,
+              LENDING_POOL_3,
+              [1],
+              [10]
+            )
+        ).to.be.revertedWith;
+      });
+
+      it("...should revert when expired(repaid) pool is added by owner", async () => {
+        // repaid pool: https://app.goldfinch.finance/pools/0xc13465ce9ae3aa184eb536f04fdc3f54d2def277
+        await expect(
+          defaultStateManager
+            .connect(deployer)
+            .addReferenceLendingPool(
+              protectionPoolAddress1,
+              "0xc13465ce9ae3aa184eb536f04fdc3f54d2def277",
+              [0],
+              [10]
+            )
+        ).to.be.revertedWith("ReferenceLendingPoolIsNotActive");
+      });
+
+      it("...should revert when defaulted pool is added by owner", async () => {
+        await expect(
+          defaultStateManager
+            .connect(deployer)
+            .addReferenceLendingPool(
+              protectionPoolAddress1,
+              "0xc13465ce9ae3aa184eb536f04fdc3f54d2def277",
+              [0],
+              [10]
+            )
+        ).to.be.revertedWith("ReferenceLendingPoolIsNotActive");
+      });
+
+      it("...should revert when lending pool being added is late", async () => {
+        await expect(
+          defaultStateManager
+            .connect(deployer)
+            .addReferenceLendingPool(
+              protectionPoolAddress1,
+              LENDING_POOL_3,
+              0,
+              10
+            )
+        ).to.be.revertedWith("ReferenceLendingPoolIsNotActive");
+
+        expect(
+          await defaultStateManager.getLendingPoolStatus(
+            protectionPoolAddress1,
+            LENDING_POOL_3
+          )
+        ).to.eq(0); // NotSupported
+      });
+
+      it("...should succeed when a new pool is added by owner", async () => {
+        await payToLendingPoolAddress(
+          LENDING_POOL_3,
+          "500000",
+          await getUsdcContract(deployer)
+        );
+
+        await expect(
+          defaultStateManager
+            .connect(deployer)
+            .addReferenceLendingPool(
+              protectionPoolAddress1,
+              LENDING_POOL_3,
+              0,
+              10
+            )
+        ).to.emit(referenceLendingPoolsInstance, "ReferenceLendingPoolAdded");
+
+        expect(
+          await defaultStateManager.getLendingPoolStatus(
+            protectionPoolAddress1,
+            LENDING_POOL_3
+          )
+        ).to.eq(1); // active
+      });
+    });
+
     describe("upgrade", () => {
+      const LENDING_POOL_4 = "0x759f097f3153f5d62ff1c2d82ba78b6350f223e3";
       let upgradedDefaultStateManager: DefaultStateManagerV2;
 
       it("... should revert when upgradeTo is called by non-owner", async () => {
@@ -898,7 +1017,7 @@ const testDefaultStateManager: Function = (
     after(async () => {
       defaultStateManager
         .connect(deployer)
-        .setContractFactory(cpContractFactoryInstance.address);
+        .setContractFactory(contractFactory.address);
     });
   });
 };

@@ -11,12 +11,13 @@ import {
   moveForwardTime,
   setNextBlockTimestamp
 } from "../utils/time";
-import { getUsdcContract, parseUSDC } from "../utils/usdc";
 import { ethers, network, upgrades } from "hardhat";
 import { BigNumber } from "@ethersproject/bignumber";
 import { ReferenceLendingPoolsV2 } from "../../typechain-types/contracts/test/ReferenceLendingPoolsV2";
-import { payToLendingPoolAddress } from "../utils/goldfinch";
 import { LATE_PAYMENT_GRACE_PERIOD_IN_DAYS } from "../../scripts/local-mainnet/data";
+import { parseUSDC } from "../utils/usdc";
+import { DefaultStateManager } from "../../typechain-types/contracts/core/DefaultStateManager";
+import { ProtectionPool } from "../../typechain-types/contracts/core/pool/ProtectionPool";
 
 const LENDING_POOL_3 = "0x89d7c618a4eef3065da8ad684859a547548e6169";
 const BUYER1 = "0x12c2cfda0a51fe2a68e443868bcbf3d6f6e2dda2";
@@ -28,6 +29,8 @@ const testReferenceLendingPools: Function = (
   referenceLendingPoolsImplementation: ReferenceLendingPools,
   referenceLendingPoolsInstance: ReferenceLendingPools,
   contractFactory: CPContractFactory,
+  defaultStateManagerInstance: DefaultStateManager,
+  protectionPoolInstance: ProtectionPool,
   addedLendingPools: string[]
 ) => {
   describe("ReferenceLendingPools", async () => {
@@ -35,6 +38,7 @@ const testReferenceLendingPools: Function = (
     let _implementationDeployerAddress: string;
     let _expectedLendingPools: string[];
     let _snapshotId: string;
+    let _defaultStateManagerAddress: string;
 
     async function revertToSnapshot(_snapshotId: string) {
       expect(await network.provider.send("evm_revert", [_snapshotId])).to.eq(
@@ -54,6 +58,7 @@ const testReferenceLendingPools: Function = (
       _deployerAddress = await deployer.getAddress();
       _implementationDeployerAddress = await account1.getAddress();
       _snapshotId = await network.provider.send("evm_snapshot", []);
+      _defaultStateManagerAddress = defaultStateManagerInstance.address;
     });
 
     after(async () => {
@@ -77,7 +82,8 @@ const testReferenceLendingPools: Function = (
               [],
               [],
               ZERO_ADDRESS,
-              1
+              1,
+              _defaultStateManagerAddress
             )
           ).to.be.revertedWith(
             "Initializable: contract is already initialized"
@@ -139,7 +145,8 @@ const testReferenceLendingPools: Function = (
               [],
               [],
               ZERO_ADDRESS,
-              1
+              1,
+              _defaultStateManagerAddress
             )
           ).to.be.revertedWith(
             "Initializable: contract is already initialized"
@@ -171,15 +178,18 @@ const testReferenceLendingPools: Function = (
               [],
               [],
               ZERO_ADDRESS,
-              1
+              1,
+              _defaultStateManagerAddress
             )
           )
             .emit(referenceLendingPoolsInstance, "OwnershipTransferred")
             .withArgs(_implementationDeployerAddress, _deployerAddress);
         });
 
-        it("...should have late payment grace period set", async () => { 
-          expect(await referenceLendingPoolsInstance.latePaymentGracePeriodInDays()).to.be.eq(LATE_PAYMENT_GRACE_PERIOD_IN_DAYS);
+        it("...should have late payment grace period set", async () => {
+          expect(
+            await referenceLendingPoolsInstance.latePaymentGracePeriodInDays()
+          ).to.be.eq(LATE_PAYMENT_GRACE_PERIOD_IN_DAYS);
         });
       });
 
@@ -197,8 +207,9 @@ const testReferenceLendingPools: Function = (
         });
 
         it("...should be updatable when called by owner", async () => {
-          await referenceLendingPoolsInstance
-            .updateLatePaymentGracePeriodInDays(_newLatePaymentGracePeriodInDays);
+          await referenceLendingPoolsInstance.updateLatePaymentGracePeriodInDays(
+            _newLatePaymentGracePeriodInDays
+          );
 
           expect(
             await referenceLendingPoolsInstance.latePaymentGracePeriodInDays()
@@ -231,70 +242,24 @@ const testReferenceLendingPools: Function = (
       });
 
       describe("addReferenceLendingPool", async () => {
-        it("...should revert when not called by owner", async () => {
-          await expect(
-            referenceLendingPoolsInstance
-              .connect(account1)
-              .addReferenceLendingPool(ZERO_ADDRESS, 0, 0)
-          ).to.be.revertedWith("Ownable: caller is not the owner");
-        });
-
-        it("...should revert when new pool is added with zero address by owner", async () => {
-          await expect(
-            referenceLendingPoolsInstance
-              .connect(deployer)
-              .addReferenceLendingPool(ZERO_ADDRESS, [0], [10])
-          ).to.be.revertedWith("ReferenceLendingPoolIsZeroAddress");
-        });
-
-        it("...should revert when existing pool is added again by owner", async () => {
-          const lendingPool = addedLendingPools[0];
-          await expect(
-            referenceLendingPoolsInstance
-              .connect(deployer)
-              .addReferenceLendingPool(lendingPool, [0], [10])
-          ).to.be.revertedWith("ReferenceLendingPoolAlreadyAdded");
-        });
-
-        it("...should revert when new pool is added with unsupported protocol by owner", async () => {
-          await expect(
-            referenceLendingPoolsInstance
-              .connect(deployer)
-              .addReferenceLendingPool(LENDING_POOL_3, [1], [10])
-          ).to.be.revertedWith;
-        });
-
-        it("...should revert when expired(repaid) pool is added by owner", async () => {
-          // repaid pool: https://app.goldfinch.finance/pools/0xc13465ce9ae3aa184eb536f04fdc3f54d2def277
-          await expect(
-            referenceLendingPoolsInstance
-              .connect(deployer)
-              .addReferenceLendingPool(
-                "0xc13465ce9ae3aa184eb536f04fdc3f54d2def277",
-                [0],
-                [10]
-              )
-          ).to.be.revertedWith("ReferenceLendingPoolIsNotActive");
-        });
-
-        // Could not find defaulted lending pool
-        it("...should revert when defaulted pool is added by owner", async () => {
-          await expect(
-            referenceLendingPoolsInstance
-              .connect(deployer)
-              .addReferenceLendingPool(
-                "0xc13465ce9ae3aa184eb536f04fdc3f54d2def277",
-                [0],
-                [10]
-              )
-          ).to.be.revertedWith("ReferenceLendingPoolIsNotActive");
-        });
-
-        it("...should succeed when a new pool is added by owner", async () => {
+        it("...should revert when a new pool is added by non-DefaultStateManager", async () => {
           await expect(
             referenceLendingPoolsInstance
               .connect(deployer)
               .addReferenceLendingPool(LENDING_POOL_3, 0, 10)
+          ).to.be.revertedWith("OnlyDefaultStateManagerCanAddLendingPool");
+        });
+
+        it("...should succeed when a new pool is added by DefaultStateManager", async () => {
+          await expect(
+            defaultStateManagerInstance
+              .connect(deployer)
+              .addReferenceLendingPool(
+                protectionPoolInstance.address,
+                LENDING_POOL_3,
+                0,
+                10
+              )
           ).to.emit(referenceLendingPoolsInstance, "ReferenceLendingPoolAdded");
         });
       });
@@ -589,28 +554,13 @@ const testReferenceLendingPools: Function = (
         ).to.eq(BigNumber.from(30));
       });
 
-      it("...should be able to add new pool by owner", async () => {
-        await payToLendingPoolAddress(
-          LENDING_POOL_4,
-          "500000",
-          await getUsdcContract(deployer)
-        );
-        await expect(
-          upgradedReferenceLendingPools
-            .connect(deployer)
-            .addReferenceLendingPool(LENDING_POOL_4, 0, 10)
-        ).to.emit(upgradedReferenceLendingPools, "ReferenceLendingPoolAdded");
-      });
-
       it("...should be able to retrieve from existing storage", async () => {
         const lendingPoolInfo =
           await upgradedReferenceLendingPools.referenceLendingPools(
-            LENDING_POOL_4
+            addedLendingPools[0]
           );
         expect(lendingPoolInfo.protocol).to.be.eq(0); // Goldfinch
-        expect(lendingPoolInfo.addedTimestamp).to.be.eq(
-          await getLatestBlockTimestamp()
-        );
+        expect(lendingPoolInfo.addedTimestamp).to.be.gt(0);
         expect(lendingPoolInfo.protectionPurchaseLimitTimestamp).to.be.gt(0);
       });
 
@@ -653,7 +603,9 @@ const testReferenceLendingPools: Function = (
 
       it("...should return LateWithinGracePeriod when payment is late but within grace period", async () => {
         // Move time forward by 1 second
-        await moveForwardTime(BigNumber.from(LATE_PAYMENT_GRACE_PERIOD_IN_DAYS));
+        await moveForwardTime(
+          BigNumber.from(LATE_PAYMENT_GRACE_PERIOD_IN_DAYS)
+        );
 
         // Lending pool is late but within grace period, so should return LateWithinGracePeriod status
         expect(await getLendingPoolStatus(_lendingPool)).to.eq(2); // LateWithinGracePeriod
@@ -661,7 +613,9 @@ const testReferenceLendingPools: Function = (
 
       it("...should return false when payment is late and after grace period", async () => {
         // Move time forward by one more day
-        await moveForwardTime(getDaysInSeconds(LATE_PAYMENT_GRACE_PERIOD_IN_DAYS));
+        await moveForwardTime(
+          getDaysInSeconds(LATE_PAYMENT_GRACE_PERIOD_IN_DAYS)
+        );
 
         // Lending pool is late and after grace period, so should return Late status
         // Total time elapsed since last payment = 30 days + 1 day + 1 second

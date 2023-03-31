@@ -175,6 +175,7 @@ contract ContractFactory is
    * @param _lendingProtocolAdapterFactory the address of the {LendingProtocolAdapterFactory} contract
    * @param _latePaymentGracePeriodInDays the grace period in days after which a lending pool will be considered late for payment in
    * unscaled value, i.e. 1 day = 1
+   * @param _defaultStateManagerAddress the address of the {DefaultStateManager} contract
    */
   function createReferenceLendingPools(
     address _referenceLendingPoolsImplementation,
@@ -182,7 +183,8 @@ contract ContractFactory is
     LendingProtocol[] calldata _lendingPoolProtocols,
     uint256[] calldata _protectionPurchaseLimitsInDays,
     address _lendingProtocolAdapterFactory,
-    uint256 _latePaymentGracePeriodInDays
+    uint256 _latePaymentGracePeriodInDays,
+    address _defaultStateManagerAddress
   ) external payable onlyOwner {
     /// Create a ERC1967 proxy contract for the reference lending pools using specified implementation address.
     /// This instance of reference lending pools is upgradable using UUPS pattern
@@ -195,7 +197,8 @@ contract ContractFactory is
         _lendingPoolProtocols,
         _protectionPurchaseLimitsInDays,
         _lendingProtocolAdapterFactory,
-        _latePaymentGracePeriodInDays
+        _latePaymentGracePeriodInDays,
+        _defaultStateManagerAddress
       )
     );
 
