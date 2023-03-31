@@ -9,6 +9,8 @@ node_modules
 .env.local
 .env.production
 .env.development
+.env.prod
+.env.dev
 
 #Hardhat
 artifacts
@@ -19,7 +21,7 @@ coverage
 coverage.json
 
 #OpenZeppelin
-.openzeppelin
+.openzeppelin/unknown-*.json
 
 #typechain
 typechain-types

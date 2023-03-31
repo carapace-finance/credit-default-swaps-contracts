@@ -3025,7 +3025,7 @@ const testProtectionPool: Function = (
         poolV2Factory = await getPoolContractFactory("ProtectionPoolV2");
 
         // Forces the import of an existing proxy deployment to be used with hardhat upgrades plugin
-        // because the proxy was deployed by ContractFactory and noy using the hardhat upgrades plugin
+        // because the proxy was deployed by ContractFactory and not using the hardhat upgrades plugin
         await upgrades.forceImport(
           protectionPool.address,
           await getPoolContractFactory()

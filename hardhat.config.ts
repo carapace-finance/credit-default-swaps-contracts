@@ -21,7 +21,8 @@ const {
   ALCHEMY_API_KEY,
   ETHERSCAN_API_KEY,
   MNEMONIC_WORDS,
-  WALLET_INITIAL_INDEX
+  WALLET_INITIAL_INDEX,
+  DEPLOYMENT_ACCOUNT_PRIVATE_KEY
 } = process.env;
 
 const config: HardhatUserConfig = {
@@ -47,9 +48,9 @@ const config: HardhatUserConfig = {
     mainnet: {
       url: `https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_API_KEY}`,
       gas: "auto", // gasLimit
-      gasPrice: 41000000000 // check the latest gas price market in https://www.ethgasstation.info/
+      gasPrice: 41000000000, // check the latest gas price market in https://www.ethgasstation.info/
       // inject: false, // optional. If true, it will EXPOSE your mnemonic in your frontend code. Then it would be available as an "in-page browser wallet" / signer which can sign without confirmation.
-      // accounts: [`0x${DEPLOYMENT_ACCOUNT_PRIVATE_KEY}`]
+      accounts: [`0x${DEPLOYMENT_ACCOUNT_PRIVATE_KEY}`]
     }
   },
   solidity: {

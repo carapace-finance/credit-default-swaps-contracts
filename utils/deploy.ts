@@ -28,7 +28,6 @@ export interface DeployContractsResult {
 }
 
 let deployer: Signer;
-let operator: Signer;
 let account1: Signer;
 let account2: Signer;
 let account3: Signer;
@@ -50,9 +49,13 @@ let protectionPoolHelperInstance: Contract;
 let mockUsdcInstance: ERC20Upgradeable;
 
 (async () => {
-  [deployer, account1, account2, account3, account4, operator] =
+  [deployer, account1, account2, account3, account4] =
     await ethers.getSigners();
-  console.log("Deployer address: ", await deployer.getAddress());
+  console.log(
+    "Deployer address: %s, balance: %s",
+    await deployer.getAddress(),
+    (await deployer.getBalance()).toString()
+  );
 })().catch((err) => {
   console.error(err);
 });
@@ -76,10 +79,21 @@ const deployContracts: Function = async (
   _lendingPools: string[],
   _lendingPoolProtocols: number[],
   _lendingPoolPurchaseLimitsInDays: number[],
-  _latePaymentGracePeriodInDays: BigNumber = BigNumber.from(LATE_PAYMENT_GRACE_PERIOD_IN_DAYS),
-  _useMock: boolean = false
+  _latePaymentGracePeriodInDays: BigNumber = BigNumber.from(
+    LATE_PAYMENT_GRACE_PERIOD_IN_DAYS
+  ),
+  _operator: Signer,
+  _useMock: boolean = false,
+  _sTokenName: string = "sToken1",
+  _sTokenSymbol: string = "sT1"
 ): Promise<DeployContractsResult> => {
   try {
+    console.log(
+      "Operator address: %s, balance: %s",
+      await _operator.getAddress(),
+      (await _operator.getBalance()).toString()
+    );
+
     // Deploy RiskFactorCalculator library
     const riskFactorCalculatorFactory = await contractFactory(
       "RiskFactorCalculator"
@@ -148,7 +162,7 @@ const deployContracts: Function = async (
     );
     defaultStateManagerInstance = (await upgrades.deployProxy(
       defaultStateManagerFactory,
-      [await operator.getAddress()]
+      [await _operator.getAddress()]
     )) as DefaultStateManager;
     await defaultStateManagerInstance.deployed();
     console.log(
@@ -305,8 +319,8 @@ const deployContracts: Function = async (
       _useMock ? mockUsdcInstance.address : USDC_ADDRESS,
       referenceLendingPoolsInstance.address,
       premiumCalculatorInstance.address,
-      "sToken11",
-      "sT11"
+      _sTokenName,
+      _sTokenSymbol
     );
 
     protectionPoolInstance = await getLatestProtectionPoolInstance(
@@ -316,7 +330,7 @@ const deployContracts: Function = async (
     return {
       success: true,
       deployer,
-      operator,
+      operator: _operator,
       protectionPoolInstance,
       protectionPoolCycleManagerInstance,
       defaultStateManagerInstance,
@@ -375,7 +389,6 @@ async function getProtectionPoolContractFactory(
 
 export {
   deployer,
-  operator,
   account1,
   account2,
   account3,

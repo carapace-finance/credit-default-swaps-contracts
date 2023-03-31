@@ -1,3 +1,5 @@
+import { Signer } from "ethers";
+
 import { testProtectionPool } from "./contracts/ProtectionPool.test";
 import { testContractFactory } from "./contracts/ContractFactory.test";
 import { testProtectionPoolCycleManager } from "./contracts/ProtectionPoolCycleManager.test";
@@ -11,7 +13,6 @@ import { testDefaultStateManager } from "./contracts/DefaultStateManager.test";
 
 import {
   deployer,
-  operator,
   account1,
   account2,
   account3,
@@ -38,18 +39,27 @@ import {
   PROTECTION_POOL_PARAMS,
   GOLDFINCH_LENDING_POOLS,
   LENDING_POOL_PROTOCOLS,
-  LENDING_POOL_PURCHASE_LIMIT_IN_DAYS
+  LENDING_POOL_PURCHASE_LIMIT_IN_DAYS,
+  LATE_PAYMENT_GRACE_PERIOD_IN_DAYS
 } from "./test-data";
+import { ethers } from "hardhat";
 
 describe("start testing", () => {
+  let operator: Signer;
+
   before("deploy contracts", async () => {
     const start = Date.now();
+    operator = (
+      await ethers.getSigners()
+    )[5];
     await deployContracts(
       PROTECTION_POOL_CYCLE_PARAMS,
       PROTECTION_POOL_PARAMS,
       GOLDFINCH_LENDING_POOLS,
       LENDING_POOL_PROTOCOLS,
-      LENDING_POOL_PURCHASE_LIMIT_IN_DAYS
+      LENDING_POOL_PURCHASE_LIMIT_IN_DAYS,
+      LATE_PAYMENT_GRACE_PERIOD_IN_DAYS,
+      operator
     );
     console.log(`Deployed contracts in ${(Date.now() - start) / 1000} seconds`);
   });

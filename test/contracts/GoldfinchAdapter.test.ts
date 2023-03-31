@@ -409,7 +409,7 @@ const testGoldfinchAdapter: Function = (
         );
 
         // Forces the import of an existing proxy deployment to be used with hardhat upgrades plugin
-        // because the proxy was deployed by ContractFactory and noy using the hardhat upgrades plugin
+        // because the proxy was deployed by ContractFactory and not using the hardhat upgrades plugin
         await upgrades.forceImport(
           goldfinchAdapter.address,
           await ethers.getContractFactory("GoldfinchAdapter")

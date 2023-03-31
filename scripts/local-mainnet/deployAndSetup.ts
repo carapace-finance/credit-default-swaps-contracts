@@ -29,6 +29,7 @@ import {
   LENDING_POOL_PURCHASE_LIMIT_IN_DAYS,
   LATE_PAYMENT_GRACE_PERIOD_IN_DAYS
 } from "./data";
+import { ethers } from "hardhat";
 
 /**
  * This function deploys contracts and setups a playground for testing.
@@ -42,6 +43,7 @@ export async function deployAndSetup(useMock: boolean) {
   }
 
   console.log("Deploying contracts...");
+  const operator = (await ethers.getSigners())[5];
   const result: DeployContractsResult = await deployContracts(
     PROTECTION_POOL_CYCLE_PARAMS,
     PROTECTION_POOL_PARAMS,
@@ -49,6 +51,7 @@ export async function deployAndSetup(useMock: boolean) {
     LENDING_POOL_PROTOCOLS,
     LENDING_POOL_PURCHASE_LIMIT_IN_DAYS,
     LATE_PAYMENT_GRACE_PERIOD_IN_DAYS,
+    operator,
     useMock
   );
 
