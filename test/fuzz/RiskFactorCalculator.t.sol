@@ -126,15 +126,12 @@ contract FuzzTestRiskFactorCalculator is Test {
     );
 
     bool _canCalculate = RiskFactorCalculator.canCalculateRiskFactor(
-      _totalCapital,
       _leverageRatio,
       _leverageRatioFloor,
-      _leverageRatioCeiling,
-      _minRequiredCapital
+      _leverageRatioCeiling
     );
 
     if (
-      _totalCapital < _minRequiredCapital ||
       _leverageRatio < _leverageRatioFloor ||
       _leverageRatio > _leverageRatioCeiling
     ) {

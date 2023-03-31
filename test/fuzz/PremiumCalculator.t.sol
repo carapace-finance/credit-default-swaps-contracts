@@ -22,7 +22,6 @@ contract FuzzTestPremiumCalculator is Test {
     uint256 _protectionAmount,
     uint256 _protectionBuyerApy,
     uint256 _leverageRatio,
-    uint256 _totalCapital,
     uint256 _leverageRatioBuffer,
     uint256 _minRequiredCapital,
     uint256 _curvature,
@@ -56,13 +55,6 @@ contract FuzzTestPremiumCalculator is Test {
       _leverageRatio,
       leverageRatioFloor,
       leverageRatioCeiling
-    );
-
-    /// Check that the totalCapital amount is within the bounds
-    _totalCapital = bound(
-      _totalCapital,
-      100e6, // 100 USDC
-      10_000_000e6 // 10M USDC
     );
 
     /// Check that the leverage ratio buffer is within the bounds
@@ -119,15 +111,15 @@ contract FuzzTestPremiumCalculator is Test {
         _protectionAmount,
         _protectionBuyerApy,
         _leverageRatio,
-        _totalCapital,
         poolParameters
       );
     assertGe(_premiumAmount, 0, "Premium amount should be greater than 0");
     assertEq(
       _isMinPremium,
-      (_totalCapital < _minRequiredCapital ||
+      (
         _leverageRatio < leverageRatioFloor ||
-        _leverageRatio > leverageRatioCeiling),
+        _leverageRatio > leverageRatioCeiling
+      ),
       "Premium should be minimum"
     );
   }

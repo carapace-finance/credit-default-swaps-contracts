@@ -659,7 +659,6 @@ contract ProtectionPool is
         premiumCalculator,
         poolInfo,
         _protectionPurchaseParams,
-        totalSTokenUnderlying,
         _leverageRatio
       );
   }
@@ -776,7 +775,6 @@ contract ProtectionPool is
         lendingPoolDetail,
         _protectionPurchaseParams,
         _maxPremiumAmount,
-        totalSTokenUnderlying,
         _leverageRatio
       );
     totalPremium += _premiumAmount;
@@ -882,7 +880,7 @@ contract ProtectionPool is
     }
 
     if (totalProtection == 0) {
-      /// When pool is is not in OpenToSellers phase,
+      /// When pool is not in OpenToSellers phase,
       /// If there is no protection, it means that we want to encourage buyers to buy protections,
       /// so we return the maximum leverage ratio.
       /// This will prohibit the sellers from depositing more capital.

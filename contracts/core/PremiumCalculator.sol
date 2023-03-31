@@ -34,7 +34,6 @@ contract PremiumCalculator is UUPSUpgradeableBase, IPremiumCalculator {
     uint256 _protectionAmount,
     uint256 _protectionBuyerApy,
     uint256 _leverageRatio,
-    uint256 _totalCapital,
     ProtectionPoolParams calldata _poolParameters
   )
     external
@@ -53,11 +52,9 @@ contract PremiumCalculator is UUPSUpgradeableBase, IPremiumCalculator {
     /// Verify if the risk factor can be calculated
     if (
       RiskFactorCalculator.canCalculateRiskFactor(
-        _totalCapital,
         _leverageRatio,
         _poolParameters.leverageRatioFloor,
-        _poolParameters.leverageRatioCeiling,
-        _poolParameters.minRequiredCapital
+        _poolParameters.leverageRatioCeiling
       )
     ) {
       int256 _riskFactor = RiskFactorCalculator.calculateRiskFactor(

@@ -90,7 +90,6 @@ library ProtectionPoolHelper {
    * @param premiumCalculator the premium calculator contract
    * @param poolInfo storage pointer to the protection pool info
    * @param _protectionPurchaseParams the protection purchase params
-   * @param totalSTokenUnderlying the total sToken underlying amount
    * @param _leverageRatio the leverage ratio scaled to 18 decimals
    * @return _premiumAmountIn18Decimals The premium amount scaled to 18 decimals.
    * @return _premiumAmount The premium amount in underlying token decimals.
@@ -100,7 +99,6 @@ library ProtectionPoolHelper {
     IPremiumCalculator premiumCalculator,
     ProtectionPoolInfo storage poolInfo,
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
-    uint256 totalSTokenUnderlying,
     uint256 _leverageRatio
   )
     public
@@ -127,7 +125,6 @@ library ProtectionPoolHelper {
           _protectionPurchaseParams.lendingPoolAddress
         ),
         _leverageRatio,
-        totalSTokenUnderlying,
         poolInfo.params
       );
 
@@ -145,6 +142,7 @@ library ProtectionPoolHelper {
    * @param lendingPoolDetail storage pointer to the lending pool detail
    * @param _protectionPurchaseParams the protection purchase params
    * @param _maxPremiumAmount the maximum premium amount
+   * @param _leverageRatio the leverage ratio scaled to 18 decimals
    * @return _premiumAmountIn18Decimals The premium amount scaled to 18 decimals.
    * @return _premiumAmount The premium amount in underlying token decimals.
    * @return _isMinPremium True if the premium amount is equal to the minimum premium amount, false otherwise.
@@ -156,7 +154,6 @@ library ProtectionPoolHelper {
     LendingPoolDetail storage lendingPoolDetail,
     ProtectionPurchaseParams calldata _protectionPurchaseParams,
     uint256 _maxPremiumAmount,
-    uint256 totalSTokenUnderlying,
     uint256 _leverageRatio
   )
     external
@@ -175,7 +172,6 @@ library ProtectionPoolHelper {
       premiumCalculator,
       poolInfo,
       _protectionPurchaseParams,
-      totalSTokenUnderlying,
       _leverageRatio
     );
 
