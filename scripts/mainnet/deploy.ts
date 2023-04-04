@@ -1,4 +1,6 @@
 import { ethers } from "hardhat";
+import hre from "hardhat";
+
 import { deployContracts } from "../../utils/deploy";
 import {
   PROTECTION_POOL_CYCLE_PARAMS,
@@ -8,7 +10,6 @@ import {
   LENDING_POOL_PURCHASE_LIMIT_IN_DAYS,
   LATE_PAYMENT_GRACE_PERIOD_IN_DAYS
 } from "./prod-data";
-import hre from "hardhat";
 
 (async () => {
   // create new ethers wallet using default provider
@@ -17,7 +18,7 @@ import hre from "hardhat";
     hre.ethers.provider
   );
 
-  const results = await deployContracts(
+  await deployContracts(
     PROTECTION_POOL_CYCLE_PARAMS,
     PROTECTION_POOL_PARAMS,
     GOLDFINCH_LENDING_POOLS,
